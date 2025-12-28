@@ -1,121 +1,338 @@
-# 📘 Product Requirements Document (PRD)
+# 📸 Lightweight Immich-Inspired Photo Sharing App
 
-**Product Name (placeholder):** _GalleryVault_  
-**Version:** v0.1 (MVP)  
-**Owner:** Aneesh Soni  
-**Last Updated:** 2025-10-18
+**Design Specification (v1)**
 
 ---
 
-## 1. Overview
+## 1. Product Goals & Non-Goals
 
-### 1.1 Vision
+### Primary Goals
 
-Create a **self-hosted photography client gallery platform** that combines the clean, elegant presentation of Pixieset with the privacy, control, and cost efficiency of hosting on your own VPS.  
-Users (photographers/studios) can easily upload, organize, and share galleries with clients through password-protected links, while deduplication ensures efficient storage usage.
+- Google Photos–level **polish and usability**
+- Self-hosted on a VPS
+- Single owner (you), with optional friend uploads
+- Secure album sharing via public links
+- Fast browsing on mobile web
+- Deduplication
+- Metadata visibility (EXIF / video metadata)
+- Simple to deploy and reason about
 
-### 1.2 Objectives
+### Explicit Non-Goals (v1)
 
-- Deliver a **minimal, elegant, and performant** web experience for viewing photos.
-- Enable **simple deployment** on a VPS using Docker (reverse proxy ready).
-- Support **deduplication** at the file-content level to avoid redundant storage.
-- Provide **private gallery sharing** with optional passwords or tokens.
-- Lay the foundation for a future multi-user model (MVP will be single admin).
+These are **intentionally out of scope**:
 
----
-
-## 2. Target Users
-
-| Persona                                | Description                                                 | Needs                                                          |
-| -------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------- |
-| **Photographer / Studio Owner**        | Individual or small studio managing multiple client shoots. | Easy upload, organization, branding, and sharing of galleries. |
-| **Client (End User)**                  | A wedding couple, family, or brand client reviewing photos. | Clean, responsive, private viewing experience.                 |
-| **IT-savvy Solopreneur / Self-hoster** | Someone running their own VPS or home server.               | Simple setup, security, and maintenance; low overhead.         |
-
----
-
-## 3. Core Features
-
-### 3.1 Image Upload & Management
-
-- **Batch upload** via web UI or API.
-- **Automatic deduplication** via file content hash (SHA256 or perceptual hash).
-- Basic EXIF extraction (optional metadata display).
-- **Folder → gallery mapping**: each uploaded folder becomes a gallery.
-- File storage on local filesystem or mounted volume (e.g., `/data/photos`).
-
-### 3.2 Gallery Presentation
-
-- **Public URL** per gallery: `https://example.com/gallery/{slug}`
-- Clean, minimal **Next.js + shadcn/ui** gallery layout:
-  - Grid of thumbnails (lazy-loaded)
-  - Lightbox-style viewer
-  - Optional download toggle (admin controlled)
-- Client-accessible via password or token-based access.
-
-### 3.3 Authentication & Access
-
-- Local authentication with a **single admin account**, seeded from environment variables.
-- Postgres (or SQLite) backend for credentials.
-- **Coolify-style bootstrap** — admin created once at startup via env vars.
-- JWT-based session management (access + refresh tokens).
-- Optional password for galleries (stored hashed).
-- Tokenized URLs for temporary, expirable share links.
-
-### 3.4 Deduplication Engine
-
-- Compute **SHA256** hash on upload.
-- Store hashes in DB.
-- Skip or hard-link file if already present.
-- Optional **image similarity deduping** using perceptual hash (future).
-- Show dedupe stats per gallery (savings, duplicates).
-
-### 3.5 Reverse Proxy Support
-
-- Built for **reverse proxy** deployment via Nginx or Caddy.
-- Docker Compose config includes:
-  - `galleryvault-frontend` (Next.js)
-  - `galleryvault-backend` (FastAPI)
-  - `galleryvault-db` (Postgres)
-  - `galleryvault-storage` (volume)
-- TLS handled by reverse proxy (Caddy/Cloudflare).
-
-### 3.6 Administration Dashboard
-
-- Simple admin web UI:
-  - Upload galleries
-  - Edit gallery metadata (title, password)
-  - Delete galleries
-  - View dedup stats
-- Gallery index page listing all galleries.
+- Face recognition
+- Semantic search ("beach", "dog")
+- Real-time sync
+- Native mobile apps
+- Timeline-based infinite scroll across _all_ photos
+- Multi-region / object storage
+- Collaborative editing, comments, likes
 
 ---
 
-## 4. Technical Architecture
+## 2. High-Level Architecture
 
-| Layer           | Technology                                        | Notes                               |
-| --------------- | ------------------------------------------------- | ----------------------------------- |
-| **Frontend**    | Next.js (v15) + TypeScript + shadcn/ui + Tailwind | Static gallery UI + admin dashboard |
-| **Backend API** | Python (FastAPI)                                  | Uploads, metadata, auth, deduping   |
-| **Database**    | Postgres (SQLite fallback)                        | Stores users, galleries, hashes     |
-| **Storage**     | Local filesystem (`/data/photos`)                 | Mounted volume, later S3-compatible |
-| **Deployment**  | Docker Compose + Nginx/Caddy                      | Single-command setup                |
-| **Hashing**     | SHA256 (+ perceptual hash optional)               | Deduplication engine                |
-| **Auth**        | JWT (FastAPI + Next.js integration)               | Minimal, secure                     |
-
----
-
-## 5. Authentication Architecture (Coolify-Style)
-
-### 5.1 Overview
-
-Local-only authentication, single admin seeded from environment variables.  
-No self-service password changes, signups, or invites.
-
-### 5.2 Environment Variables
-
-```bash
-ADMIN_EMAIL=admin@mydomain.com
-ADMIN_PASSWORD=strongpass123
-JWT_SECRET=supersecretjwtkey
 ```
+Browser (Mobile)
+   │
+   ▼
+NGINX (TLS, proxy, rate limits)
+   │
+   ├──► Next.js Frontend (gallery, lightbox, sharing UI)
+   │
+   ├──► FastAPI Backend (auth, albums, assets, sharing)
+   │
+   ├──► PostgreSQL (metadata, dedup, permissions)
+   │
+   └──► Local Disk (/data/photos)
+```
+
+---
+
+## 3. Technology Stack
+
+| Layer      | Choice         | Rationale                       |
+| ---------- | -------------- | ------------------------------- |
+| Frontend   | Next.js        | UX polish, mobile-first         |
+| Backend    | FastAPI        | Async, simple, fast enough      |
+| DB         | PostgreSQL     | Dedup + metadata queries        |
+| Storage    | Local disk     | Cheapest, simplest              |
+| Proxy      | NGINX          | TLS, signed URLs, rate limiting |
+| Deployment | Shell → Docker | Progressive complexity          |
+
+---
+
+## 4. Core Domain Model
+
+### 4.1 Users
+
+```sql
+users (
+  id UUID PRIMARY KEY,
+  email TEXT UNIQUE,
+  password_hash TEXT,
+  role ENUM('owner', 'uploader'),
+  created_at TIMESTAMP
+)
+```
+
+- Only **owner** required in v1
+- Uploaders optional later
+
+---
+
+### 4.2 Assets (Photos / Videos)
+
+```sql
+assets (
+  id UUID PRIMARY KEY,
+  original_filename TEXT,
+  file_hash CHAR(64),
+  file_size BIGINT,
+  mime_type TEXT,
+  width INT,
+  height INT,
+  duration_seconds FLOAT,
+  taken_at TIMESTAMP,
+  created_at TIMESTAMP,
+  storage_path TEXT,
+  metadata JSONB,
+  is_video BOOLEAN
+)
+```
+
+#### Deduplication Strategy
+
+- SHA-256 hash of file contents
+- Unique index on `file_hash`
+- Upload flow:
+
+  1. Hash file stream
+  2. Check for existing hash
+  3. Reuse asset if found
+  4. Store file + metadata if new
+
+---
+
+### 4.3 Albums
+
+```sql
+albums (
+  id UUID PRIMARY KEY,
+  title TEXT,
+  description TEXT,
+  is_private BOOLEAN,
+  owner_id UUID,
+  created_at TIMESTAMP
+)
+```
+
+```sql
+album_assets (
+  album_id UUID,
+  asset_id UUID,
+  position INT,
+  PRIMARY KEY (album_id, asset_id)
+)
+```
+
+- Assets may exist in multiple albums
+
+---
+
+### 4.4 Shared Links
+
+```sql
+shared_links (
+  id UUID PRIMARY KEY,
+  album_id UUID,
+  token CHAR(64),
+  permissions JSONB,
+  password_hash TEXT NULL,
+  expires_at TIMESTAMP NULL,
+  revoked BOOLEAN DEFAULT false,
+  created_at TIMESTAMP
+)
+```
+
+- Multiple links per album
+- Instant revocation
+- Optional password + expiration
+
+---
+
+## 5. Media Storage Layout
+
+```
+/data/photos/
+  ├── originals/
+  │     └── ab/cd/<hash>.ext
+  ├── thumbnails/
+  │     └── ab/cd/<hash>_sm.jpg
+  └── videos/
+        └── ab/cd/<hash>.mp4
+```
+
+- Sharded directories
+- Thumbnails generated async
+- RAW files preserved
+
+---
+
+## 6. Metadata Handling
+
+### Extracted at Upload
+
+- EXIF (photos)
+- ffprobe (videos)
+- Camera make/model
+- Lens
+- ISO / shutter / aperture
+- GPS (optional)
+
+Stored as JSONB for flexible querying.
+
+### Privacy Controls
+
+- Strip GPS metadata for shared links (optional)
+- Originals always preserved
+
+---
+
+## 7. API Design (FastAPI)
+
+### Authentication
+
+- JWT for owner/uploader
+- Cookie-based sessions for frontend
+
+### Asset Upload
+
+```
+POST /api/assets/upload
+```
+
+- Multipart upload
+- Streaming hash calculation
+- Async thumbnail generation
+
+### Albums
+
+```
+POST /api/albums
+GET  /api/albums
+GET  /api/albums/{id}
+POST /api/albums/{id}/assets
+```
+
+### Sharing
+
+```
+POST   /api/albums/{id}/share
+GET    /api/share/{token}
+POST   /api/share/{token}/auth
+DELETE /api/share/{token}
+```
+
+### Downloads
+
+```
+GET /api/assets/{id}/download
+GET /api/albums/{id}/download.zip
+```
+
+- ZIP files streamed on-the-fly
+
+---
+
+## 8. Signed URLs & Security
+
+- HMAC-signed URLs
+- Expiration timestamps
+- Optional IP binding
+- Enforced by NGINX
+
+Example:
+
+```
+/media/<path>?expires=...&sig=...
+```
+
+Rate limiting:
+
+- Per IP
+- Per token
+- Stricter limits for ZIP downloads
+
+---
+
+## 9. Frontend UX Principles
+
+### UX Pillars
+
+- Minimal UI
+- Mobile-first
+- Smooth animations
+- Skeleton loaders
+- Progressive image loading
+
+### Key Screens
+
+- Album grid
+- Album view (masonry)
+- Lightbox viewer
+- Metadata drawer
+- Share link management
+
+### UI Stack
+
+- Next.js App Router
+- Tailwind CSS
+- Headless UI
+- Framer Motion
+- Blurhash / LQIP previews
+
+---
+
+## 10. Deployment Plan
+
+### Phase 1
+
+- Shell scripts
+- Manual NGINX config
+
+### Phase 2
+
+- Docker Compose
+- Services: frontend, backend, postgres, nginx
+- Persistent volume for `/data/photos`
+
+---
+
+## 11. Scaling Notes
+
+- 10k+ photos trivial
+- PostgreSQL more than sufficient
+- Disk IO is the main bottleneck
+- Dedup significantly reduces growth
+
+---
+
+## 12. Future Extensions
+
+- Friend uploads
+- Object storage (S3-compatible)
+- Background job queue
+- Timeline view
+- Metadata search
+
+---
+
+**Positioning:**
+
+> Immich-style storage and sharing, without sync or ML complexity
+
+---
+
+_End of specification._

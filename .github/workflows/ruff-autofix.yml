@@ -1,0 +1,57 @@
+# .github/workflows/ruff-autofix.yml
+name: Ruff Autofix
+
+on:
+  pull_request:
+    paths:
+      - "apps/python/**/*.py"
+      - "apps/python/pyproject.toml"
+      - "apps/python/ruff.toml"
+
+jobs:
+  ruff-autofix:
+    runs-on: ubuntu-latest
+    # Needed so the workflow can push fixes to the PR branch
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Install dependencies (dev)
+        working-directory: apps/python
+        run: uv sync --dev
+
+      # Get the list of changed files in this PR (under apps/python) – robust and simple
+      - name: Get changed Python files
+        id: cf
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            apps/python/**/*.py
+
+      - name: Run Ruff on changed files
+        if: steps.cf.outputs.all_changed_files != ''
+        shell: bash
+        run: |
+          cd apps/python
+          # Convert absolute paths to paths relative to apps/python for Ruff
+          files=$(printf "%s" "${{ steps.cf.outputs.all_changed_files }}" | sed 's|apps/python/||g')
+          echo "Ruff will process: $files"
+          # Lint + autofix, then format
+          uv run ruff check --fix $files
+          uv run ruff format $files
+
+      - name: Commit fixes back to PR
+        if: steps.cf.outputs.all_changed_files != ''
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(ruff): auto-fix lint + format"
+          add_options: "-A"
