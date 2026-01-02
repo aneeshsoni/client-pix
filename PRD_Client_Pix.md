@@ -10,7 +10,7 @@
 
 - Google Photos–level **polish and usability**
 - Self-hosted on a VPS
-- Single owner (you), with optional friend uploads
+- Single owner, with optional uploading by others
 - Secure album sharing via public links
 - Fast browsing on mobile web
 - Deduplication
