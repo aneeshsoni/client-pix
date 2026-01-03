@@ -12,7 +12,7 @@
 - Self-hosted on a VPS
 - Single owner, with optional uploading by others
 - Secure album sharing via public links
-- Fast browsing on mobile web
+- Fast browsing on mobile web with downloads that don't fail with semi large albums like immich
 - Deduplication
 - Metadata visibility (EXIF / video metadata)
 - Simple to deploy and reason about
