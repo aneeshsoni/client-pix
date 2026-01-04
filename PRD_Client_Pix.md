@@ -322,7 +322,7 @@ Rate limiting:
 ## 12. Future Extensions
 
 - Friend uploads
-- Object storage (S3-compatible)
+- Object storage (S3-compatible or open source S3 alternative)
 - Background job queue
 - Timeline view
 - Metadata search
