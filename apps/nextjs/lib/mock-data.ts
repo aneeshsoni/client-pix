@@ -26,6 +26,7 @@ export interface Album {
   coverPhoto: string;
   photoCount: number;
   createdAt: string;
+  dateDisplay: string;
   isPrivate: boolean;
 }
 
@@ -63,12 +64,20 @@ const lenses = [
 
 export const mockPhotos: Photo[] = unsplashPhotos.map((photo, index) => ({
   id: photo.id,
-  src: `https://images.unsplash.com/photo-${1500000000000 + index * 100000}?w=${photo.w}&h=${photo.h}&fit=crop&auto=format&q=90`,
-  thumbnail: `https://images.unsplash.com/photo-${1500000000000 + index * 100000}?w=400&h=400&fit=crop&auto=format&q=80`,
+  src: `https://images.unsplash.com/photo-${1500000000000 + index * 100000}?w=${
+    photo.w
+  }&h=${photo.h}&fit=crop&auto=format&q=90`,
+  thumbnail: `https://images.unsplash.com/photo-${
+    1500000000000 + index * 100000
+  }?w=400&h=400&fit=crop&auto=format&q=80`,
   width: photo.w,
   height: photo.h,
   alt: photo.query.replace("-", " "),
-  takenAt: new Date(2024, Math.floor(index / 3), (index % 28) + 1).toISOString(),
+  takenAt: new Date(
+    2024,
+    Math.floor(index / 3),
+    (index % 28) + 1
+  ).toISOString(),
   metadata: {
     camera: cameras[index % cameras.length],
     lens: lenses[index % lenses.length],
@@ -76,15 +85,16 @@ export const mockPhotos: Photo[] = unsplashPhotos.map((photo, index) => ({
     aperture: ["f/1.4", "f/2.8", "f/4", "f/5.6", "f/8"][index % 5],
     shutterSpeed: ["1/1000", "1/500", "1/250", "1/125", "1/60"][index % 5],
     focalLength: ["24mm", "35mm", "50mm", "85mm", "135mm"][index % 5],
-    location: index % 3 === 0 ? "Iceland" : index % 3 === 1 ? "Japan" : "California",
+    location:
+      index % 3 === 0 ? "Iceland" : index % 3 === 1 ? "Japan" : "California",
   },
 }));
 
 // Use picsum.photos for reliable placeholder images
-export const generatePhotoUrl = (id: string, width: number, height: number) => 
+export const generatePhotoUrl = (id: string, width: number, height: number) =>
   `https://picsum.photos/seed/${id}/${width}/${height}`;
 
-export const generateThumbnailUrl = (id: string) => 
+export const generateThumbnailUrl = (id: string) =>
   `https://picsum.photos/seed/${id}/400/400`;
 
 // Generate realistic mock photos using picsum
@@ -94,7 +104,7 @@ export const generateMockPhotos = (count: number, albumId: string): Photo[] => {
     const isPortrait = Math.random() > 0.6;
     const width = isPortrait ? 1200 : 1600;
     const height = isPortrait ? 1600 : 1200;
-    
+
     return {
       id,
       src: generatePhotoUrl(id, width, height),
@@ -102,15 +112,27 @@ export const generateMockPhotos = (count: number, albumId: string): Photo[] => {
       width,
       height,
       alt: `Photo ${i + 1}`,
-      takenAt: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1).toISOString(),
+      takenAt: new Date(
+        2024,
+        Math.floor(Math.random() * 12),
+        Math.floor(Math.random() * 28) + 1
+      ).toISOString(),
       metadata: {
         camera: cameras[Math.floor(Math.random() * cameras.length)],
         lens: lenses[Math.floor(Math.random() * lenses.length)],
         iso: [100, 200, 400, 800, 1600][Math.floor(Math.random() * 5)],
-        aperture: ["f/1.4", "f/2.8", "f/4", "f/5.6", "f/8"][Math.floor(Math.random() * 5)],
-        shutterSpeed: ["1/1000", "1/500", "1/250", "1/125", "1/60"][Math.floor(Math.random() * 5)],
-        focalLength: ["24mm", "35mm", "50mm", "85mm", "135mm"][Math.floor(Math.random() * 5)],
-        location: ["Iceland", "Japan", "California", "Norway", "New Zealand"][Math.floor(Math.random() * 5)],
+        aperture: ["f/1.4", "f/2.8", "f/4", "f/5.6", "f/8"][
+          Math.floor(Math.random() * 5)
+        ],
+        shutterSpeed: ["1/1000", "1/500", "1/250", "1/125", "1/60"][
+          Math.floor(Math.random() * 5)
+        ],
+        focalLength: ["24mm", "35mm", "50mm", "85mm", "135mm"][
+          Math.floor(Math.random() * 5)
+        ],
+        location: ["Iceland", "Japan", "California", "Norway", "New Zealand"][
+          Math.floor(Math.random() * 5)
+        ],
       },
     };
   });
@@ -124,6 +146,7 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("iceland-cover", 800, 600),
     photoCount: 24,
     createdAt: "2024-03-15",
+    dateDisplay: "2024-03-10",
     isPrivate: false,
   },
   {
@@ -133,6 +156,7 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("tokyo-cover", 800, 600),
     photoCount: 36,
     createdAt: "2024-04-02",
+    dateDisplay: "2024-03-28",
     isPrivate: false,
   },
   {
@@ -142,6 +166,7 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("california-cover", 800, 600),
     photoCount: 18,
     createdAt: "2024-05-20",
+    dateDisplay: "2024-05-15",
     isPrivate: false,
   },
   {
@@ -151,6 +176,7 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("norway-cover", 800, 600),
     photoCount: 42,
     createdAt: "2024-06-10",
+    dateDisplay: "2024-06-01",
     isPrivate: true,
   },
   {
@@ -160,6 +186,7 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("nz-cover", 800, 600),
     photoCount: 55,
     createdAt: "2024-07-25",
+    dateDisplay: "2024-07-18",
     isPrivate: false,
   },
   {
@@ -169,19 +196,19 @@ export const mockAlbums: Album[] = [
     coverPhoto: generatePhotoUrl("patagonia-cover", 800, 600),
     photoCount: 31,
     createdAt: "2024-08-15",
+    dateDisplay: "2024-08-10",
     isPrivate: false,
   },
 ];
 
 // Get photos for a specific album
 export const getAlbumPhotos = (albumId: string): Photo[] => {
-  const album = mockAlbums.find(a => a.id === albumId);
+  const album = mockAlbums.find((a) => a.id === albumId);
   if (!album) return [];
   return generateMockPhotos(album.photoCount, albumId);
 };
 
 // Get album by ID
 export const getAlbum = (albumId: string): Album | undefined => {
-  return mockAlbums.find(a => a.id === albumId);
+  return mockAlbums.find((a) => a.id === albumId);
 };
-

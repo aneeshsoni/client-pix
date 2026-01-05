@@ -1,7 +1,16 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Camera, Aperture, Clock, Sun, Ruler, MapPin, Calendar } from "lucide-react";
+import {
+  X,
+  Camera,
+  Aperture,
+  Clock,
+  Sun,
+  Ruler,
+  MapPin,
+  Calendar,
+} from "lucide-react";
 import type { Photo } from "@/lib/mock-data";
 
 interface MetadataDrawerProps {
@@ -18,19 +27,25 @@ interface MetadataRowProps {
 
 function MetadataRow({ icon, label, value }: MetadataRowProps) {
   if (!value) return null;
-  
+
   return (
     <div className="flex items-start gap-3 py-3 border-b border-white/10 last:border-0">
       <div className="text-white/50 mt-0.5">{icon}</div>
       <div className="flex-1 min-w-0">
-        <div className="text-xs text-white/50 uppercase tracking-wide">{label}</div>
+        <div className="text-xs text-white/50 uppercase tracking-wide">
+          {label}
+        </div>
         <div className="text-sm text-white mt-0.5 truncate">{value}</div>
       </div>
     </div>
   );
 }
 
-export function MetadataDrawer({ photo, isOpen, onClose }: MetadataDrawerProps) {
+export function MetadataDrawer({
+  photo,
+  isOpen,
+  onClose,
+}: MetadataDrawerProps) {
   const formattedDate = new Date(photo.takenAt).toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -89,7 +104,7 @@ export function MetadataDrawer({ photo, isOpen, onClose }: MetadataDrawerProps) 
                 label="Camera"
                 value={photo.metadata.camera}
               />
-              
+
               <MetadataRow
                 icon={<Ruler className="h-4 w-4" />}
                 label="Lens"
@@ -102,19 +117,19 @@ export function MetadataDrawer({ photo, isOpen, onClose }: MetadataDrawerProps) 
                 label="Aperture"
                 value={photo.metadata.aperture}
               />
-              
+
               <MetadataRow
                 icon={<Clock className="h-4 w-4" />}
                 label="Shutter Speed"
                 value={photo.metadata.shutterSpeed}
               />
-              
+
               <MetadataRow
                 icon={<Sun className="h-4 w-4" />}
                 label="ISO"
                 value={photo.metadata.iso}
               />
-              
+
               <MetadataRow
                 icon={<Ruler className="h-4 w-4" />}
                 label="Focal Length"
@@ -132,12 +147,26 @@ export function MetadataDrawer({ photo, isOpen, onClose }: MetadataDrawerProps) 
               <div className="pt-4 mt-4 border-t border-white/10">
                 <div className="flex items-center gap-3">
                   <div className="text-white/50">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2" />
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <rect
+                        x="3"
+                        y="3"
+                        width="18"
+                        height="18"
+                        rx="2"
+                        strokeWidth="2"
+                      />
                     </svg>
                   </div>
                   <div>
-                    <div className="text-xs text-white/50 uppercase tracking-wide">Dimensions</div>
+                    <div className="text-xs text-white/50 uppercase tracking-wide">
+                      Dimensions
+                    </div>
                     <div className="text-sm text-white mt-0.5">
                       {photo.width} × {photo.height}
                     </div>
@@ -151,4 +180,3 @@ export function MetadataDrawer({ photo, isOpen, onClose }: MetadataDrawerProps) 
     </AnimatePresence>
   );
 }
-

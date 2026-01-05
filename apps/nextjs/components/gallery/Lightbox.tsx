@@ -84,7 +84,7 @@ export function Lightbox({
           <div className="text-sm text-white/70 font-medium">
             {currentIndex + 1} / {totalCount}
           </div>
-          
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowMetadata((prev) => !prev)}
@@ -97,7 +97,7 @@ export function Lightbox({
             >
               <Info className="h-5 w-5" />
             </button>
-            
+
             <a
               href={photo.src}
               download
@@ -106,7 +106,7 @@ export function Lightbox({
             >
               <Download className="h-5 w-5" />
             </a>
-            
+
             <button
               onClick={onClose}
               className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors"
@@ -157,7 +157,7 @@ export function Lightbox({
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
-        
+
         <button
           onClick={() => {
             onNext();
@@ -179,4 +179,3 @@ export function Lightbox({
     </AnimatePresence>
   );
 }
-

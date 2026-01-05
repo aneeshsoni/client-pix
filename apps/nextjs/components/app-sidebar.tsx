@@ -1,24 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import {
-  Home,
-  CreditCard,
-  User,
-  Settings2,
-} from "lucide-react"
-import { useUser } from "@clerk/nextjs"
+import * as React from "react";
+import { Home, CreditCard, User, Settings2, Images } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 
-import { NavMain } from "@/components/nav-main"
-import UserSection from "@/components/UserSection"
-import { TeamSwitcher } from "@/components/team-switcher"
+import { NavMain } from "@/components/nav-main";
+import UserSection from "@/components/UserSection";
+import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 // Navigation items for the main application
 const navItems = [
@@ -26,6 +21,12 @@ const navItems = [
     title: "Home",
     url: "/dashboard",
     icon: Home,
+    isActive: false,
+  },
+  {
+    title: "Gallery",
+    url: "/dashboard/gallery",
+    icon: Images,
     isActive: false,
   },
   {
@@ -40,7 +41,7 @@ const navItems = [
     icon: Settings2,
     isActive: false,
   },
-]
+];
 
 // This is sample data for teams - you can customize this
 const data = {
@@ -61,14 +62,14 @@ const data = {
       plan: "Enterprise",
     },
   ],
-}
+};
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, isLoaded } = useUser()
+  const { user, isLoaded } = useUser();
 
   // Don't render if Clerk is not loaded or user is not authenticated
   if (!isLoaded) {
-    return null
+    return null;
   }
 
   return (
@@ -80,13 +81,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
-        <UserSection user={user ? {
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.emailAddresses[0]?.emailAddress
-        } : undefined} />
+        <UserSection
+          user={
+            user
+              ? {
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  email: user.emailAddresses[0]?.emailAddress,
+                }
+              : undefined
+          }
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }

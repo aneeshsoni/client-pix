@@ -16,4 +16,3 @@ export function AlbumGrid({ albums }: AlbumGridProps) {
     </div>
   );
 }
-

@@ -11,7 +11,7 @@ export default function AlbumNotFound() {
           The album you're looking for doesn't exist or has been removed.
         </p>
         <Link
-          href="/gallery"
+          href="/dashboard/gallery"
           className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -21,4 +21,3 @@ export default function AlbumNotFound() {
     </main>
   );
 }
-

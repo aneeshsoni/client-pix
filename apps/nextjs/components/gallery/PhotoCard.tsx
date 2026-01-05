@@ -13,10 +13,10 @@ interface PhotoCardProps {
 
 export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
   const [isLoaded, setIsLoaded] = useState(false);
-  
+
   // Calculate aspect ratio for proper sizing
   const aspectRatio = photo.height / photo.width;
-  
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -33,7 +33,7 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
         {!isLoaded && (
           <div className="absolute inset-0 animate-pulse bg-muted" />
         )}
-        
+
         {/* Photo */}
         <Image
           src={photo.thumbnail}
@@ -45,11 +45,10 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           onLoad={() => setIsLoaded(true)}
         />
-        
+
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
       </button>
     </motion.div>
   );
 }
-
