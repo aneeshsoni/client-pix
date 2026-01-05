@@ -26,7 +26,7 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
     >
       <button
         onClick={onClick}
-        className="group relative block w-full overflow-hidden rounded-lg bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+        className="group relative block w-full overflow-hidden bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
         style={{ aspectRatio: `${photo.width}/${photo.height}` }}
       >
         {/* Loading skeleton */}

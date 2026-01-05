@@ -1,6 +1,6 @@
 import { mockAlbums } from "@/lib/mock-data";
 import { AlbumGrid } from "@/components/gallery";
-import { Plus } from "lucide-react";
+import { GalleryHeader } from "@/components/gallery/GalleryHeader";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -30,15 +30,7 @@ export default function GalleryPage() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="ml-auto flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">
-            {mockAlbums.length} albums
-          </span>
-          <button className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New Album</span>
-          </button>
-        </div>
+        <GalleryHeader albumCount={mockAlbums.length} />
       </header>
 
       {/* Content */}

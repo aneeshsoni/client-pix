@@ -4,3 +4,5 @@ export { PhotoCard } from "./PhotoCard";
 export { PhotoGrid } from "./PhotoGrid";
 export { Lightbox } from "./Lightbox";
 export { MetadataDrawer } from "./MetadataDrawer";
+export { NewAlbumModal } from "./NewAlbumModal";
+export { GalleryHeader } from "./GalleryHeader";
