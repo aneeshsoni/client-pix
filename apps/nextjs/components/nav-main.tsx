@@ -58,12 +58,12 @@ export function NavMain({
                       </Link>
                     </SidebarMenuButton>
                     <CollapsibleTrigger asChild>
-                      <SidebarMenuButton 
-                        tooltip=""
-                        className="w-8 p-0"
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground outline-none transition-transform focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                       >
                         <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                      </SidebarMenuButton>
+                      </button>
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent>
