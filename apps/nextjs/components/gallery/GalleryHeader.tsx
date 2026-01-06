@@ -6,16 +6,20 @@ import { NewAlbumModal } from "./NewAlbumModal";
 
 interface GalleryHeaderProps {
   albumCount: number;
+  onAlbumCreated?: () => void;
 }
 
-export function GalleryHeader({ albumCount }: GalleryHeaderProps) {
+export function GalleryHeader({
+  albumCount,
+  onAlbumCreated,
+}: GalleryHeaderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <>
       <div className="ml-auto flex items-center gap-4">
         <span className="text-sm text-muted-foreground">
-          {albumCount} albums
+          {albumCount} album{albumCount !== 1 ? "s" : ""}
         </span>
         <button
           onClick={() => setIsModalOpen(true)}
@@ -26,7 +30,11 @@ export function GalleryHeader({ albumCount }: GalleryHeaderProps) {
         </button>
       </div>
 
-      <NewAlbumModal open={isModalOpen} onOpenChange={setIsModalOpen} />
+      <NewAlbumModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onAlbumCreated={onAlbumCreated}
+      />
     </>
   );
 }

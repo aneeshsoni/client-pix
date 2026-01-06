@@ -1,0 +1,48 @@
+# Development: PostgreSQL + Nginx
+# Run with: docker compose -f docker-compose.dev.yml up -d
+#
+# This runs:
+# - PostgreSQL on port 5432
+# - Nginx on port 80 (proxies to your local dev servers)
+#
+# You still run the backend and frontend manually:
+#   Backend: cd apps/python && uv run fastapi dev
+#   Frontend: cd apps/nextjs && npm run dev
+#
+# Access the app at: http://localhost (port 80)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clientpix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clientpix
+      POSTGRES_PASSWORD: clientpix_dev
+      POSTGRES_DB: clientpix
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clientpix"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    container_name: clientpix-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./apps/python/uploads:/var/www/uploads:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

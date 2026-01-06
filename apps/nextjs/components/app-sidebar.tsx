@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Home, CreditCard, User, Settings2, Images } from "lucide-react";
+import { Home, CreditCard, User, Settings2, Images, Folder } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { NavMain } from "@/components/nav-main";
 import UserSection from "@/components/UserSection";
@@ -14,19 +16,14 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { listAlbums, type Album } from "@/lib/api";
 
-// Navigation items for the main application
-const navItems = [
+// Base navigation items (without dynamic albums)
+const baseNavItems = [
   {
     title: "Home",
     url: "/dashboard",
     icon: Home,
-    isActive: false,
-  },
-  {
-    title: "Gallery",
-    url: "/dashboard/gallery",
-    icon: Images,
     isActive: false,
   },
   {
@@ -66,6 +63,57 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user, isLoaded } = useUser();
+  const pathname = usePathname();
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [isLoadingAlbums, setIsLoadingAlbums] = useState(true);
+
+  // Fetch albums for sidebar
+  useEffect(() => {
+    const fetchAlbums = async () => {
+      try {
+        const response = await listAlbums();
+        setAlbums(response.albums);
+      } catch (error) {
+        console.error("Failed to fetch albums for sidebar:", error);
+      } finally {
+        setIsLoadingAlbums(false);
+      }
+    };
+
+    if (isLoaded) {
+      fetchAlbums();
+    }
+  }, [isLoaded]);
+
+  // Build navigation items with dynamic albums
+  const navItems = React.useMemo(() => {
+    const galleryItem = {
+      title: "Gallery",
+      url: "/dashboard/gallery",
+      icon: Images,
+      isActive: pathname === "/dashboard/gallery",
+    };
+
+    const albumsItem = {
+      title: "Albums",
+      url: "/dashboard/albums",
+      icon: Folder,
+      isActive: pathname === "/dashboard/albums" || pathname?.startsWith("/dashboard/albums/"),
+      items: albums.map((album) => ({
+        title: album.title,
+        url: `/dashboard/albums/${album.slug}`,
+        isActive: pathname === `/dashboard/albums/${album.slug}`,
+      })),
+    };
+
+    // Update base nav items with active state
+    const updatedBaseNavItems = baseNavItems.map((item) => ({
+      ...item,
+      isActive: pathname === item.url || (item.url !== "/dashboard" && pathname?.startsWith(item.url)),
+    }));
+
+    return [updatedBaseNavItems[0], galleryItem, albumsItem, ...updatedBaseNavItems.slice(1)];
+  }, [albums, pathname]);
 
   // Don't render if Clerk is not loaded or user is not authenticated
   if (!isLoaded) {

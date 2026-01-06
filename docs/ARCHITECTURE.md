@@ -98,19 +98,16 @@ client-pix/
 │   │   ├── lib/             # Utilities, API clients
 │   │   └── styles/          # Global styles
 │   │
-│   ├── api/                 # Backend application (to be created)
-│   │   ├── src/
-│   │   │   ├── main.py      # FastAPI application entry
-│   │   │   ├── routers/     # API route handlers
-│   │   │   ├── services/    # Business logic
-│   │   │   ├── models/      # SQLAlchemy ORM models
-│   │   │   ├── schemas/     # Pydantic DTOs
-│   │   │   └── utils/       # Helpers (auth, storage, etc.)
-│   │   ├── pyproject.toml
-│   │   └── Dockerfile
-│   │
-│   └── docs/                # Documentation
+│   └── python/              # Backend application
+│       ├── main.py          # FastAPI app entry point
+│       ├── router.py        # Main router (aggregates all API routers)
+│       ├── api/             # API endpoints
+│       ├── models/          # Pydantic data models
+│       ├── services/        # Business logic
+│       ├── utils/           # Utility functions
+│       └── pyproject.toml   # Python dependencies (uv)
 │
+├── docs/                    # Documentation
 ├── docker-compose.yml       # Local development orchestration
 └── README.md
 ```
@@ -119,33 +116,67 @@ client-pix/
 
 ## Backend Architecture (FastAPI)
 
-### Core Modules
+### Directory Structure & Naming Conventions
 
 ```
-api/src/
-├── routers/
-│   ├── auth.py          # Login, register, JWT tokens
-│   ├── users.py         # User management
-│   ├── albums.py        # Album CRUD (admin)
-│   ├── photos.py        # Photo upload, metadata
-│   └── galleries.py     # Public client gallery access
+apps/python/
+├── main.py                  # FastAPI app instance, middleware, CORS
+├── router.py                # Aggregates all API routers under /api prefix
 │
-├── services/
-│   ├── auth.py          # Password hashing, JWT
-│   ├── storage.py       # File storage, deduplication
-│   ├── image.py         # Thumbnails, optimization
-│   └── album.py         # Album business logic
+├── api/                     # API endpoints
+│   ├── system/
+│   │   └── system_api.py    # Health checks, system info
+│   ├── auth/
+│   │   └── auth_api.py      # Login, register, JWT tokens
+│   ├── albums/
+│   │   └── albums_api.py    # Album CRUD
+│   ├── photos/
+│   │   └── photos_api.py    # Photo upload, metadata
+│   └── galleries/
+│       └── galleries_api.py # Public client gallery access
 │
-├── models/
-│   ├── user.py          # User model
-│   ├── album.py         # Album model
-│   ├── photo.py         # Photo model
-│   └── file_hash.py     # Deduplication tracking
+├── models/                  # Pydantic data models
+│   ├── api/                 # Models for API request/response
+│   │   └── system_api_models.py
+│   └── db/                  # Database/ORM models (future)
+│       └── user_db_models.py
 │
-└── schemas/
-    ├── auth.py          # Login/register DTOs
-    ├── album.py         # Album request/response
-    └── photo.py         # Photo metadata DTOs
+├── services/                # Business logic
+│   ├── auth_service.py      # Password hashing, JWT
+│   ├── storage_service.py   # File storage, deduplication
+│   ├── image_service.py     # Thumbnails, optimization
+│   └── album_service.py     # Album business logic
+│
+└── utils/                   # Utility functions
+    ├── logger_util.py       # Logging configuration
+    └── hashing_util.py      # SHA256 helpers
+```
+
+### Naming Conventions
+
+| Directory     | File Suffix      | Example                | Purpose                        |
+| ------------- | ---------------- | ---------------------- | ------------------------------ |
+| `api/`        | `_api.py`        | `albums_api.py`        | API endpoint handlers          |
+| `models/api/` | `_api_models.py` | `albums_api_models.py` | Pydantic request/response DTOs |
+| `models/db/`  | `_db_models.py`  | `user_db_models.py`    | Database/ORM models (future)   |
+| `services/`   | `_service.py`    | `storage_service.py`   | Business logic                 |
+| `utils/`      | `_util.py`       | `logger_util.py`       | Reusable utility functions     |
+
+### Entry Point Flow
+
+```
+main.py
+  └── app = FastAPI()
+  └── app.include_router(router)
+        │
+router.py
+  └── router = APIRouter(prefix="/api")
+  └── router.include_router(system_api.router)
+  └── router.include_router(auth_api.router)
+  └── ...
+        │
+api/*_api.py
+  └── Individual endpoint handlers
 ```
 
 ### File Storage Strategy

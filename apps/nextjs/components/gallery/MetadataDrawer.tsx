@@ -1,17 +1,8 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  X,
-  Camera,
-  Aperture,
-  Clock,
-  Sun,
-  Ruler,
-  MapPin,
-  Calendar,
-} from "lucide-react";
-import type { Photo } from "@/lib/mock-data";
+import { X, Calendar, FileImage, HardDrive } from "lucide-react";
+import type { Photo } from "@/lib/api";
 
 interface MetadataDrawerProps {
   photo: Photo;
@@ -41,19 +32,25 @@ function MetadataRow({ icon, label, value }: MetadataRowProps) {
   );
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function MetadataDrawer({
   photo,
   isOpen,
   onClose,
 }: MetadataDrawerProps) {
-  const formattedDate = new Date(photo.takenAt).toLocaleDateString("en-US", {
+  const formattedDate = new Date(photo.created_at).toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  const formattedTime = new Date(photo.takenAt).toLocaleTimeString("en-US", {
+  const formattedTime = new Date(photo.created_at).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -92,76 +89,33 @@ export function MetadataDrawer({
 
             {/* Content */}
             <div className="p-4 space-y-1">
-              {/* Date & Time */}
+              {/* Filename */}
               <div className="pb-4 mb-2 border-b border-white/10">
-                <div className="text-white font-medium">{formattedDate}</div>
-                <div className="text-white/50 text-sm">{formattedTime}</div>
+                <div className="text-white font-medium truncate">
+                  {photo.original_filename}
+                </div>
+                <div className="text-white/50 text-sm">{photo.mime_type}</div>
               </div>
 
-              {/* Camera info */}
+              {/* Date & Time */}
               <MetadataRow
-                icon={<Camera className="h-4 w-4" />}
-                label="Camera"
-                value={photo.metadata.camera}
+                icon={<Calendar className="h-4 w-4" />}
+                label="Uploaded"
+                value={`${formattedDate} at ${formattedTime}`}
               />
 
+              {/* File info */}
               <MetadataRow
-                icon={<Ruler className="h-4 w-4" />}
-                label="Lens"
-                value={photo.metadata.lens}
-              />
-
-              {/* Exposure settings */}
-              <MetadataRow
-                icon={<Aperture className="h-4 w-4" />}
-                label="Aperture"
-                value={photo.metadata.aperture}
-              />
-
-              <MetadataRow
-                icon={<Clock className="h-4 w-4" />}
-                label="Shutter Speed"
-                value={photo.metadata.shutterSpeed}
-              />
-
-              <MetadataRow
-                icon={<Sun className="h-4 w-4" />}
-                label="ISO"
-                value={photo.metadata.iso}
-              />
-
-              <MetadataRow
-                icon={<Ruler className="h-4 w-4" />}
-                label="Focal Length"
-                value={photo.metadata.focalLength}
-              />
-
-              {/* Location */}
-              <MetadataRow
-                icon={<MapPin className="h-4 w-4" />}
-                label="Location"
-                value={photo.metadata.location}
+                icon={<HardDrive className="h-4 w-4" />}
+                label="File Size"
+                value={formatFileSize(photo.file_size)}
               />
 
               {/* Dimensions */}
               <div className="pt-4 mt-4 border-t border-white/10">
                 <div className="flex items-center gap-3">
                   <div className="text-white/50">
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <rect
-                        x="3"
-                        y="3"
-                        width="18"
-                        height="18"
-                        rx="2"
-                        strokeWidth="2"
-                      />
-                    </svg>
+                    <FileImage className="h-4 w-4" />
                   </div>
                   <div>
                     <div className="text-xs text-white/50 uppercase tracking-wide">
@@ -173,6 +127,16 @@ export function MetadataDrawer({
                   </div>
                 </div>
               </div>
+
+              {/* Caption */}
+              {photo.caption && (
+                <div className="pt-4 mt-4 border-t border-white/10">
+                  <div className="text-xs text-white/50 uppercase tracking-wide mb-2">
+                    Caption
+                  </div>
+                  <div className="text-sm text-white">{photo.caption}</div>
+                </div>
+              )}
             </div>
           </motion.div>
         </>

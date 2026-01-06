@@ -1,8 +1,9 @@
 export { AlbumCard } from "./AlbumCard";
 export { AlbumGrid } from "./AlbumGrid";
-export { PhotoCard } from "./PhotoCard";
-export { PhotoGrid } from "./PhotoGrid";
+export { AlbumSettingsModal } from "./AlbumSettingsModal";
+export { GalleryHeader } from "./GalleryHeader";
 export { Lightbox } from "./Lightbox";
 export { MetadataDrawer } from "./MetadataDrawer";
 export { NewAlbumModal } from "./NewAlbumModal";
-export { GalleryHeader } from "./GalleryHeader";
+export { PhotoCard } from "./PhotoCard";
+export { PhotoGrid } from "./PhotoGrid";

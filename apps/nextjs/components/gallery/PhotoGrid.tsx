@@ -3,13 +3,14 @@
 import { useState, useCallback } from "react";
 import { PhotoCard } from "./PhotoCard";
 import { Lightbox } from "./Lightbox";
-import type { Photo } from "@/lib/mock-data";
+import type { Photo } from "@/lib/api";
 
 interface PhotoGridProps {
   photos: Photo[];
+  albumId?: string; // Optional, will use photo.album_id if not provided
 }
 
-export function PhotoGrid({ photos }: PhotoGridProps) {
+export function PhotoGrid({ photos, albumId }: PhotoGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const openLightbox = useCallback((index: number) => {
@@ -48,6 +49,7 @@ export function PhotoGrid({ photos }: PhotoGridProps) {
       {lightboxIndex !== null && (
         <Lightbox
           photo={photos[lightboxIndex]}
+          albumId={albumId || photos[lightboxIndex].album_id}
           currentIndex={lightboxIndex}
           totalCount={photos.length}
           onClose={closeLightbox}

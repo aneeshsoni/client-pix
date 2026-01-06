@@ -2,7 +2,13 @@
 
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Images, ArrowDownToLine, ImageIcon } from "lucide-react";
+import {
+  Upload,
+  Images,
+  ArrowDownToLine,
+  ImageIcon,
+  Loader2,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,17 +18,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { createAlbum, uploadPhotosToAlbum } from "@/lib/api";
 
 interface NewAlbumModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAlbumCreated?: () => void;
 }
 
-export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
+export function NewAlbumModal({
+  open,
+  onOpenChange,
+  onAlbumCreated,
+}: NewAlbumModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback((fileList: FileList) => {
@@ -60,20 +74,54 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
     [handleFiles]
   );
 
-  const handleSubmit = useCallback(() => {
-    console.log({ title, description, files });
-    setTitle("");
-    setDescription("");
-    setFiles([]);
-    onOpenChange(false);
-  }, [title, description, files, onOpenChange]);
+  const handleSubmit = useCallback(async () => {
+    if (!title.trim()) return;
+
+    setIsUploading(true);
+    setUploadProgress("Creating album...");
+
+    try {
+      // Create the album
+      const album = await createAlbum(
+        title.trim(),
+        description.trim() || undefined
+      );
+
+      // Upload photos if any
+      if (files.length > 0) {
+        setUploadProgress(
+          `Uploading ${files.length} photo${files.length !== 1 ? "s" : ""}...`
+        );
+        await uploadPhotosToAlbum(album.id, files);
+      }
+
+      // Success! Reset and close
+      setTitle("");
+      setDescription("");
+      setFiles([]);
+      setUploadProgress("");
+      onOpenChange(false);
+
+      // Notify parent to refresh album list
+      onAlbumCreated?.();
+    } catch (error) {
+      console.error("Failed to create album:", error);
+      setUploadProgress(
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  }, [title, description, files, onOpenChange, onAlbumCreated]);
 
   const handleClose = useCallback(() => {
+    if (isUploading) return; // Prevent closing during upload
     setTitle("");
     setDescription("");
     setFiles([]);
+    setUploadProgress("");
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [isUploading, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -89,6 +137,7 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
                   placeholder="Add your album title here..."
                   className="w-full bg-transparent text-2xl font-semibold tracking-tight placeholder:text-muted-foreground/40 focus:outline-none focus:placeholder:text-muted-foreground/60"
                   autoFocus
+                  disabled={isUploading}
                 />
                 <motion.div
                   className="absolute -bottom-1 left-0 h-0.5 bg-foreground"
@@ -117,6 +166,7 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 className="border-2 bg-background/50 transition-all focus:border-foreground focus:ring-foreground/20"
+                disabled={isUploading}
               />
             </div>
 
@@ -130,10 +180,11 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !isUploading && fileInputRef.current?.click()}
                 animate={isDragOver ? { scale: 1.02 } : { scale: 1 }}
                 className={`
                   relative flex min-h-[180px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition-all duration-300
+                  ${isUploading ? "pointer-events-none opacity-50" : ""}
                   ${
                     isDragOver
                       ? "border-foreground bg-accent"
@@ -158,6 +209,7 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
                   accept="image/*"
                   onChange={handleFileInput}
                   className="hidden"
+                  disabled={isUploading}
                 />
 
                 <AnimatePresence mode="wait">
@@ -251,12 +303,20 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
             </div>
           </div>
 
+          {/* Upload Progress */}
+          {uploadProgress && (
+            <div className="flex items-center gap-2 pb-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {uploadProgress}
+            </div>
+          )}
+
           {/* Footer */}
           <div className="flex items-center justify-between pt-4">
             {/* Left side - Clear button */}
             <div>
               <AnimatePresence>
-                {files.length > 0 && (
+                {files.length > 0 && !isUploading && (
                   <motion.div
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -285,20 +345,28 @@ export function NewAlbumModal({ open, onOpenChange }: NewAlbumModalProps) {
               <Button
                 variant="ghost"
                 onClick={handleClose}
+                disabled={isUploading}
                 className="text-muted-foreground hover:text-foreground"
               >
                 Cancel
               </Button>
               <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: isUploading ? 1 : 1.02 }}
+                whileTap={{ scale: isUploading ? 1 : 0.98 }}
               >
                 <Button
                   onClick={handleSubmit}
-                  disabled={!title.trim()}
+                  disabled={!title.trim() || isUploading}
                   className="px-6"
                 >
-                  Create Album
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Album"
+                  )}
                 </Button>
               </motion.div>
             </div>

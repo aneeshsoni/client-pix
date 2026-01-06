@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import type { Photo } from "@/lib/mock-data";
+import type { Photo } from "@/lib/api";
+import { getImageUrl } from "@/lib/api";
 
 interface PhotoCardProps {
   photo: Photo;
@@ -14,8 +15,8 @@ interface PhotoCardProps {
 export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Calculate aspect ratio for proper sizing
-  const aspectRatio = photo.height / photo.width;
+  // Get the thumbnail URL from the API
+  const thumbnailUrl = getImageUrl(photo.thumbnail_path);
 
   return (
     <motion.div
@@ -36,14 +37,15 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
 
         {/* Photo */}
         <Image
-          src={photo.thumbnail}
-          alt={photo.alt}
+          src={thumbnailUrl}
+          alt={photo.original_filename}
           fill
           className={`object-cover transition-all duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           onLoad={() => setIsLoaded(true)}
+          unoptimized // Skip Next.js image optimization for external URLs
         />
 
         {/* Hover overlay */}

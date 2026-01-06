@@ -5,10 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Info, Download } from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
-import type { Photo } from "@/lib/mock-data";
+import type { Photo } from "@/lib/api";
+import { getImageUrl, getDownloadUrl } from "@/lib/api";
 
 interface LightboxProps {
   photo: Photo;
+  albumId: string;
   currentIndex: number;
   totalCount: number;
   onClose: () => void;
@@ -18,6 +20,7 @@ interface LightboxProps {
 
 export function Lightbox({
   photo,
+  albumId,
   currentIndex,
   totalCount,
   onClose,
@@ -26,6 +29,10 @@ export function Lightbox({
 }: LightboxProps) {
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
+
+  // Get the full resolution image URL
+  const imageUrl = getImageUrl(photo.web_path);
+  const downloadUrl = getDownloadUrl(albumId, photo.id);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
@@ -99,8 +106,8 @@ export function Lightbox({
             </button>
 
             <a
-              href={photo.src}
-              download
+              href={downloadUrl}
+              download={photo.original_filename}
               className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               title="Download"
             >
@@ -135,13 +142,14 @@ export function Lightbox({
             className="relative h-full w-full"
           >
             <Image
-              src={photo.src}
-              alt={photo.alt}
+              src={imageUrl}
+              alt={photo.original_filename}
               fill
               className="object-contain"
               sizes="100vw"
               priority
               onLoad={() => setIsImageLoaded(true)}
+              unoptimized
             />
           </motion.div>
         </div>

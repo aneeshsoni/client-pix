@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PhotoGrid } from "@/components/gallery";
+import { AlbumGrid } from "@/components/gallery";
+import { GalleryHeader } from "@/components/gallery/GalleryHeader";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -10,31 +11,30 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { getAllPhotos, type Photo } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { listAlbums, type Album } from "@/lib/api";
 
-export default function GalleryPage() {
-  const [photos, setPhotos] = useState<Photo[]>([]);
+export default function AlbumsPage() {
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPhotos = useCallback(async () => {
+  const fetchAlbums = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAllPhotos();
-      setPhotos(data);
+      const response = await listAlbums();
+      setAlbums(response.albums);
     } catch (err) {
-      console.error("Failed to fetch photos:", err);
-      setError(err instanceof Error ? err.message : "Failed to load photos");
+      console.error("Failed to fetch albums:", err);
+      setError(err instanceof Error ? err.message : "Failed to load albums");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchPhotos();
-  }, [fetchPhotos]);
+    fetchAlbums();
+  }, [fetchAlbums]);
 
   return (
     <>
@@ -45,39 +45,49 @@ export default function GalleryPage() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbPage>Gallery</BreadcrumbPage>
+              <BreadcrumbPage>Albums</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+
+        <GalleryHeader
+          albumCount={albums.length}
+          onAlbumCreated={fetchAlbums}
+        />
       </header>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <p className="text-destructive">{error}</p>
             <button
-              onClick={fetchPhotos}
+              onClick={fetchAlbums}
               className="mt-4 text-sm text-primary hover:underline"
             >
               Try again
             </button>
           </div>
-        ) : photos.length === 0 ? (
+        ) : albums.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground">No photos yet</p>
+            <p className="text-muted-foreground">No albums yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload photos to albums to see them here
+              Click &quot;New Album&quot; to create your first album
             </p>
           </div>
         ) : (
-          <PhotoGrid photos={photos} />
+          <AlbumGrid
+            albums={albums}
+            onAlbumUpdated={fetchAlbums}
+            onAlbumDeleted={fetchAlbums}
+          />
         )}
       </div>
     </>
   );
 }
+
