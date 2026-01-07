@@ -7,3 +7,4 @@ export { MetadataDrawer } from "./MetadataDrawer";
 export { NewAlbumModal } from "./NewAlbumModal";
 export { PhotoCard } from "./PhotoCard";
 export { PhotoGrid } from "./PhotoGrid";
+export { ShareModal } from "./ShareModal";

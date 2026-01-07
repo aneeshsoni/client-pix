@@ -129,27 +129,32 @@ apps/python/
 │   ├── auth/
 │   │   └── auth_api.py      # Login, register, JWT tokens
 │   ├── albums/
-│   │   └── albums_api.py    # Album CRUD
-│   ├── photos/
-│   │   └── photos_api.py    # Photo upload, metadata
+│   │   └── albums_api.py    # Album CRUD, photo management
+│   ├── uploads/
+│   │   └── uploads_api.py   # File upload endpoints
+│   ├── share_links/
+│   │   └── share_links_api.py # Share link management
 │   └── galleries/
 │       └── galleries_api.py # Public client gallery access
 │
-├── models/                  # Pydantic data models
-│   ├── api/                 # Models for API request/response
-│   │   └── system_api_models.py
-│   └── db/                  # Database/ORM models (future)
-│       └── user_db_models.py
+├── models/                  # Data models
+│   ├── api/                 # Pydantic models for API request/response
+│   │   ├── albums_api_models.py
+│   │   ├── uploads_api_models.py
+│   │   └── share_links_api_models.py
+│   └── db/                  # SQLAlchemy ORM models
+│       ├── base.py          # Declarative base
+│       ├── album_db_models.py
+│       ├── photo_db_models.py
+│       ├── file_hash_db_models.py
+│       └── share_link_db_models.py
 │
 ├── services/                # Business logic
-│   ├── auth_service.py      # Password hashing, JWT
-│   ├── storage_service.py   # File storage, deduplication
-│   ├── image_service.py     # Thumbnails, optimization
-│   └── album_service.py     # Album business logic
+│   └── storage_service.py   # File storage, deduplication, thumbnails
 │
 └── utils/                   # Utility functions
-    ├── logger_util.py       # Logging configuration
-    └── hashing_util.py      # SHA256 helpers
+    ├── slug_util.py         # URL slug generation
+    └── response_util.py     # API response builders
 ```
 
 ### Naming Conventions
@@ -186,16 +191,23 @@ Photos are stored using **SHA256 content-based deduplication**:
 ```
 /uploads/
 ├── originals/
-│   └── ab/cd/abcd1234...sha256.jpg    # Original files
+│   └── ab/cd/abcd1234...sha256.jpg    # Original files (SHA256 hash)
 ├── thumbnails/
-│   └── ab/cd/abcd1234...sha256_thumb.jpg
-└── optimized/
-    └── ab/cd/abcd1234...sha256_web.jpg
+│   └── ab/cd/abcd1234...sha256.webp   # Thumbnails (800x800, WebP)
+├── web/
+│   └── ab/cd/abcd1234...sha256.webp   # Web-optimized (max 2400px, WebP)
+└── videos/
+    └── uuid.mp4                        # Video files (UUID-based, no dedup)
 ```
 
-- Files are hashed on upload
-- Duplicate uploads reference existing files
-- Two-level directory structure prevents filesystem limits
+**Key Features:**
+
+- **Images**: SHA256 hashing for deduplication, stored in 2-level sharded directories
+- **Videos**: UUID-based storage (no hashing due to size), stored flat in `videos/` directory
+- **Thumbnails**: Generated automatically (800x800px, WebP, 90% quality)
+- **Web versions**: Optimized for web viewing (max 2400px, WebP, 92% quality)
+- **Streaming uploads**: 8MB chunks for efficient large file handling
+- Duplicate uploads reference existing files (reference counting in database)
 
 ---
 
@@ -210,22 +222,99 @@ Photos are stored using **SHA256 content-based deduplication**:
 ### Endpoints Overview
 
 ```
-POST   /api/auth/login           # Admin login
-POST   /api/auth/register        # Admin registration (if enabled)
-POST   /api/auth/refresh         # Refresh access token
+# System
+GET    /api/system/health        # Health check
 
+# Albums
 GET    /api/albums               # List albums
 POST   /api/albums               # Create album
 GET    /api/albums/:id           # Get album details
-PUT    /api/albums/:id           # Update album
+GET    /api/albums/slug/:slug   # Get album by slug
+PATCH  /api/albums/:id           # Update album
 DELETE /api/albums/:id           # Delete album
+PUT    /api/albums/:id/cover/:photo_id  # Set cover photo
 
+# Photos
 POST   /api/albums/:id/photos    # Upload photos to album
-DELETE /api/photos/:id           # Delete photo
+GET    /api/albums/photos/all    # Get all photos across albums
+GET    /api/albums/:id/photos/:photo_id/download  # Download photo
+DELETE /api/albums/:id/photos/:photo_id  # Delete photo
+POST   /api/albums/:id/photos/:photo_id/regenerate-thumbnails  # Regenerate thumbnails
 
-GET    /api/galleries/:slug      # Public gallery access
-POST   /api/galleries/:slug/verify  # Verify PIN (if protected)
+# Share Links
+POST   /api/albums/:id/share     # Create share link
+GET    /api/albums/:id/share     # List share links for album
+PATCH  /api/albums/:id/share/:share_link_id  # Update share link (password, revoke)
+DELETE /api/albums/:id/share/:share_link_id  # Delete share link
+
+# File Uploads
+POST   /api/upload               # Upload single file
+POST   /api/upload/multiple      # Upload multiple files
 ```
+
+---
+
+## Sharing & Access Control
+
+### Share Links
+
+Albums can be shared via unique, secure share links with optional password protection.
+
+**Database Model:**
+
+- `share_links` table with fields: `id`, `album_id` (FK), `token`, `password_hash`, `is_password_protected`, `expires_at`, `is_revoked`
+- Foreign key relationship to `albums` with CASCADE delete
+- Unique token generation using `secrets.token_urlsafe(32)`
+
+**Security:**
+
+- Passwords hashed using bcrypt
+- Tokens are cryptographically secure (32-byte URL-safe tokens)
+- Links can be revoked without deletion
+- Optional expiration dates
+
+**Frontend:**
+
+- Share Modal component (`ShareModal.tsx`) for creating and managing share links
+- Visual indicators for password-protected vs public links
+- Copy-to-clipboard functionality
+- Revoke/restore toggle
+
+**API Endpoints:**
+
+- `POST /api/albums/:id/share` - Create share link (optional password)
+- `GET /api/albums/:id/share` - List all share links for album
+- `PATCH /api/albums/:id/share/:share_link_id` - Update (password, expiration, revoke)
+- `DELETE /api/albums/:id/share/:share_link_id` - Delete share link
+
+---
+
+## Error Handling & Network Resilience
+
+### Frontend API Client
+
+All API functions include comprehensive error handling:
+
+- **Network error detection**: Catches `TypeError: Failed to fetch` and provides clear messages
+- **HTTP error details**: Extracts error text from response body when available
+- **Backend connectivity**: Clear messaging when backend is unavailable
+- **URL encoding**: Proper encoding for slug-based endpoints
+
+### CORS Configuration
+
+Backend CORS middleware allows:
+
+- `http://localhost:3000` - Direct Next.js dev server access
+- `http://localhost` - Nginx proxy access (port 80)
+
+### Development Scripts
+
+The `start.sh` script includes:
+
+- Backend health check (waits up to 30 seconds for backend to be ready)
+- Automatic dependency installation
+- Docker status checking
+- Graceful cleanup on exit
 
 ---
 

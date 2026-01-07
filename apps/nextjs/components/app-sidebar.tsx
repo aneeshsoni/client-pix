@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Home, CreditCard, User, Settings2, Images, Folder } from "lucide-react";
+import {
+  Home,
+  CreditCard,
+  User,
+  Settings2,
+  Images,
+  Folder,
+} from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -94,11 +101,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       isActive: pathname === "/dashboard/gallery",
     };
 
+    // Check if we're viewing a specific album (sub-item)
+    const isViewingSpecificAlbum = albums.some(
+      (album) => pathname === `/dashboard/albums/${album.slug}`
+    );
+
     const albumsItem = {
       title: "Albums",
       url: "/dashboard/albums",
       icon: Folder,
-      isActive: pathname === "/dashboard/albums" || pathname?.startsWith("/dashboard/albums/"),
+      // Only mark Albums as active if we're on the albums list page, NOT when viewing a specific album
+      isActive: pathname === "/dashboard/albums",
       items: albums.map((album) => ({
         title: album.title,
         url: `/dashboard/albums/${album.slug}`,
@@ -109,10 +122,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     // Update base nav items with active state
     const updatedBaseNavItems = baseNavItems.map((item) => ({
       ...item,
-      isActive: pathname === item.url || (item.url !== "/dashboard" && pathname?.startsWith(item.url)),
+      isActive:
+        pathname === item.url ||
+        (item.url !== "/dashboard" && pathname?.startsWith(item.url)),
     }));
 
-    return [updatedBaseNavItems[0], galleryItem, albumsItem, ...updatedBaseNavItems.slice(1)];
+    return [
+      updatedBaseNavItems[0],
+      galleryItem,
+      albumsItem,
+      ...updatedBaseNavItems.slice(1),
+    ];
   }, [albums, pathname]);
 
   // Don't render if Clerk is not loaded or user is not authenticated

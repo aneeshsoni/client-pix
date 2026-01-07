@@ -128,7 +128,7 @@ export function AlbumSettingsModal({
           <DialogTitle>Album Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-6 py-4">
+        <div className="flex-1 overflow-y-auto space-y-6 py-4 px-2">
           {/* Title */}
           <div>
             <Label htmlFor="title" className="text-sm font-medium">

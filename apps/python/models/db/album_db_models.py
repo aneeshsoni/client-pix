@@ -51,6 +51,11 @@ class Album(Base):
         back_populates="album",
         cascade="all, delete-orphan",
     )
+    share_links: Mapped[list["ShareLink"]] = relationship(  # noqa: F821
+        "ShareLink",
+        back_populates="album",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<Album(id={self.id}, title='{self.title}')>"

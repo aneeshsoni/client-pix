@@ -23,8 +23,12 @@ from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from services.storage_service import storage_service
-from utils import generate_slug, build_album_response, build_photo_response
-from utils.response_util import get_thumbnail_path_for_hash
+from utils.slug_util import generate_slug
+from utils.response_util import (
+    build_album_response,
+    build_photo_response,
+    get_thumbnail_path_for_hash,
+)
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 
@@ -200,6 +204,8 @@ async def update_album(
 
     if data.title is not None:
         album.title = data.title
+        # Regenerate slug when title changes
+        album.slug = generate_slug(data.title)
     if data.description is not None:
         album.description = data.description
     if data.cover_photo_id is not None:

@@ -73,13 +73,27 @@ export async function createAlbum(
 }
 
 export async function listAlbums(): Promise<AlbumListResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/albums`);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/albums`, {
+      cache: "no-store", // Always fetch latest
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch albums: ${response.statusText}`);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(
+        `Failed to fetch albums: ${response.status} ${errorText}`
+      );
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      throw new Error(
+        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+      );
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function getAlbum(albumId: string): Promise<AlbumDetail> {
@@ -93,13 +107,25 @@ export async function getAlbum(albumId: string): Promise<AlbumDetail> {
 }
 
 export async function getAlbumBySlug(slug: string): Promise<AlbumDetail> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/slug/${slug}`);
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(slug)}`
+    );
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch album: ${response.statusText}`);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`Failed to fetch album: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      throw new Error(
+        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+      );
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function updateAlbum(
@@ -188,14 +214,28 @@ export async function setCoverPhoto(
 }
 
 export async function getAllPhotos(): Promise<Photo[]> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/photos/all`);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/albums/photos/all`, {
+      cache: "no-store",
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch photos: ${response.statusText}`);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(
+        `Failed to fetch photos: ${response.status} ${errorText}`
+      );
+    }
+
+    const data = await response.json();
+    return data.photos;
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      throw new Error(
+        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+      );
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return data.photos;
 }
 
 // --- Helper to get image URLs ---
@@ -209,4 +249,100 @@ export function getImageUrl(path: string): string {
 export function getDownloadUrl(albumId: string, photoId: string): string {
   // Use the download endpoint which sets proper Content-Disposition header
   return `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/download`;
+}
+
+// --- Share Link Types ---
+
+export interface ShareLink {
+  id: string;
+  album_id: string;
+  token: string;
+  share_url: string;
+  is_password_protected: boolean;
+  expires_at: string | null;
+  is_revoked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShareLinkListResponse {
+  share_links: ShareLink[];
+  total_count: number;
+}
+
+// --- Share Link API ---
+
+export async function createShareLink(
+  albumId: string,
+  password?: string
+): Promise<ShareLink> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: password || null }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to create share link");
+  }
+
+  return response.json();
+}
+
+export async function getShareLinks(albumId: string): Promise<ShareLink[]> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch share links: ${response.statusText}`);
+  }
+
+  const data: ShareLinkListResponse = await response.json();
+  return data.share_links;
+}
+
+export async function updateShareLink(
+  albumId: string,
+  shareLinkId: string,
+  updates: {
+    password?: string | null;
+    expires_at?: string | null;
+    is_revoked?: boolean;
+  }
+): Promise<ShareLink> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to update share link");
+  }
+
+  return response.json();
+}
+
+export async function deleteShareLink(
+  albumId: string,
+  shareLinkId: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete share link: ${response.statusText}`);
+  }
 }

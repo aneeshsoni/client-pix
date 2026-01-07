@@ -34,8 +34,21 @@ BACKEND_PID=$!
 (cd apps/nextjs && npm run dev) &
 FRONTEND_PID=$!
 
-# Wait for services
-sleep 3
+# Wait for backend to be ready
+echo "Waiting for backend..."
+for i in {1..30}; do
+    if curl -s http://localhost:8000/api/system/health > /dev/null 2>&1; then
+        echo "✓ Backend ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "⚠ Backend not responding after 30 seconds"
+    fi
+    sleep 1
+done
+
+# Wait for frontend
+sleep 2
 
 echo "✓ Services running"
 echo "  App: http://localhost"

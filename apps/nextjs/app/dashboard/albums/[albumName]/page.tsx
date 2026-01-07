@@ -1,9 +1,9 @@
 "use client";
 
 import { use, useEffect, useState, useCallback } from "react";
-import { PhotoGrid } from "@/components/gallery";
-import { Share2, MoreHorizontal, Upload, Loader2 } from "lucide-react";
-import { notFound } from "next/navigation";
+import { PhotoGrid, ShareModal, AlbumSettingsModal } from "@/components/gallery";
+import { Share2, Settings, Upload, Loader2 } from "lucide-react";
+import { notFound, useRouter } from "next/navigation";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -26,10 +26,13 @@ interface AlbumPageProps {
 
 export default function AlbumPage({ params }: AlbumPageProps) {
   const { albumName } = use(params);
+  const router = useRouter();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   const fetchAlbum = useCallback(async () => {
     try {
@@ -126,13 +129,20 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             />
           </label>
 
-          <button className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+          <button
+            onClick={() => setShareModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
             <Share2 className="h-4 w-4" />
             <span className="hidden sm:inline">Share</span>
           </button>
 
-          <button className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <MoreHorizontal className="h-5 w-5" />
+          <button
+            onClick={() => setSettingsModalOpen(true)}
+            className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Album settings"
+          >
+            <Settings className="h-5 w-5" />
           </button>
         </div>
       </header>
@@ -157,7 +167,38 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <PhotoGrid photos={album.photos} albumId={album.id} />
         )}
       </div>
+
+      {/* Share Modal */}
+      {album && (
+        <ShareModal
+          albumId={album.id}
+          open={shareModalOpen}
+          onOpenChange={setShareModalOpen}
+        />
+      )}
+
+      {/* Album Settings Modal */}
+      {album && (
+        <AlbumSettingsModal
+          album={{
+            id: album.id,
+            title: album.title,
+            description: album.description,
+            slug: album.slug,
+            cover_photo_id: album.cover_photo_id,
+            cover_photo_thumbnail: null, // Not needed for settings modal
+            photo_count: album.photo_count,
+            created_at: album.created_at,
+            updated_at: album.updated_at,
+          }}
+          open={settingsModalOpen}
+          onOpenChange={setSettingsModalOpen}
+          onAlbumUpdated={fetchAlbum}
+          onAlbumDeleted={() => {
+            router.push("/dashboard/albums");
+          }}
+        />
+      )}
     </>
   );
 }
-
