@@ -31,28 +31,28 @@ async def get_admin_from_token_or_query(
     This allows Image components to pass token via URL.
     """
     jwt_token = None
-    
+
     # Try Authorization header first
     if authorization and authorization.startswith("Bearer "):
         jwt_token = authorization.replace("Bearer ", "")
     # Fall back to query parameter
     elif token:
         jwt_token = token
-    
+
     if not jwt_token:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     admin_id = get_admin_id_from_token(jwt_token)
     if not admin_id:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
+
     stmt = select(Admin).where(Admin.id == admin_id)
     result = await db.execute(stmt)
     admin = result.scalar_one_or_none()
-    
+
     if not admin:
         raise HTTPException(status_code=401, detail="Admin not found")
-    
+
     return admin
 
 
@@ -60,7 +60,7 @@ def get_file_path(file_hash: str, variant: str, extension: str) -> Path:
     """Get the file path for a given hash and variant."""
     prefix = file_hash[:2]
     second = file_hash[2:4]
-    
+
     if variant == "original":
         return UPLOAD_DIR / "originals" / prefix / second / f"{file_hash}{extension}"
     elif variant == "thumbnail":
@@ -78,29 +78,29 @@ def get_file_path(file_hash: str, variant: str, extension: str) -> Path:
 async def get_authenticated_photo(
     photo_id: uuid.UUID,
     variant: str = Query("web", pattern="^(original|thumbnail|web)$"),
-    token: str | None = Query(None, description="JWT auth token (alternative to Authorization header)"),
+    token: str | None = Query(
+        None, description="JWT auth token (alternative to Authorization header)"
+    ),
     authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get a photo file. Requires admin authentication.
-    
+
     Variants:
     - thumbnail: Small preview (800px)
     - web: Web-optimized (2400px) - default
     - original: Full resolution
-    
+
     Auth can be provided via:
     - Authorization: Bearer <token> header
     - ?token=<token> query parameter (for Image components)
     """
     # Verify authentication
     await get_admin_from_token_or_query(db, authorization, token)
-    
+
     stmt = (
-        select(Photo)
-        .where(Photo.id == photo_id)
-        .options(selectinload(Photo.file_hash))
+        select(Photo).where(Photo.id == photo_id).options(selectinload(Photo.file_hash))
     )
     result = await db.execute(stmt)
     photo = result.scalar_one_or_none()
@@ -114,18 +114,22 @@ async def get_authenticated_photo(
     if not file_path.exists():
         # Fallback to original if variant doesn't exist
         if variant != "original":
-            file_path = get_file_path(file_hash.sha256_hash, "original", file_hash.file_extension)
+            file_path = get_file_path(
+                file_hash.sha256_hash, "original", file_hash.file_extension
+            )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
-    
+    media_type = (
+        "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
+    )
+
     return FileResponse(
         path=file_path,
         media_type=media_type,
         headers={
             "Cache-Control": "private, max-age=31536000",  # 1 year, but private (requires auth)
-        }
+        },
     )
 
 
@@ -133,7 +137,9 @@ async def get_authenticated_photo(
 async def get_authenticated_file_by_hash(
     file_hash: str,
     variant: str = Query("web", pattern="^(original|thumbnail|web)$"),
-    token: str | None = Query(None, description="JWT auth token (alternative to Authorization header)"),
+    token: str | None = Query(
+        None, description="JWT auth token (alternative to Authorization header)"
+    ),
     authorization: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -143,7 +149,7 @@ async def get_authenticated_file_by_hash(
     """
     # Verify authentication
     await get_admin_from_token_or_query(db, authorization, token)
-    
+
     stmt = select(FileHash).where(FileHash.sha256_hash == file_hash)
     result = await db.execute(stmt)
     fh = result.scalar_one_or_none()
@@ -160,13 +166,13 @@ async def get_authenticated_file_by_hash(
             raise HTTPException(status_code=404, detail="File not found")
 
     media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
-    
+
     return FileResponse(
         path=file_path,
         media_type=media_type,
         headers={
             "Cache-Control": "private, max-age=31536000",
-        }
+        },
     )
 
 
@@ -186,9 +192,8 @@ async def get_shared_photo(
     If share link is password protected, password must be provided.
     """
     # Validate share link
-    stmt = (
-        select(ShareLink)
-        .where(ShareLink.token == share_token, ShareLink.is_revoked == False)
+    stmt = select(ShareLink).where(
+        ShareLink.token == share_token, ShareLink.is_revoked is False
     )
     result = await db.execute(stmt)
     share_link = result.scalar_one_or_none()
@@ -199,6 +204,7 @@ async def get_shared_photo(
     # Check expiration
     if share_link.expires_at:
         from datetime import datetime, timezone
+
         if datetime.now(timezone.utc) > share_link.expires_at:
             raise HTTPException(status_code=410, detail="Share link has expired")
 
@@ -226,19 +232,23 @@ async def get_shared_photo(
 
     if not file_path.exists():
         if variant != "original":
-            file_path = get_file_path(file_hash.sha256_hash, "original", file_hash.file_extension)
+            file_path = get_file_path(
+                file_hash.sha256_hash, "original", file_hash.file_extension
+            )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
-    
+    media_type = (
+        "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
+    )
+
     return FileResponse(
         path=file_path,
         media_type=media_type,
         headers={
             # Public cache is OK for shared files since token is validated
             "Cache-Control": "public, max-age=86400",  # 1 day
-        }
+        },
     )
 
 
@@ -254,9 +264,8 @@ async def get_shared_file_by_hash(
     Get a file by hash from a shared album. Used for cover photos.
     """
     # Validate share link
-    stmt = (
-        select(ShareLink)
-        .where(ShareLink.token == share_token, ShareLink.is_revoked == False)
+    stmt = select(ShareLink).where(
+        ShareLink.token == share_token, ShareLink.is_revoked is False
     )
     result = await db.execute(stmt)
     share_link = result.scalar_one_or_none()
@@ -267,6 +276,7 @@ async def get_shared_file_by_hash(
     # Check expiration
     if share_link.expires_at:
         from datetime import datetime, timezone
+
         if datetime.now(timezone.utc) > share_link.expires_at:
             raise HTTPException(status_code=410, detail="Share link has expired")
 
@@ -306,11 +316,11 @@ async def get_shared_file_by_hash(
             raise HTTPException(status_code=404, detail="File not found")
 
     media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
-    
+
     return FileResponse(
         path=file_path,
         media_type=media_type,
         headers={
             "Cache-Control": "public, max-age=86400",
-        }
+        },
     )
