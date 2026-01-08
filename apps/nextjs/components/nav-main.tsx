@@ -2,6 +2,7 @@
 
 import { ChevronRight, type LucideIcon } from "lucide-react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 import {
   Collapsible,
@@ -30,9 +31,11 @@ export function NavMain({
     items?: {
       title: string
       url: string
+      isActive?: boolean
     }[]
   }[]
 }) {
+  const pathname = usePathname()
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Navigation</SidebarGroupLabel>
@@ -43,29 +46,40 @@ export function NavMain({
             return (
               <Collapsible
                 key={item.title}
-                asChild
                 defaultOpen={item.isActive}
                 className="group/collapsible"
               >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton tooltip={item.title}>
-                      {item.icon && <item.icon />}
-                      <span>{item.title}</span>
-                      <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                <SidebarMenuItem className="group/item">
+                  <div className="flex items-center gap-1">
+                    <SidebarMenuButton asChild tooltip={item.title} className="flex-1" isActive={item.isActive}>
+                      <Link href={item.url} className="group/link">
+                        {item.icon && <item.icon />}
+                        <span>{item.title}</span>
+                      </Link>
                     </SidebarMenuButton>
-                  </CollapsibleTrigger>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground outline-none transition-transform focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                      >
+                        <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </button>
+                    </CollapsibleTrigger>
+                  </div>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {item.items.map((subItem) => (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild>
-                            <Link href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
+                      {item.items.map((subItem) => {
+                        const isSubItemActive = subItem.isActive ?? pathname === subItem.url
+                        return (
+                          <SidebarMenuSubItem key={subItem.title}>
+                            <SidebarMenuSubButton asChild isActive={isSubItemActive}>
+                              <Link href={subItem.url}>
+                                <span>{subItem.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )
+                      })}
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>
@@ -76,7 +90,7 @@ export function NavMain({
           // If item has no sub-items, render as simple link
           return (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild tooltip={item.title}>
+              <SidebarMenuButton asChild tooltip={item.title} isActive={item.isActive}>
                 <Link href={item.url}>
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>

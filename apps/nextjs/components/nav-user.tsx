@@ -1,22 +1,13 @@
-"use client"
+"use client";
 
-import {
-  BadgeCheck,
-  Bell,
-  ChevronsUpDown,
-  CreditCard,
-  LogOut,
-  Sparkles,
-  User,
-} from "lucide-react"
-import { useUser, SignOutButton } from "@clerk/nextjs"
-import Link from "next/link"
+import { ChevronsUpDown, LogOut, Settings, User } from "lucide-react";
+import Link from "next/link";
+import { useAuth } from "@/lib/auth";
 
 import {
   Avatar,
   AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+} from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,20 +16,20 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 export function NavUser() {
-  const { isMobile } = useSidebar()
-  const { user, isLoaded } = useUser()
+  const { isMobile } = useSidebar();
+  const { admin, logout, isLoading } = useAuth();
 
-  // Show loading state while Clerk is loading
-  if (!isLoaded) {
+  // Show loading state
+  if (isLoading) {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
@@ -53,17 +44,22 @@ export function NavUser() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-    )
+    );
   }
 
-  // Don't render if no user (shouldn't happen in authenticated routes)
-  if (!user) {
-    return null
+  // Don't render if no user
+  if (!admin) {
+    return null;
   }
 
-  const name = user.fullName || user.firstName || 'User'
-  const email = user.emailAddresses[0]?.emailAddress || ''
-  const image = user.imageUrl
+  const name = admin.name || "Admin";
+  const email = admin.email;
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <SidebarMenu>
@@ -75,13 +71,7 @@ export function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={image} alt={name} />
-                <AvatarFallback className="rounded-lg">
-                  {name.includes(' ') ?
-                    `${name.split(' ')[0][0]}${name.split(' ')[1][0]}` :
-                    name.slice(0, 2)
-                  }
-                </AvatarFallback>
+                <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{name}</span>
@@ -99,13 +89,7 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={image} alt={name} />
-                  <AvatarFallback className="rounded-lg">
-                    {name.includes(' ') ?
-                      `${name.split(' ')[0][0]}${name.split(' ')[1][0]}` :
-                      name.slice(0, 2)
-                    }
-                  </AvatarFallback>
+                  <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{name}</span>
@@ -116,34 +100,20 @@ export function NavUser() {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/dashboard/user-profile" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Profile
+                <Link href="/dashboard/settings" className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
                 </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/billing" className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Billing
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Bell className="h-4 w-4" />
-                Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <SignOutButton>
-                <div className="flex items-center gap-2">
-                  <LogOut className="h-4 w-4" />
-                  Log out
-                </div>
-              </SignOutButton>
+            <DropdownMenuItem onClick={logout} className="cursor-pointer">
+              <LogOut className="h-4 w-4 mr-2" />
+              Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

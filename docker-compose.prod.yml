@@ -1,0 +1,98 @@
+# =============================================================================
+# Production Docker Compose
+# =============================================================================
+# For deployment on Coolify or any Docker-based hosting platform.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (set in Coolify or .env file):
+#   - POSTGRES_PASSWORD
+#
+# Optional (auto-generated or have defaults):
+#   - JWT_SECRET (auto-generated and persisted in uploads volume)
+#   - POSTGRES_USER (default: clientpix)
+#   - POSTGRES_DB (default: clientpix)
+#
+# Note: Domain is auto-detected from request headers - no URL config needed!
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clientpix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+      POSTGRES_DB: ${POSTGRES_DB:-clientpix}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clientpix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./apps/python
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_NAME: ${APP_NAME:-Client Pix API}
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clientpix}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clientpix}
+      UPLOAD_DIR: /app/uploads
+      WEB_MAX_DIMENSION: ${WEB_MAX_DIMENSION:-2400}
+      JWT_SECRET: ${JWT_SECRET:-}  # Optional: auto-generated if not set
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Next.js Frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./apps/nextjs
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # NOTE: uploads_data no longer mounted - all files served through authenticated API
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:

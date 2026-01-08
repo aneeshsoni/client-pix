@@ -1,0 +1,21 @@
+# Virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Uploads (handled by volumes)
+uploads/
+
+# Local env files
+.env
+.env.local

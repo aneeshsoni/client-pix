@@ -1,3 +1,49 @@
-./npm-install.sh
-cd apps/nextjs
-npm run dev
+# =============================================================================
+# Development Start Script
+# =============================================================================
+# Simple wrapper around docker compose for development.
+#
+# Usage:
+#   ./start.sh        - Start all services
+#   ./start.sh down   - Stop all services
+#   ./start.sh logs   - View logs
+#   ./start.sh build  - Rebuild containers
+# =============================================================================
+
+set -e
+
+COMPOSE_FILE="docker-compose.dev.yml"
+
+case "${1:-up}" in
+    up)
+        echo "Starting development environment..."
+        docker compose -f $COMPOSE_FILE up --build -d
+        echo ""
+        echo "✓ Services starting..."
+        echo ""
+        echo "  App:  http://localhost"
+        echo "  API:  http://localhost/api"
+        echo "  Docs: http://localhost/docs"
+        echo ""
+        echo "View logs: ./start.sh logs"
+        echo "Stop:      ./start.sh down"
+        ;;
+    down)
+        echo "Stopping development environment..."
+        docker compose -f $COMPOSE_FILE down
+        ;;
+    logs)
+        docker compose -f $COMPOSE_FILE logs -f
+        ;;
+    build)
+        echo "Rebuilding containers..."
+        docker compose -f $COMPOSE_FILE build --no-cache
+        ;;
+    restart)
+        docker compose -f $COMPOSE_FILE restart
+        ;;
+    *)
+        echo "Usage: ./start.sh [up|down|logs|build|restart]"
+        exit 1
+        ;;
+esac

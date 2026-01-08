@@ -1,0 +1,105 @@
+# =============================================================================
+# Development Docker Compose - Full Stack
+# =============================================================================
+# Runs everything in Docker with hot reload support.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Access:
+#   App:  http://localhost
+#   API:  http://localhost/api
+#   Docs: http://localhost/docs
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: clientpix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clientpix
+      POSTGRES_PASSWORD: clientpix_dev
+      POSTGRES_DB: clientpix
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clientpix"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend (with hot reload)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./apps/python
+      dockerfile: Dockerfile.dev
+    container_name: clientpix-backend
+    restart: unless-stopped
+    environment:
+      APP_NAME: Client Pix API (Dev)
+      DEBUG: "true"
+      DATABASE_URL: postgresql+asyncpg://clientpix:clientpix_dev@postgres:5432/clientpix
+      UPLOAD_DIR: /app/uploads
+      # JWT_SECRET auto-generated and saved to uploads/.jwt_secret
+      # Note: Domain auto-detected from request headers - no BASE_URL needed
+    volumes:
+      - ./apps/python:/app
+      - uploads_data:/app/uploads
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Next.js Frontend (with hot reload)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./apps/nextjs
+      dockerfile: Dockerfile.dev
+    container_name: clientpix-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_TELEMETRY_DISABLED: 1
+      # Note: Uses relative URLs - no NEXT_PUBLIC_API_URL needed
+    volumes:
+      - ./apps/nextjs:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      backend:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: clientpix-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      # NOTE: uploads_data no longer mounted - all files served through authenticated API
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  uploads_data:

@@ -1,111 +1,42 @@
-import { ReactNode } from 'react';
-import { AppSidebar } from '@/components/app-sidebar';
-import { auth, currentUser } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
-import prisma from '@/lib/db';
-import { stripe } from '@/lib/stripe';
-import {
-    SidebarInset,
-    SidebarProvider,
-} from "@/components/ui/sidebar"
+"use client";
 
-async function getData({ email, clerkId, firstName, lastName, profileImage }:
-    { email: string, clerkId: string, firstName: string | undefined | null, lastName: string | undefined | null, profileImage: string | undefined | null }) {
+import { ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { AppSidebar } from "@/components/app-sidebar";
+import { useAuth } from "@/lib/auth";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Loader2 } from "lucide-react";
 
-    let user = await prisma.user.findUnique({
-        where: {
-            clerk_id: clerkId,  // Look up by Clerk ID
-        },
-        select: {
-            user_id: true,
-            stripe_customer_id: true,
-        },
-    });
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
 
-    if (!user) {
-        const name = `${firstName ?? ""} ${lastName ?? ""}`;
-
-        await prisma.user.create({
-            data: {
-                clerk_id: clerkId,  // Store Clerk's user ID
-                email: email,
-                name: name,
-            },
-        });
-
-        // Refetch the user after creation
-        user = await prisma.user.findUnique({
-            where: {
-                clerk_id: clerkId,
-            },
-            select: {
-                user_id: true,
-                stripe_customer_id: true,
-            },
-        });
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
     }
+  }, [isLoading, isAuthenticated, router]);
 
-    if (!user?.stripe_customer_id) {
-        console.log('Creating stripe customer');
-        const data = await stripe.customers.create({
-            email: email,
-        });
-
-        await prisma.user.update({
-            where: {
-                clerk_id: clerkId,  // Update using Clerk ID
-            },
-            data: {
-                stripe_customer_id: data.id,
-            },
-        });
-
-        // Update the user variable with the new stripe_customer_id
-        user = await prisma.user.findUnique({
-            where: {
-                clerk_id: clerkId,
-            },
-            select: {
-                user_id: true,
-                stripe_customer_id: true,
-            },
-        });
-    }
-}
-
-export default async function DashboardLayout({ children }: { children: ReactNode }) {
-    const { userId } = await auth();
-    const user = await currentUser();
-
-    if (!userId || !user) {
-        return redirect('/');
-    }
-
-    const email = user.emailAddresses[0]?.emailAddress;
-    const firstName = user.firstName;
-    const lastName = user.lastName;
-    const profileImage = user.imageUrl;
-
-    if (!email) {
-        return redirect('/');
-    }
-
-    await getData({
-        email: email,
-        firstName: firstName,
-        clerkId: userId,  // Pass Clerk's userId as clerkId
-        lastName: lastName,
-        profileImage: profileImage
-    });
-
+  // Show loading state
+  if (isLoading) {
     return (
-        <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-                <div className="flex-1">
-                    {children}
-                </div>
-            </SidebarInset>
-        </SidebarProvider>
-    )
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Don't render dashboard if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <div className="flex-1">{children}</div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }

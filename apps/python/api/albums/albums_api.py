@@ -1,0 +1,521 @@
+"""Album API endpoints."""
+
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from core.config import UPLOAD_DIR
+from core.database import get_db
+from models.api.albums_api_models import (
+    AlbumCreate,
+    AlbumDetailResponse,
+    AlbumListResponse,
+    AlbumResponse,
+    AlbumUpdate,
+    PhotoListResponse,
+    PhotoUploadResponse,
+)
+from models.db.album_db_models import Album
+from models.db.file_hash_db_models import FileHash
+from models.db.photo_db_models import Photo
+from services.storage_service import storage_service
+from utils.slug_util import generate_slug
+from utils.response_util import (
+    build_album_response,
+    build_photo_response,
+    get_thumbnail_path_for_hash,
+)
+
+router = APIRouter(prefix="/albums", tags=["albums"])
+
+
+# --- Album CRUD ---
+
+
+@router.post("", response_model=AlbumResponse, status_code=201)
+async def create_album(
+    data: AlbumCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new album."""
+    album = Album(
+        title=data.title,
+        description=data.description,
+        slug=generate_slug(data.title),
+    )
+    db.add(album)
+    await db.commit()
+    await db.refresh(album)
+
+    return build_album_response(album, photo_count=0, cover_photo_hash=None)
+
+
+@router.get("", response_model=AlbumListResponse)
+async def list_albums(
+    db: AsyncSession = Depends(get_db),
+):
+    """List all albums with cover photo thumbnails."""
+    # Get albums with photo count
+    stmt = (
+        select(Album, func.count(Photo.id).label("photo_count"))
+        .outerjoin(Photo, Album.id == Photo.album_id)
+        .group_by(Album.id)
+        .order_by(Album.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # Get cover photo hashes for albums that have cover photos
+    album_ids_with_covers = [
+        album.id for album, _ in rows if album.cover_photo_id is not None
+    ]
+
+    cover_hashes: dict[uuid.UUID, str] = {}
+    if album_ids_with_covers:
+        cover_stmt = (
+            select(Photo.id, FileHash.sha256_hash)
+            .join(FileHash, Photo.file_hash_id == FileHash.id)
+            .where(
+                Photo.id.in_(
+                    [album.cover_photo_id for album, _ in rows if album.cover_photo_id]
+                )
+            )
+        )
+        cover_result = await db.execute(cover_stmt)
+        cover_hashes = {row[0]: row[1] for row in cover_result.all()}
+
+    albums = [
+        build_album_response(
+            album,
+            photo_count=photo_count,
+            cover_photo_hash=cover_hashes.get(album.cover_photo_id)
+            if album.cover_photo_id
+            else None,
+        )
+        for album, photo_count in rows
+    ]
+
+    return AlbumListResponse(albums=albums, total_count=len(albums))
+
+
+@router.get("/{album_id}", response_model=AlbumDetailResponse)
+async def get_album(
+    album_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get album details with photos."""
+    stmt = (
+        select(Album)
+        .where(Album.id == album_id)
+        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    photos = [build_photo_response(photo) for photo in album.photos]
+
+    # Get cover photo hash
+    cover_hash = None
+    if album.cover_photo_id:
+        for photo in album.photos:
+            if photo.id == album.cover_photo_id:
+                cover_hash = photo.file_hash.sha256_hash
+                break
+
+    return AlbumDetailResponse(
+        id=album.id,
+        title=album.title,
+        description=album.description,
+        slug=album.slug,
+        cover_photo_id=album.cover_photo_id,
+        cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
+        if cover_hash
+        else None,
+        photo_count=len(photos),
+        created_at=album.created_at,
+        updated_at=album.updated_at,
+        photos=photos,
+    )
+
+
+@router.get("/slug/{slug}", response_model=AlbumDetailResponse)
+async def get_album_by_slug(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get album by slug (for public access)."""
+    stmt = (
+        select(Album)
+        .where(Album.slug == slug)
+        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    photos = [build_photo_response(photo) for photo in album.photos]
+
+    # Get cover photo hash
+    cover_hash = None
+    if album.cover_photo_id:
+        for photo in album.photos:
+            if photo.id == album.cover_photo_id:
+                cover_hash = photo.file_hash.sha256_hash
+                break
+
+    return AlbumDetailResponse(
+        id=album.id,
+        title=album.title,
+        description=album.description,
+        slug=album.slug,
+        cover_photo_id=album.cover_photo_id,
+        cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
+        if cover_hash
+        else None,
+        photo_count=len(photos),
+        created_at=album.created_at,
+        updated_at=album.updated_at,
+        photos=photos,
+    )
+
+
+@router.patch("/{album_id}", response_model=AlbumResponse)
+async def update_album(
+    album_id: uuid.UUID,
+    data: AlbumUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update album details."""
+    stmt = select(Album).where(Album.id == album_id)
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    if data.title is not None:
+        album.title = data.title
+        # Regenerate slug when title changes
+        album.slug = generate_slug(data.title)
+    if data.description is not None:
+        album.description = data.description
+    if data.cover_photo_id is not None:
+        # Verify the photo belongs to this album
+        photo_check = await db.execute(
+            select(Photo).where(
+                Photo.id == data.cover_photo_id,
+                Photo.album_id == album_id,
+            )
+        )
+        if not photo_check.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Photo not in this album")
+        album.cover_photo_id = data.cover_photo_id
+
+    await db.commit()
+    await db.refresh(album)
+
+    # Get photo count and cover hash
+    count_stmt = select(func.count(Photo.id)).where(Photo.album_id == album_id)
+    count_result = await db.execute(count_stmt)
+    photo_count = count_result.scalar() or 0
+
+    cover_hash = None
+    if album.cover_photo_id:
+        cover_stmt = (
+            select(FileHash.sha256_hash)
+            .join(Photo, Photo.file_hash_id == FileHash.id)
+            .where(Photo.id == album.cover_photo_id)
+        )
+        cover_result = await db.execute(cover_stmt)
+        cover_hash = cover_result.scalar_one_or_none()
+
+    return build_album_response(
+        album, photo_count=photo_count, cover_photo_hash=cover_hash
+    )
+
+
+@router.put("/{album_id}/cover/{photo_id}", response_model=AlbumResponse)
+async def set_cover_photo(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a photo as the album cover."""
+    # Verify album exists
+    album_stmt = select(Album).where(Album.id == album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Verify photo belongs to this album
+    photo_stmt = (
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photo_result = await db.execute(photo_stmt)
+    photo = photo_result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found in this album")
+
+    album.cover_photo_id = photo_id
+    await db.commit()
+    await db.refresh(album)
+
+    # Get photo count
+    count_stmt = select(func.count(Photo.id)).where(Photo.album_id == album_id)
+    count_result = await db.execute(count_stmt)
+    photo_count = count_result.scalar() or 0
+
+    return build_album_response(
+        album,
+        photo_count=photo_count,
+        cover_photo_hash=photo.file_hash.sha256_hash,
+    )
+
+
+@router.delete("/{album_id}", status_code=204)
+async def delete_album(
+    album_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an album and all its photos."""
+    stmt = select(Album).where(Album.id == album_id)
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Note: Photos are deleted via cascade, but we should decrement file_hash reference counts
+    # For now, just delete the album (TODO: handle file cleanup)
+    await db.delete(album)
+    await db.commit()
+
+
+# --- Photo Management ---
+
+
+@router.post("/{album_id}/photos", response_model=PhotoUploadResponse)
+async def upload_photos_to_album(
+    album_id: uuid.UUID,
+    files: list[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload photos to an album. Auto-sets cover photo if album has none."""
+    # Verify album exists
+    stmt = select(Album).where(Album.id == album_id)
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Check if album needs a cover photo
+    needs_cover = album.cover_photo_id is None
+
+    # Get current max sort_order for this album
+    sort_stmt = select(func.max(Photo.sort_order)).where(Photo.album_id == album_id)
+    sort_result = await db.execute(sort_stmt)
+    max_sort = sort_result.scalar() or 0
+
+    photos = []
+    duplicate_count = 0
+    first_photo_id = None
+
+    for i, file in enumerate(files):
+        # Store file on disk
+        stored = await storage_service.store_file_streaming(
+            file=file.file,
+            original_filename=file.filename or "unnamed",
+        )
+
+        # Skip videos for now (photos only)
+        if stored.is_video:
+            continue
+
+        if stored.is_duplicate:
+            duplicate_count += 1
+
+        # Get or create FileHash record
+        hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
+        hash_result = await db.execute(hash_stmt)
+        file_hash = hash_result.scalar_one_or_none()
+
+        if file_hash:
+            file_hash.reference_count += 1
+        else:
+            file_hash = FileHash(
+                sha256_hash=stored.file_id,
+                storage_path=stored.storage_path,
+                file_extension=stored.file_extension,
+                mime_type=stored.mime_type,
+                file_size=stored.file_size,
+                width=stored.width or 0,
+                height=stored.height or 0,
+                reference_count=1,
+            )
+            db.add(file_hash)
+            await db.flush()  # Get the ID
+
+        # Create Photo record
+        photo = Photo(
+            album_id=album_id,
+            file_hash_id=file_hash.id,
+            original_filename=file.filename or "unnamed",
+            sort_order=max_sort + i + 1,
+        )
+        db.add(photo)
+        await db.flush()
+        await db.refresh(photo, ["file_hash"])
+
+        # Track first photo for auto-cover
+        if first_photo_id is None:
+            first_photo_id = photo.id
+
+        photos.append(build_photo_response(photo))
+
+    # Auto-set cover photo to first uploaded photo if album had none
+    if needs_cover and first_photo_id:
+        album.cover_photo_id = first_photo_id
+
+    await db.commit()
+
+    return PhotoUploadResponse(
+        photos=photos,
+        uploaded_count=len(photos),
+        duplicate_count=duplicate_count,
+    )
+
+
+@router.delete("/{album_id}/photos/{photo_id}", status_code=204)
+async def delete_photo(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a photo from an album."""
+    stmt = (
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photo = result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    # Decrement file_hash reference count
+    file_hash = photo.file_hash
+    file_hash.reference_count -= 1
+
+    # Delete photo record
+    await db.delete(photo)
+
+    # If no more references, delete the actual files
+    if file_hash.reference_count <= 0:
+        await storage_service.delete_file(
+            file_hash.sha256_hash,
+            file_hash.file_extension,
+            is_video=False,
+        )
+        await db.delete(file_hash)
+
+    await db.commit()
+
+
+@router.get("/{album_id}/photos/{photo_id}/download")
+async def download_photo(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a photo with its original filename."""
+    stmt = (
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photo = result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    file_hash = photo.file_hash
+    file_path = UPLOAD_DIR / file_hash.storage_path
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(
+        path=file_path,
+        filename=photo.original_filename,
+        media_type=file_hash.mime_type,
+    )
+
+
+@router.post("/{album_id}/photos/{photo_id}/regenerate-thumbnails", status_code=200)
+async def regenerate_photo_thumbnails(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Regenerate thumbnails and web versions for a photo."""
+    stmt = (
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photo = result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    file_hash = photo.file_hash
+
+    # Regenerate thumbnails
+    success = await storage_service.regenerate_thumbnails(
+        file_hash.sha256_hash,
+        file_hash.file_extension,
+    )
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Original file not found on disk")
+
+    return {"message": "Thumbnails regenerated successfully"}
+
+
+@router.get("/photos/all", response_model=PhotoListResponse)
+async def get_all_photos(
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all photos across all albums."""
+    stmt = (
+        select(Photo)
+        .options(selectinload(Photo.file_hash))
+        .order_by(Photo.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    photos = result.scalars().all()
+
+    photos_response = [build_photo_response(photo) for photo in photos]
+
+    return PhotoListResponse(
+        photos=photos_response,
+        total_count=len(photos_response),
+    )
