@@ -8,6 +8,7 @@ from core.config import DATABASE_URL, DEBUG
 from models.db.base import Base
 
 # Import all models to register them with SQLAlchemy
+from models.db.admin_db_models import Admin  # noqa: F401
 from models.db.album_db_models import Album  # noqa: F401
 from models.db.file_hash_db_models import FileHash  # noqa: F401
 from models.db.photo_db_models import Photo  # noqa: F401

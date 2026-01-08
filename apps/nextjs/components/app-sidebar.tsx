@@ -1,20 +1,12 @@
 "use client";
 
 import * as React from "react";
-import {
-  Home,
-  CreditCard,
-  User,
-  Settings2,
-  Images,
-  Folder,
-} from "lucide-react";
-import { useUser } from "@clerk/nextjs";
+import { Settings2, Images, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { NavMain } from "@/components/nav-main";
-import UserSection from "@/components/UserSection";
+import { NavUser } from "@/components/nav-user";
 import { TeamSwitcher } from "@/components/team-switcher";
 import {
   Sidebar,
@@ -24,52 +16,10 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { listAlbums, type Album } from "@/lib/api";
-
-// Base navigation items (without dynamic albums)
-const baseNavItems = [
-  {
-    title: "Home",
-    url: "/dashboard",
-    icon: Home,
-    isActive: false,
-  },
-  {
-    title: "Billing",
-    url: "/dashboard/billing",
-    icon: CreditCard,
-    isActive: false,
-  },
-  {
-    title: "Settings",
-    url: "/dashboard/settings",
-    icon: Settings2,
-    isActive: false,
-  },
-];
-
-// This is sample data for teams - you can customize this
-const data = {
-  teams: [
-    {
-      name: "Personal",
-      logo: User,
-      plan: "Free",
-    },
-    {
-      name: "Pro Team",
-      logo: CreditCard,
-      plan: "Pro",
-    },
-    {
-      name: "Enterprise",
-      logo: Settings2,
-      plan: "Enterprise",
-    },
-  ],
-};
+import { useAuth } from "@/lib/auth";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, isLoaded } = useUser();
+  const { isAuthenticated } = useAuth();
   const pathname = usePathname();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = useState(true);
@@ -87,10 +37,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     };
 
-    if (isLoaded) {
+    if (isAuthenticated) {
       fetchAlbums();
     }
-  }, [isLoaded]);
+  }, [isAuthenticated]);
 
   // Build navigation items with dynamic albums
   const navItems = React.useMemo(() => {
@@ -98,19 +48,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       title: "Gallery",
       url: "/dashboard/gallery",
       icon: Images,
-      isActive: pathname === "/dashboard/gallery",
+      isActive: pathname === "/dashboard/gallery" || pathname === "/dashboard",
     };
-
-    // Check if we're viewing a specific album (sub-item)
-    const isViewingSpecificAlbum = albums.some(
-      (album) => pathname === `/dashboard/albums/${album.slug}`
-    );
 
     const albumsItem = {
       title: "Albums",
       url: "/dashboard/albums",
       icon: Folder,
-      // Only mark Albums as active if we're on the albums list page, NOT when viewing a specific album
       isActive: pathname === "/dashboard/albums",
       items: albums.map((album) => ({
         title: album.title,
@@ -119,47 +63,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       })),
     };
 
-    // Update base nav items with active state
-    const updatedBaseNavItems = baseNavItems.map((item) => ({
-      ...item,
-      isActive:
-        pathname === item.url ||
-        (item.url !== "/dashboard" && pathname?.startsWith(item.url)),
-    }));
+    const settingsItem = {
+      title: "Settings",
+      url: "/dashboard/settings",
+      icon: Settings2,
+      isActive: pathname === "/dashboard/settings" || pathname?.startsWith("/dashboard/settings"),
+    };
 
-    return [
-      updatedBaseNavItems[0],
-      galleryItem,
-      albumsItem,
-      ...updatedBaseNavItems.slice(1),
-    ];
+    return [galleryItem, albumsItem, settingsItem];
   }, [albums, pathname]);
-
-  // Don't render if Clerk is not loaded or user is not authenticated
-  if (!isLoaded) {
-    return null;
-  }
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navItems} />
       </SidebarContent>
       <SidebarFooter>
-        <UserSection
-          user={
-            user
-              ? {
-                  firstName: user.firstName,
-                  lastName: user.lastName,
-                  email: user.emailAddresses[0]?.emailAddress,
-                }
-              : undefined
-          }
-        />
+        <NavUser />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

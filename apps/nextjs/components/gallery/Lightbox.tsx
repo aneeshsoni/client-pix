@@ -6,7 +6,8 @@ import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Info, Download } from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
 import type { Photo } from "@/lib/api";
-import { getImageUrl, getDownloadUrl } from "@/lib/api";
+import { getSecureImageUrl, getDownloadUrl } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface LightboxProps {
   photo: Photo;
@@ -29,9 +30,10 @@ export function Lightbox({
 }: LightboxProps) {
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const { token } = useAuth();
 
-  // Get the full resolution image URL
-  const imageUrl = getImageUrl(photo.web_path);
+  // Get the full resolution image URL with auth token
+  const imageUrl = getSecureImageUrl(photo.id, "web", token || undefined);
   const downloadUrl = getDownloadUrl(albumId, photo.id);
 
   // Handle keyboard navigation

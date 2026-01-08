@@ -1,4 +1,4 @@
-"""Share link API endpoints."""
+"""Share link API endpoints for album owners (authenticated)."""
 
 import uuid
 

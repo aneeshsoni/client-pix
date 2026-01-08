@@ -3,12 +3,19 @@ const nextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
 
+  // Enable standalone output for Docker deployment
+  output: "standalone",
+
   // Image optimization configuration
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "http",
+        hostname: "localhost",
+      },
+      {
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
@@ -17,7 +24,7 @@ const nextConfig = {
   experimental: {
     // Enable server actions (stable in Next.js 15)
     serverActions: {
-      bodySizeLimit: '2mb',
+      bodySizeLimit: "2mb",
     },
   },
 };

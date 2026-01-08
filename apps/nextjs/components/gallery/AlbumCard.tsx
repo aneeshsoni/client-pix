@@ -5,7 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { ImageIcon, Settings } from "lucide-react";
 import type { Album } from "@/lib/api";
-import { getImageUrl } from "@/lib/api";
+import { getSecureImageUrlByHash } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface AlbumCardProps {
   album: Album;
@@ -21,9 +22,19 @@ function formatAlbumDate(dateString: string): string {
   });
 }
 
+// Extract hash from thumbnail path (format: "thumbnails/ab/cd/abcdef123...webp")
+function extractHashFromPath(path: string): string | null {
+  const match = path.match(/([a-f0-9]{64})/i);
+  return match ? match[1] : null;
+}
+
 export function AlbumCard({ album, index, onSettingsClick }: AlbumCardProps) {
+  const { token } = useAuth();
   const hasCover = album.cover_photo_thumbnail !== null;
-  const coverUrl = hasCover ? getImageUrl(album.cover_photo_thumbnail!) : null;
+  
+  // Extract hash from the thumbnail path and build secure URL
+  const coverHash = hasCover ? extractHashFromPath(album.cover_photo_thumbnail!) : null;
+  const coverUrl = coverHash ? getSecureImageUrlByHash(coverHash, "thumbnail", token || undefined) : null;
 
   return (
     <motion.div

@@ -19,10 +19,11 @@ import {
   deleteAlbum,
   getAlbum,
   setCoverPhoto,
-  getImageUrl,
+  getSecureImageUrl,
   type Album,
   type Photo,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface AlbumSettingsModalProps {
   album: Album | null;
@@ -47,6 +48,7 @@ export function AlbumSettingsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { token } = useAuth();
 
   // Load album details when opened
   useEffect(() => {
@@ -191,7 +193,7 @@ export function AlbumSettingsModal({
                     disabled={isSaving}
                   >
                     <Image
-                      src={getImageUrl(photo.thumbnail_path)}
+                      src={getSecureImageUrl(photo.id, "thumbnail", token || undefined)}
                       alt={photo.original_filename}
                       fill
                       className="object-cover"
@@ -274,4 +276,3 @@ export function AlbumSettingsModal({
     </Dialog>
   );
 }
-

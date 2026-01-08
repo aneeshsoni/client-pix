@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from core.config import APP_NAME, UPLOAD_DIR
+from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
 
 from router import router
@@ -33,12 +33,10 @@ app = FastAPI(
 )
 
 # CORS middleware for frontend
+# Origins are configured via ALLOWED_ORIGINS environment variable
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js dev server (direct)
-        "http://localhost",  # Nginx proxy (port 80)
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

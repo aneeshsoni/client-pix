@@ -1,15 +1,16 @@
 # =============================================================================
-# Development Docker Compose - Full Stack
+# Production Docker Compose
 # =============================================================================
-# Runs everything in Docker with hot reload support.
+# For deployment on Coolify or any Docker-based hosting platform.
 #
 # Usage:
-#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.prod.yml up -d
 #
-# Access:
-#   App:  http://localhost
-#   API:  http://localhost/api
-#   Docs: http://localhost/docs
+# Required environment variables (set in Coolify or .env file):
+#   - POSTGRES_PASSWORD
+#   - BASE_URL
+#   - NEXT_PUBLIC_API_URL
+#   - JWT_SECRET
 # =============================================================================
 
 services:
@@ -18,42 +19,37 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    container_name: clientpix-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: clientpix
-      POSTGRES_PASSWORD: clientpix_dev
-      POSTGRES_DB: clientpix
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-clientpix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+      POSTGRES_DB: ${POSTGRES_DB:-clientpix}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clientpix"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clientpix}"]
+      interval: 10s
       timeout: 5s
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # FastAPI Backend (with hot reload)
+  # FastAPI Backend
   # ---------------------------------------------------------------------------
   backend:
     build:
       context: ./apps/python
-      dockerfile: Dockerfile.dev
-    container_name: clientpix-backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      APP_NAME: Client Pix API (Dev)
-      DEBUG: "true"
-      DATABASE_URL: postgresql+asyncpg://clientpix:clientpix_dev@postgres:5432/clientpix
-      BASE_URL: http://localhost
+      APP_NAME: ${APP_NAME:-Client Pix API}
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clientpix}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clientpix}
+      BASE_URL: ${BASE_URL:?Base URL is required}
       UPLOAD_DIR: /app/uploads
-      JWT_SECRET: dev-secret-change-in-production-use-a-long-random-string
+      WEB_MAX_DIMENSION: ${WEB_MAX_DIMENSION:-2400}
+      JWT_SECRET: ${JWT_SECRET:?JWT secret is required}
     volumes:
-      - ./apps/python:/app
       - uploads_data:/app/uploads
-      - /app/.venv
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,44 +57,40 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
       interval: 10s
       timeout: 5s
+      start_period: 30s
       retries: 5
-      start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # Next.js Frontend (with hot reload)
+  # Next.js Frontend
   # ---------------------------------------------------------------------------
   frontend:
     build:
       context: ./apps/nextjs
-      dockerfile: Dockerfile.dev
-    container_name: clientpix-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?API URL is required}
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost
-      NEXT_TELEMETRY_DISABLED: 1
-    volumes:
-      - ./apps/nextjs:/app
-      - /app/node_modules
-      - /app/.next
+      NODE_ENV: production
     depends_on:
-      backend:
-        condition: service_started
+      - backend
 
   # ---------------------------------------------------------------------------
   # Nginx Reverse Proxy
   # ---------------------------------------------------------------------------
   nginx:
     image: nginx:alpine
-    container_name: clientpix-nginx
     restart: unless-stopped
     ports:
       - "80:80"
     volumes:
-      - ./docker/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       # NOTE: uploads_data no longer mounted - all files served through authenticated API
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

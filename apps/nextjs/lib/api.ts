@@ -2,8 +2,8 @@
  * API client for communicating with the Python backend
  */
 
-// In development with nginx: use port 80
-// Without nginx: use port 8000 directly
+// Base URL without /api - the API paths include /api prefix
+// Example: http://localhost or https://photos.example.com
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost";
 
 // --- Types ---
@@ -238,12 +238,75 @@ export async function getAllPhotos(): Promise<Photo[]> {
   }
 }
 
-// --- Helper to get image URLs ---
+// --- Helper to get image URLs (Secure - requires auth token) ---
 
+/**
+ * Get a secure image URL for authenticated users.
+ * Images are served through the API with JWT authentication.
+ * 
+ * @param photoId - The photo ID
+ * @param variant - "thumbnail" | "web" | "original" (default: "web")
+ * @param token - JWT auth token (passed via query param for Image components)
+ */
+export function getSecureImageUrl(
+  photoId: string, 
+  variant: "thumbnail" | "web" | "original" = "web", 
+  token?: string
+): string {
+  let url = `${API_BASE_URL}/api/files/photo/${photoId}?variant=${variant}`;
+  if (token) {
+    url += `&token=${encodeURIComponent(token)}`;
+  }
+  return url;
+}
+
+/**
+ * Get a secure image URL by file hash (for cover photos).
+ * @param fileHash - The SHA256 hash of the file
+ * @param variant - Image variant
+ * @param token - JWT auth token
+ */
+export function getSecureImageUrlByHash(
+  fileHash: string, 
+  variant: "thumbnail" | "web" | "original" = "web",
+  token?: string
+): string {
+  let url = `${API_BASE_URL}/api/files/hash/${fileHash}?variant=${variant}`;
+  if (token) {
+    url += `&token=${encodeURIComponent(token)}`;
+  }
+  return url;
+}
+
+/**
+ * Get image URL for shared album (public with share token validation).
+ * 
+ * @param shareToken - The share link token
+ * @param photoId - The photo ID
+ * @param variant - Image variant
+ * @param password - Password if share is protected
+ */
+export function getSharedImageUrl(
+  shareToken: string,
+  photoId: string,
+  variant: "thumbnail" | "web" | "original" = "web",
+  password?: string
+): string {
+  let url = `${API_BASE_URL}/api/files/share/${shareToken}/photo/${photoId}?variant=${variant}`;
+  if (password) {
+    url += `&password=${encodeURIComponent(password)}`;
+  }
+  return url;
+}
+
+/**
+ * @deprecated - Use getSecureImageUrl for authenticated access or getSharedImageUrl for shared access.
+ * This function no longer works as direct file access has been removed for security.
+ */
 export function getImageUrl(path: string): string {
-  // Serve directly from the uploads folder
-  // In production, this would go through a CDN or nginx
-  return `${API_BASE_URL}/uploads/${path}`;
+  console.warn("getImageUrl is deprecated. Use getSecureImageUrl or getSharedImageUrl instead.");
+  // Return a placeholder that will 404 - this helps identify code that needs updating
+  return `${API_BASE_URL}/api/files/deprecated?path=${encodeURIComponent(path)}`;
 }
 
 export function getDownloadUrl(albumId: string, photoId: string): string {

@@ -10,6 +10,7 @@ load_dotenv()
 # Application
 APP_NAME = os.getenv("APP_NAME", "Client Pix API")
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+BASE_URL = os.getenv("BASE_URL", "http://localhost")
 
 # Database
 DATABASE_URL = os.getenv(
@@ -28,3 +29,8 @@ THUMBNAIL_QUALITY = 90  # WebP quality (0-100)
 # Web-optimized version for lightbox viewing
 WEB_MAX_DIMENSION = int(os.getenv("WEB_MAX_DIMENSION", "2400"))
 WEB_QUALITY = 92  # Higher quality for full-screen viewing
+
+# CORS - comma-separated list of allowed origins
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost"
+).split(",")

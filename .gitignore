@@ -1,4 +1,7 @@
 .DS_Store
 
-# Local Uploads
-apps/python/uploads/
+# Local Uploads (keep .gitkeep files)
+apps/python/uploads/*
+!apps/python/uploads/.gitkeep
+
+.env

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import type { Photo } from "@/lib/api";
-import { getImageUrl } from "@/lib/api";
+import { getSecureImageUrl } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 interface PhotoCardProps {
   photo: Photo;
@@ -14,9 +15,14 @@ interface PhotoCardProps {
 
 export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const { token } = useAuth();
 
-  // Get the thumbnail URL from the API
-  const thumbnailUrl = getImageUrl(photo.thumbnail_path);
+  // Get the secure thumbnail URL with auth token
+  const thumbnailUrl = getSecureImageUrl(
+    photo.id,
+    "thumbnail",
+    token || undefined
+  );
 
   return (
     <motion.div

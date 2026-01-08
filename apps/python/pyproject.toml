@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "greenlet>=3.3.0",
     "bcrypt>=5.0.0",
+    "pyjwt>=2.8.0",
 ]
 
 [dependency-groups]
