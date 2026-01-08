@@ -57,7 +57,7 @@ async def get_share_info(
     """
     Get basic info about a share link (whether it requires password).
     This endpoint is public and doesn't require authentication.
-    
+
     The `token` parameter can be either the random token or a custom slug.
     """
     share_link = await get_share_link_by_token_or_slug(token, db)
@@ -88,7 +88,7 @@ async def access_shared_album(
     """
     Access a shared album. If password protected, the correct password must be provided.
     This endpoint is public and doesn't require authentication.
-    
+
     The `token` parameter can be either the random token or a custom slug.
     """
     share_link = await get_share_link_by_token_or_slug(token, db)
