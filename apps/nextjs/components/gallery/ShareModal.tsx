@@ -34,6 +34,8 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
+  const [customSlug, setCustomSlug] = useState("");
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   const fetchShareLinks = useCallback(async () => {
     if (!open || !albumId) return;
@@ -57,20 +59,26 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
     if (!albumId) return;
 
     setIsCreating(true);
+    setSlugError(null);
     try {
       const newLink = await createShareLink(
         albumId,
-        isPasswordProtected ? password : undefined
+        isPasswordProtected ? password : undefined,
+        customSlug.trim() || undefined
       );
       setShareLinks((prev) => [newLink, ...prev]);
       setPassword("");
       setIsPasswordProtected(false);
+      setCustomSlug("");
     } catch (error) {
       console.error("Failed to create share link:", error);
+      if (error instanceof Error && error.message.includes("slug")) {
+        setSlugError(error.message);
+      }
     } finally {
       setIsCreating(false);
     }
-  }, [albumId, password, isPasswordProtected]);
+  }, [albumId, password, isPasswordProtected, customSlug]);
 
   const handleCopyLink = useCallback(async (link: ShareLink) => {
     try {
@@ -132,6 +140,30 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
             <h3 className="text-sm font-medium">Create Share Link</h3>
 
             <div className="space-y-3">
+              {/* Custom Slug */}
+              <div>
+                <Label htmlFor="custom-slug">Custom Link (optional)</Label>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-sm text-muted-foreground">/share/</span>
+                  <Input
+                    id="custom-slug"
+                    value={customSlug}
+                    onChange={(e) => {
+                      setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                      setSlugError(null);
+                    }}
+                    placeholder="my-wedding-photos"
+                    className="flex-1"
+                  />
+                </div>
+                {slugError && (
+                  <p className="text-xs text-destructive mt-1">{slugError}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave blank for a random link. Use letters, numbers, and hyphens.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <Label
                   htmlFor="password-protect"
@@ -169,7 +201,9 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
               <Button
                 onClick={handleCreateLink}
                 disabled={
-                  isCreating || (isPasswordProtected && password.length < 4)
+                  isCreating || 
+                  (isPasswordProtected && password.length < 4) ||
+                  (customSlug.length > 0 && customSlug.length < 3)
                 }
                 className="w-full"
               >

@@ -28,6 +28,27 @@ from utils.security_util import verify_password
 router = APIRouter(prefix="/share", tags=["share-public"])
 
 
+async def get_share_link_by_token_or_slug(
+    identifier: str, db: AsyncSession
+) -> ShareLink | None:
+    """
+    Find a share link by token or custom slug.
+    Checks custom_slug first (for friendly URLs), then falls back to token.
+    """
+    # Try custom slug first
+    stmt = select(ShareLink).where(ShareLink.custom_slug == identifier)
+    result = await db.execute(stmt)
+    share_link = result.scalar_one_or_none()
+
+    if share_link:
+        return share_link
+
+    # Fall back to token
+    stmt = select(ShareLink).where(ShareLink.token == identifier)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 @router.get("/{token}/info")
 async def get_share_info(
     token: str,
@@ -36,10 +57,10 @@ async def get_share_info(
     """
     Get basic info about a share link (whether it requires password).
     This endpoint is public and doesn't require authentication.
+    
+    The `token` parameter can be either the random token or a custom slug.
     """
-    stmt = select(ShareLink).where(ShareLink.token == token)
-    result = await db.execute(stmt)
-    share_link = result.scalar_one_or_none()
+    share_link = await get_share_link_by_token_or_slug(token, db)
 
     if not share_link:
         raise HTTPException(status_code=404, detail="Share link not found")
@@ -67,11 +88,10 @@ async def access_shared_album(
     """
     Access a shared album. If password protected, the correct password must be provided.
     This endpoint is public and doesn't require authentication.
+    
+    The `token` parameter can be either the random token or a custom slug.
     """
-    # Get share link
-    stmt = select(ShareLink).where(ShareLink.token == token)
-    result = await db.execute(stmt)
-    share_link = result.scalar_one_or_none()
+    share_link = await get_share_link_by_token_or_slug(token, db)
 
     if not share_link:
         raise HTTPException(status_code=404, detail="Share link not found")
@@ -152,10 +172,11 @@ async def _validate_share_link(
     password: str | None,
     db: AsyncSession,
 ) -> ShareLink:
-    """Validate a share link and return it if valid."""
-    stmt = select(ShareLink).where(ShareLink.token == token)
-    result = await db.execute(stmt)
-    share_link = result.scalar_one_or_none()
+    """
+    Validate a share link and return it if valid.
+    The `token` can be either the random token or a custom slug.
+    """
+    share_link = await get_share_link_by_token_or_slug(token, db)
 
     if not share_link:
         raise HTTPException(status_code=404, detail="Share link not found")
