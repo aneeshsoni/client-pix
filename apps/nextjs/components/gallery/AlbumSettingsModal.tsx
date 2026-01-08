@@ -101,12 +101,12 @@ export function AlbumSettingsModal({
     onAlbumUpdated,
   ]);
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(async (deletePhotos: boolean) => {
     if (!album) return;
 
     setIsDeleting(true);
     try {
-      await deleteAlbum(album.id);
+      await deleteAlbum(album.id, deletePhotos);
       onOpenChange(false);
       onAlbumDeleted?.();
     } catch (error) {
@@ -219,29 +219,54 @@ export function AlbumSettingsModal({
               Danger Zone
             </h3>
             {showDeleteConfirm ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Are you sure?
-                </span>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  ) : null}
-                  Yes, delete
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </Button>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  How would you like to delete this album?
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(false)}
+                    disabled={isDeleting}
+                    className="justify-start"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete Album Only
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (keep photos)
+                    </span>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(true)}
+                    disabled={isDeleting}
+                    className="justify-start"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete Album & Photos
+                    <span className="text-xs opacity-80 ml-2">
+                      (permanent)
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button

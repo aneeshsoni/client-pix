@@ -16,6 +16,7 @@ class Photo(Base):
 
     The actual file is referenced via file_hash_id (for deduplication).
     Multiple Photo records can share the same FileHash.
+    Photos can exist without an album (orphaned/unassociated photos).
     """
 
     __tablename__ = "photos"
@@ -26,11 +27,11 @@ class Photo(Base):
         default=uuid.uuid4,
     )
 
-    # Album this photo belongs to
-    album_id: Mapped[uuid.UUID] = mapped_column(
+    # Album this photo belongs to (nullable - photos can be unassociated)
+    album_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("albums.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("albums.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 

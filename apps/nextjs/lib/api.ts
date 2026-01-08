@@ -149,8 +149,8 @@ export async function updateAlbum(
   return response.json();
 }
 
-export async function deleteAlbum(albumId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}`, {
+export async function deleteAlbum(albumId: string, deletePhotos: boolean = false): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}?delete_photos=${deletePhotos}`, {
     method: "DELETE",
   });
 

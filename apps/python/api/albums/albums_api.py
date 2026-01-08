@@ -2,9 +2,9 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -289,9 +289,17 @@ async def set_cover_photo(
 @router.delete("/{album_id}", status_code=204)
 async def delete_album(
     album_id: uuid.UUID,
+    delete_photos: bool = Query(
+        False, description="If true, permanently delete all photos. If false, photos become unassociated."
+    ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an album and all its photos."""
+    """
+    Delete an album.
+    
+    - delete_photos=false (default): Album is deleted, photos become unassociated (orphaned)
+    - delete_photos=true: Album and all photos are permanently deleted from disk
+    """
     stmt = select(Album).where(Album.id == album_id)
     result = await db.execute(stmt)
     album = result.scalar_one_or_none()
@@ -299,9 +307,40 @@ async def delete_album(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    # Note: Photos are deleted via cascade, but we should decrement file_hash reference counts
-    # For now, just delete the album (TODO: handle file cleanup)
-    await db.delete(album)
+    if delete_photos:
+        # Get all photos with their file hashes for cleanup
+        photos_stmt = (
+            select(Photo)
+            .where(Photo.album_id == album_id)
+            .options(selectinload(Photo.file_hash))
+        )
+        photos_result = await db.execute(photos_stmt)
+        photos = photos_result.scalars().all()
+
+        # Decrement reference counts and delete files if needed
+        for photo in photos:
+            file_hash = photo.file_hash
+            file_hash.reference_count -= 1
+            
+            # If no more references, delete the actual files
+            if file_hash.reference_count <= 0:
+                await storage_service.delete_file(
+                    file_hash.sha256_hash,
+                    file_hash.file_extension,
+                    is_video=False,
+                )
+                await db.delete(file_hash)
+
+        # Delete album (cascade will delete photo records)
+        await db.delete(album)
+    else:
+        # Just unassociate photos from the album (set album_id to NULL)
+        await db.execute(
+            update(Photo).where(Photo.album_id == album_id).values(album_id=None)
+        )
+        # Delete the album
+        await db.delete(album)
+
     await db.commit()
 
 

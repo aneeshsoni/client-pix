@@ -47,6 +47,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         # Run schema migrations for existing databases
         await conn.run_sync(_migrate_share_links_custom_slug)
+        await conn.run_sync(_migrate_photos_album_id_nullable)
 
 
 def _migrate_share_links_custom_slug(conn):
@@ -74,5 +75,43 @@ def _migrate_share_links_custom_slug(conn):
             print("✓ Migration complete: custom_slug column added")
     except Exception as e:
         # Table might not exist yet, that's OK - create_all will handle it
+        if "does not exist" not in str(e).lower():
+            print(f"⚠️  Migration check failed (non-critical): {e}")
+
+
+def _migrate_photos_album_id_nullable(conn):
+    """Make photos.album_id nullable and change ondelete to SET NULL.
+    
+    This allows photos to exist without being associated with an album.
+    """
+    try:
+        inspector = inspect(conn)
+        
+        # Check if photos table exists
+        if "photos" not in inspector.get_table_names():
+            return
+        
+        # Get column info
+        columns = {col["name"]: col for col in inspector.get_columns("photos")}
+        album_id_col = columns.get("album_id")
+        
+        if album_id_col and not album_id_col.get("nullable", True):
+            print("⚠️  Making photos.album_id nullable...")
+            # Make column nullable
+            conn.execute(
+                text("ALTER TABLE photos ALTER COLUMN album_id DROP NOT NULL")
+            )
+            # Drop old foreign key and create new one with SET NULL
+            conn.execute(
+                text("ALTER TABLE photos DROP CONSTRAINT IF EXISTS photos_album_id_fkey")
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE photos ADD CONSTRAINT photos_album_id_fkey "
+                    "FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE SET NULL"
+                )
+            )
+            print("✓ Migration complete: photos.album_id is now nullable")
+    except Exception as e:
         if "does not exist" not in str(e).lower():
             print(f"⚠️  Migration check failed (non-critical): {e}")
