@@ -47,10 +47,23 @@ async def create_share_link(
         password_hash = hash_password(data.password)
         is_password_protected = True
 
+    # Validate custom slug uniqueness if provided
+    custom_slug = data.custom_slug.lower() if data.custom_slug else None
+    if custom_slug:
+        existing = await db.execute(
+            select(ShareLink).where(ShareLink.custom_slug == custom_slug)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Custom slug '{custom_slug}' is already in use",
+            )
+
     # Create share link
     share_link = ShareLink(
         album_id=album_id,
         token=token,
+        custom_slug=custom_slug,
         password_hash=password_hash,
         is_password_protected=is_password_protected,
         expires_at=data.expires_at,
@@ -63,7 +76,8 @@ async def create_share_link(
         id=share_link.id,
         album_id=share_link.album_id,
         token=share_link.token,
-        share_url=build_share_url(share_link.token, request),
+        custom_slug=share_link.custom_slug,
+        share_url=build_share_url(share_link.token, request, share_link.custom_slug),
         is_password_protected=share_link.is_password_protected,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,
@@ -102,7 +116,8 @@ async def list_share_links(
                 id=link.id,
                 album_id=link.album_id,
                 token=link.token,
-                share_url=build_share_url(link.token, request),
+                custom_slug=link.custom_slug,
+                share_url=build_share_url(link.token, request, link.custom_slug),
                 is_password_protected=link.is_password_protected,
                 expires_at=link.expires_at,
                 is_revoked=link.is_revoked,
@@ -158,6 +173,24 @@ async def update_share_link(
     if data.is_revoked is not None:
         share_link.is_revoked = data.is_revoked
 
+    # Update custom slug if provided
+    if data.custom_slug is not None:
+        new_slug = data.custom_slug.lower() if data.custom_slug else None
+        if new_slug and new_slug != share_link.custom_slug:
+            # Check uniqueness
+            existing = await db.execute(
+                select(ShareLink).where(
+                    ShareLink.custom_slug == new_slug,
+                    ShareLink.id != share_link.id,
+                )
+            )
+            if existing.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Custom slug '{new_slug}' is already in use",
+                )
+        share_link.custom_slug = new_slug
+
     await db.commit()
     await db.refresh(share_link)
 
@@ -165,7 +198,8 @@ async def update_share_link(
         id=share_link.id,
         album_id=share_link.album_id,
         token=share_link.token,
-        share_url=build_share_url(share_link.token, request),
+        custom_slug=share_link.custom_slug,
+        share_url=build_share_url(share_link.token, request, share_link.custom_slug),
         is_password_protected=share_link.is_password_protected,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,

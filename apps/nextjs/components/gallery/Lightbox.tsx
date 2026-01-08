@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { X, ChevronLeft, ChevronRight, Info, Download } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Info, Download, Trash2 } from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
 import type { Photo } from "@/lib/api";
-import { getSecureImageUrl, getDownloadUrl } from "@/lib/api";
+import { getSecureImageUrl, getDownloadUrl, deletePhoto } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 interface LightboxProps {
@@ -17,6 +17,7 @@ interface LightboxProps {
   onClose: () => void;
   onNext: () => void;
   onPrev: () => void;
+  onDelete?: (photoId: string) => void;
 }
 
 export function Lightbox({
@@ -27,10 +28,37 @@ export function Lightbox({
   onClose,
   onNext,
   onPrev,
+  onDelete,
 }: LightboxProps) {
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { token } = useAuth();
+
+  const handleDelete = useCallback(async () => {
+    if (!onDelete) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${photo.original_filename}"? This cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+    
+    setIsDeleting(true);
+    try {
+      await deletePhoto(albumId, photo.id);
+      onDelete(photo.id);
+      // If this was the last photo, close the lightbox
+      if (totalCount === 1) {
+        onClose();
+      }
+    } catch (error) {
+      console.error("Failed to delete photo:", error);
+      alert("Failed to delete photo. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [albumId, photo.id, photo.original_filename, onDelete, onClose, totalCount]);
 
   // Get the full resolution image URL with auth token
   const imageUrl = getSecureImageUrl(photo.id, "web", token || undefined);
@@ -115,6 +143,17 @@ export function Lightbox({
             >
               <Download className="h-5 w-5" />
             </a>
+
+            {onDelete && (
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="p-2 rounded-full text-white/70 hover:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                title="Delete photo"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
 
             <button
               onClick={onClose}

@@ -11,6 +11,13 @@ class ShareLinkCreate(BaseModel):
 
     password: str | None = Field(None, min_length=4, max_length=100)
     expires_at: datetime | None = None
+    custom_slug: str | None = Field(
+        None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+        description="Custom URL slug (lowercase letters, numbers, hyphens only)",
+    )
 
 
 class ShareLinkResponse(BaseModel):
@@ -19,6 +26,7 @@ class ShareLinkResponse(BaseModel):
     id: uuid.UUID
     album_id: uuid.UUID
     token: str
+    custom_slug: str | None
     share_url: str
     is_password_protected: bool
     expires_at: datetime | None
@@ -42,6 +50,13 @@ class ShareLinkUpdate(BaseModel):
     password: str | None = Field(None, min_length=4, max_length=100)
     expires_at: datetime | None = None
     is_revoked: bool | None = None
+    custom_slug: str | None = Field(
+        None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+        description="Custom URL slug (lowercase letters, numbers, hyphens only)",
+    )
 
 
 class ShareLinkVerifyRequest(BaseModel):

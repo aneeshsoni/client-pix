@@ -164,7 +164,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             </p>
           </div>
         ) : (
-          <PhotoGrid photos={album.photos} albumId={album.id} />
+          <PhotoGrid
+            photos={album.photos}
+            albumId={album.id}
+            onPhotoDeleted={fetchAlbum}
+          />
         )}
       </div>
 

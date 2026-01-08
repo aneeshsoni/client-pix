@@ -179,6 +179,23 @@ async def get_authenticated_file_by_hash(
 # --- Public Share File Access (Token validated) ---
 
 
+async def get_share_link_by_token_or_slug(
+    identifier: str, db: AsyncSession
+) -> ShareLink | None:
+    """
+    Find a share link by token or custom slug.
+    Checks custom_slug first (for friendly URLs), then falls back to token.
+    """
+    from sqlalchemy import or_
+
+    stmt = select(ShareLink).where(
+        or_(ShareLink.custom_slug == identifier, ShareLink.token == identifier),
+        ~ShareLink.is_revoked,  # SQLAlchemy NOT operator
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 @router.get("/share/{share_token}/photo/{photo_id}")
 async def get_shared_photo(
     share_token: str,
@@ -188,15 +205,11 @@ async def get_shared_photo(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get a photo from a shared album. Requires valid share token.
+    Get a photo from a shared album. Requires valid share token or custom slug.
     If share link is password protected, password must be provided.
     """
-    # Validate share link
-    stmt = select(ShareLink).where(
-        ShareLink.token == share_token, ShareLink.is_revoked is False
-    )
-    result = await db.execute(stmt)
-    share_link = result.scalar_one_or_none()
+    # Validate share link (supports both token and custom slug)
+    share_link = await get_share_link_by_token_or_slug(share_token, db)
 
     if not share_link:
         raise HTTPException(status_code=404, detail="Share link not found or revoked")
@@ -262,13 +275,10 @@ async def get_shared_file_by_hash(
 ):
     """
     Get a file by hash from a shared album. Used for cover photos.
+    Supports both token and custom slug.
     """
-    # Validate share link
-    stmt = select(ShareLink).where(
-        ShareLink.token == share_token, ShareLink.is_revoked is False
-    )
-    result = await db.execute(stmt)
-    share_link = result.scalar_one_or_none()
+    # Validate share link (supports both token and custom slug)
+    share_link = await get_share_link_by_token_or_slug(share_token, db)
 
     if not share_link:
         raise HTTPException(status_code=404, detail="Share link not found")

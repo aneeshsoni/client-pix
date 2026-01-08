@@ -159,26 +159,60 @@ export async function deleteAlbum(albumId: string): Promise<void> {
   }
 }
 
+/**
+ * Upload photos to an album in batches for reliability.
+ * 
+ * Uploads in batches of BATCH_SIZE to prevent timeouts and memory issues.
+ * Supports uploading 100+ photos at once.
+ * 
+ * @param albumId - Album to upload to
+ * @param files - Array of files to upload
+ * @param onProgress - Callback with (uploaded, total) counts
+ * @param batchSize - Number of files per batch (default: 5)
+ */
 export async function uploadPhotosToAlbum(
   albumId: string,
   files: File[],
-  onProgress?: (uploaded: number, total: number) => void
+  onProgress?: (uploaded: number, total: number) => void,
+  batchSize: number = 5
 ): Promise<PhotoUploadResponse> {
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append("files", file);
-  });
+  const allPhotos: Photo[] = [];
+  let totalUploaded = 0;
+  let totalDuplicates = 0;
 
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/photos`, {
-    method: "POST",
-    body: formData,
-  });
+  // Process files in batches
+  for (let i = 0; i < files.length; i += batchSize) {
+    const batch = files.slice(i, i + batchSize);
+    
+    const formData = new FormData();
+    batch.forEach((file) => {
+      formData.append("files", file);
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to upload photos: ${response.statusText}`);
+    const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/photos`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      throw new Error(`Failed to upload batch ${Math.floor(i / batchSize) + 1}: ${errorText}`);
+    }
+
+    const result: PhotoUploadResponse = await response.json();
+    allPhotos.push(...result.photos);
+    totalUploaded += result.uploaded_count;
+    totalDuplicates += result.duplicate_count;
+
+    // Report progress
+    onProgress?.(Math.min(i + batchSize, files.length), files.length);
   }
 
-  return response.json();
+  return {
+    photos: allPhotos,
+    uploaded_count: totalUploaded,
+    duplicate_count: totalDuplicates,
+  };
 }
 
 export async function deletePhoto(
@@ -322,6 +356,7 @@ export interface ShareLink {
   id: string;
   album_id: string;
   token: string;
+  custom_slug: string | null;
   share_url: string;
   is_password_protected: boolean;
   expires_at: string | null;
@@ -339,14 +374,18 @@ export interface ShareLinkListResponse {
 
 export async function createShareLink(
   albumId: string,
-  password?: string
+  password?: string,
+  customSlug?: string
 ): Promise<ShareLink> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ password: password || null }),
+    body: JSON.stringify({
+      password: password || null,
+      custom_slug: customSlug || null,
+    }),
   });
 
   if (!response.ok) {

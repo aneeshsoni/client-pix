@@ -75,7 +75,7 @@ export default function GalleryPage() {
             </p>
           </div>
         ) : (
-          <PhotoGrid photos={photos} />
+          <PhotoGrid photos={photos} onPhotoDeleted={fetchPhotos} />
         )}
       </div>
     </>

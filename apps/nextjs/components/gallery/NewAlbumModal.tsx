@@ -87,12 +87,15 @@ export function NewAlbumModal({
         description.trim() || undefined
       );
 
-      // Upload photos if any
+      // Upload photos if any (in batches for reliability)
       if (files.length > 0) {
-        setUploadProgress(
-          `Uploading ${files.length} photo${files.length !== 1 ? "s" : ""}...`
+        await uploadPhotosToAlbum(
+          album.id, 
+          files,
+          (uploaded, total) => {
+            setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+          }
         );
-        await uploadPhotosToAlbum(album.id, files);
       }
 
       // Success! Reset and close

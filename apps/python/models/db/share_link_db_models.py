@@ -32,6 +32,13 @@ class ShareLink(Base):
         nullable=False,
         index=True,
     )
+    # Custom slug for friendly URLs (e.g., "wedding-2024" instead of random token)
+    custom_slug: Mapped[str | None] = mapped_column(
+        String(100),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_password_protected: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
