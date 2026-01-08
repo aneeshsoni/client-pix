@@ -51,7 +51,7 @@ async def init_db() -> None:
 
 def _migrate_share_links_custom_slug(conn):
     """Add custom_slug column to share_links table if it doesn't exist.
-    
+
     This is a sync function called via run_sync from async context.
     """
     try:
