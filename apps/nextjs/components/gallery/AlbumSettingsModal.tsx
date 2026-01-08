@@ -101,20 +101,23 @@ export function AlbumSettingsModal({
     onAlbumUpdated,
   ]);
 
-  const handleDelete = useCallback(async (deletePhotos: boolean) => {
-    if (!album) return;
+  const handleDelete = useCallback(
+    async (deletePhotos: boolean) => {
+      if (!album) return;
 
-    setIsDeleting(true);
-    try {
-      await deleteAlbum(album.id, deletePhotos);
-      onOpenChange(false);
-      onAlbumDeleted?.();
-    } catch (error) {
-      console.error("Failed to delete album:", error);
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [album, onOpenChange, onAlbumDeleted]);
+      setIsDeleting(true);
+      try {
+        await deleteAlbum(album.id, deletePhotos);
+        onOpenChange(false);
+        onAlbumDeleted?.();
+      } catch (error) {
+        console.error("Failed to delete album:", error);
+      } finally {
+        setIsDeleting(false);
+      }
+    },
+    [album, onOpenChange, onAlbumDeleted]
+  );
 
   const handleClose = useCallback(() => {
     if (isSaving || isDeleting) return;
@@ -193,7 +196,11 @@ export function AlbumSettingsModal({
                     disabled={isSaving}
                   >
                     <Image
-                      src={getSecureImageUrl(photo.id, "thumbnail", token || undefined)}
+                      src={getSecureImageUrl(
+                        photo.id,
+                        "thumbnail",
+                        token || undefined
+                      )}
                       alt={photo.original_filename}
                       fill
                       className="object-cover"
@@ -254,9 +261,7 @@ export function AlbumSettingsModal({
                       <Trash2 className="h-4 w-4 mr-2" />
                     )}
                     Delete Album & Photos
-                    <span className="text-xs opacity-80 ml-2">
-                      (permanent)
-                    </span>
+                    <span className="text-xs opacity-80 ml-2">(permanent)</span>
                   </Button>
                   <Button
                     variant="ghost"

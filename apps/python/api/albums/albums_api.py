@@ -290,13 +290,14 @@ async def set_cover_photo(
 async def delete_album(
     album_id: uuid.UUID,
     delete_photos: bool = Query(
-        False, description="If true, permanently delete all photos. If false, photos become unassociated."
+        False,
+        description="If true, permanently delete all photos. If false, photos become unassociated.",
     ),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Delete an album.
-    
+
     - delete_photos=false (default): Album is deleted, photos become unassociated (orphaned)
     - delete_photos=true: Album and all photos are permanently deleted from disk
     """
@@ -321,7 +322,7 @@ async def delete_album(
         for photo in photos:
             file_hash = photo.file_hash
             file_hash.reference_count -= 1
-            
+
             # If no more references, delete the actual files
             if file_hash.reference_count <= 0:
                 await storage_service.delete_file(

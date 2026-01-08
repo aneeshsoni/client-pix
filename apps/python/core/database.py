@@ -52,7 +52,7 @@ async def init_db() -> None:
 
 def _migrate_share_links_custom_slug(conn):
     """Add custom_slug column to share_links table if it doesn't exist.
-    
+
     This is a sync function called via run_sync from async context.
     """
     try:
@@ -81,29 +81,29 @@ def _migrate_share_links_custom_slug(conn):
 
 def _migrate_photos_album_id_nullable(conn):
     """Make photos.album_id nullable and change ondelete to SET NULL.
-    
+
     This allows photos to exist without being associated with an album.
     """
     try:
         inspector = inspect(conn)
-        
+
         # Check if photos table exists
         if "photos" not in inspector.get_table_names():
             return
-        
+
         # Get column info
         columns = {col["name"]: col for col in inspector.get_columns("photos")}
         album_id_col = columns.get("album_id")
-        
+
         if album_id_col and not album_id_col.get("nullable", True):
             print("⚠️  Making photos.album_id nullable...")
             # Make column nullable
-            conn.execute(
-                text("ALTER TABLE photos ALTER COLUMN album_id DROP NOT NULL")
-            )
+            conn.execute(text("ALTER TABLE photos ALTER COLUMN album_id DROP NOT NULL"))
             # Drop old foreign key and create new one with SET NULL
             conn.execute(
-                text("ALTER TABLE photos DROP CONSTRAINT IF EXISTS photos_album_id_fkey")
+                text(
+                    "ALTER TABLE photos DROP CONSTRAINT IF EXISTS photos_album_id_fkey"
+                )
             )
             conn.execute(
                 text(

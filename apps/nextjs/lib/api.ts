@@ -1,6 +1,6 @@
 /**
  * API client for communicating with the Python backend
- * 
+ *
  * Uses relative URLs so it works automatically with any domain.
  * No need to configure NEXT_PUBLIC_API_URL - just works!
  */
@@ -149,10 +149,16 @@ export async function updateAlbum(
   return response.json();
 }
 
-export async function deleteAlbum(albumId: string, deletePhotos: boolean = false): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}?delete_photos=${deletePhotos}`, {
-    method: "DELETE",
-  });
+export async function deleteAlbum(
+  albumId: string,
+  deletePhotos: boolean = false
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}?delete_photos=${deletePhotos}`,
+    {
+      method: "DELETE",
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to delete album: ${response.statusText}`);
@@ -161,51 +167,81 @@ export async function deleteAlbum(albumId: string, deletePhotos: boolean = false
 
 /**
  * Upload photos to an album in batches for reliability.
- * 
+ *
  * Uploads in batches of BATCH_SIZE to prevent timeouts and memory issues.
  * Supports uploading 100+ photos at once.
- * 
+ *
  * @param albumId - Album to upload to
  * @param files - Array of files to upload
  * @param onProgress - Callback with (uploaded, total) counts
- * @param batchSize - Number of files per batch (default: 5)
+ * @param batchSize - Number of files per batch (default: 3 for large files)
  */
 export async function uploadPhotosToAlbum(
   albumId: string,
   files: File[],
   onProgress?: (uploaded: number, total: number) => void,
-  batchSize: number = 5
+  batchSize: number = 3
 ): Promise<PhotoUploadResponse> {
   const allPhotos: Photo[] = [];
   let totalUploaded = 0;
   let totalDuplicates = 0;
+  let successfullyProcessed = 0;
 
   // Process files in batches
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
-    
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    const totalBatches = Math.ceil(files.length / batchSize);
+
     const formData = new FormData();
     batch.forEach((file) => {
       formData.append("files", file);
     });
 
-    const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/photos`, {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      const controller = new AbortController();
+      // 5 minute timeout per batch (large RAW files can take time)
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText);
-      throw new Error(`Failed to upload batch ${Math.floor(i / batchSize) + 1}: ${errorText}`);
+      const response = await fetch(
+        `${API_BASE_URL}/api/albums/${albumId}/photos`,
+        {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        console.error(`Batch ${batchNumber}/${totalBatches} failed:`, errorText);
+        // Continue with next batch instead of failing completely
+        continue;
+      }
+
+      const result: PhotoUploadResponse = await response.json();
+      allPhotos.push(...result.photos);
+      totalUploaded += result.uploaded_count;
+      totalDuplicates += result.duplicate_count;
+      successfullyProcessed += batch.length;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`Batch ${batchNumber}/${totalBatches} timed out`);
+      } else {
+        console.error(`Batch ${batchNumber}/${totalBatches} error:`, error);
+      }
+      // Continue with next batch
     }
 
-    const result: PhotoUploadResponse = await response.json();
-    allPhotos.push(...result.photos);
-    totalUploaded += result.uploaded_count;
-    totalDuplicates += result.duplicate_count;
-
-    // Report progress
+    // Report progress after each batch
     onProgress?.(Math.min(i + batchSize, files.length), files.length);
+  }
+
+  // If nothing was uploaded at all, throw an error
+  if (successfullyProcessed === 0 && files.length > 0) {
+    throw new Error("Failed to upload any photos. Please try again.");
   }
 
   return {
@@ -279,14 +315,14 @@ export async function getAllPhotos(): Promise<Photo[]> {
 /**
  * Get a secure image URL for authenticated users.
  * Images are served through the API with JWT authentication.
- * 
+ *
  * @param photoId - The photo ID
  * @param variant - "thumbnail" | "web" | "original" (default: "web")
  * @param token - JWT auth token (passed via query param for Image components)
  */
 export function getSecureImageUrl(
-  photoId: string, 
-  variant: "thumbnail" | "web" | "original" = "web", 
+  photoId: string,
+  variant: "thumbnail" | "web" | "original" = "web",
   token?: string
 ): string {
   let url = `${API_BASE_URL}/api/files/photo/${photoId}?variant=${variant}`;
@@ -303,7 +339,7 @@ export function getSecureImageUrl(
  * @param token - JWT auth token
  */
 export function getSecureImageUrlByHash(
-  fileHash: string, 
+  fileHash: string,
   variant: "thumbnail" | "web" | "original" = "web",
   token?: string
 ): string {
@@ -316,7 +352,7 @@ export function getSecureImageUrlByHash(
 
 /**
  * Get image URL for shared album (public with share token validation).
- * 
+ *
  * @param shareToken - The share link token
  * @param photoId - The photo ID
  * @param variant - Image variant
@@ -340,9 +376,13 @@ export function getSharedImageUrl(
  * This function no longer works as direct file access has been removed for security.
  */
 export function getImageUrl(path: string): string {
-  console.warn("getImageUrl is deprecated. Use getSecureImageUrl or getSharedImageUrl instead.");
+  console.warn(
+    "getImageUrl is deprecated. Use getSecureImageUrl or getSharedImageUrl instead."
+  );
   // Return a placeholder that will 404 - this helps identify code that needs updating
-  return `${API_BASE_URL}/api/files/deprecated?path=${encodeURIComponent(path)}`;
+  return `${API_BASE_URL}/api/files/deprecated?path=${encodeURIComponent(
+    path
+  )}`;
 }
 
 export function getDownloadUrl(albumId: string, photoId: string): string {

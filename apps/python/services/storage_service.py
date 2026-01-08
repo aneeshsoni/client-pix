@@ -1,8 +1,10 @@
 """Storage service for file handling with deduplication."""
 
+import asyncio
 import hashlib
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import BinaryIO
 
@@ -296,13 +298,13 @@ class StorageService:
         except Exception:
             return (0, 0)
 
-    async def _generate_thumbnails(
+    def _generate_thumbnails_sync(
         self,
         original_path: Path,
         file_id: str,
         extension: str,
     ) -> None:
-        """Generate thumbnail and web-optimized versions."""
+        """Generate thumbnail and web-optimized versions (synchronous)."""
         try:
             with Image.open(original_path) as img:
                 # Convert to RGB if necessary (for PNG with transparency, etc.)
@@ -334,6 +336,19 @@ class StorageService:
         except Exception:
             # Non-standard image format, skip thumbnails
             pass
+
+    async def _generate_thumbnails(
+        self,
+        original_path: Path,
+        file_id: str,
+        extension: str,
+    ) -> None:
+        """Generate thumbnail and web-optimized versions (async, runs in thread pool)."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            partial(self._generate_thumbnails_sync, original_path, file_id, extension)
+        )
 
     def get_file_path(
         self,
