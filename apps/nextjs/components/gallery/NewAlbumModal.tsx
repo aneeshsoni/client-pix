@@ -37,6 +37,7 @@ export function NewAlbumModal({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback((fileList: FileList) => {
@@ -89,13 +90,19 @@ export function NewAlbumModal({
 
       // Upload photos if any (in batches for reliability)
       if (files.length > 0) {
+        setUploadProgress(`Uploading 0/${files.length} photos...`);
+        setUploadProgressPercent(0);
         await uploadPhotosToAlbum(
           album.id, 
           files,
           (uploaded, total) => {
+            const percent = Math.round((uploaded / total) * 100);
             setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+            setUploadProgressPercent(percent);
           }
         );
+        setUploadProgress("Upload complete!");
+        setUploadProgressPercent(100);
       }
 
       // Success! Reset and close
@@ -103,6 +110,7 @@ export function NewAlbumModal({
       setDescription("");
       setFiles([]);
       setUploadProgress("");
+      setUploadProgressPercent(0);
       onOpenChange(false);
 
       // Notify parent to refresh album list
@@ -123,6 +131,7 @@ export function NewAlbumModal({
     setDescription("");
     setFiles([]);
     setUploadProgress("");
+    setUploadProgressPercent(0);
     onOpenChange(false);
   }, [isUploading, onOpenChange]);
 
@@ -308,9 +317,29 @@ export function NewAlbumModal({
 
           {/* Upload Progress */}
           {uploadProgress && (
-            <div className="flex items-center gap-2 pb-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {uploadProgress}
+            <div className="rounded-lg border bg-primary/10 px-4 py-3">
+              <div className="flex items-center gap-3 mb-2">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Please wait while photos are being uploaded...
+                  </p>
+                </div>
+                {uploadProgressPercent > 0 && (
+                  <span className="text-sm font-semibold text-primary">
+                    {uploadProgressPercent}%
+                  </span>
+                )}
+              </div>
+              {uploadProgressPercent > 0 && (
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgressPercent}%` }}
+                  />
+                </div>
+              )}
             </div>
           )}
 

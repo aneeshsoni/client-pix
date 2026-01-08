@@ -52,17 +52,36 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     fetchAlbum();
   }, [fetchAlbum]);
 
+  const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
+
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0 || !album) return;
 
       setIsUploading(true);
+      setUploadProgress(`Uploading 0/${files.length} photos...`);
+      setUploadProgressPercent(0);
       try {
-        await uploadPhotosToAlbum(album.id, Array.from(files));
+        await uploadPhotosToAlbum(
+          album.id,
+          Array.from(files),
+          (uploaded, total) => {
+            const percent = Math.round((uploaded / total) * 100);
+            setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+            setUploadProgressPercent(percent);
+          }
+        );
+        setUploadProgress("Upload complete! Refreshing...");
+        setUploadProgressPercent(100);
         await fetchAlbum(); // Refresh album data
+        setUploadProgress("");
+        setUploadProgressPercent(0);
       } catch (err) {
         console.error("Failed to upload photos:", err);
+        setUploadProgress(`Error: ${err instanceof Error ? err.message : "Upload failed"}`);
+        setUploadProgressPercent(0);
       } finally {
         setIsUploading(false);
         // Reset input
@@ -147,8 +166,36 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         </div>
       </header>
 
+      {/* Upload Progress Banner */}
+      {uploadProgress && (
+        <div className="mx-6 mt-4 rounded-lg border bg-primary/10 px-4 py-3">
+          <div className="flex items-center gap-3 mb-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Please wait while photos are being uploaded...
+              </p>
+            </div>
+            {uploadProgressPercent > 0 && (
+              <span className="text-sm font-semibold text-primary">
+                {uploadProgressPercent}%
+              </span>
+            )}
+          </div>
+          {uploadProgressPercent > 0 && (
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${uploadProgressPercent}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Album description */}
-      {album.description && (
+      {album.description && !uploadProgress && (
         <div className="px-6 pt-4">
           <p className="text-muted-foreground">{album.description}</p>
         </div>

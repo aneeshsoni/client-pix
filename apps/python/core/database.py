@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import text, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.config import DATABASE_URL, DEBUG
@@ -41,6 +42,35 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Create all database tables."""
+    """Create all database tables and run migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Run schema migrations for existing databases
+        await _migrate_share_links_custom_slug(conn)
+
+
+async def _migrate_share_links_custom_slug(conn):
+    """Add custom_slug column to share_links table if it doesn't exist."""
+
+    try:
+        # Check if column exists
+        inspector = inspect(conn.sync_engine)
+        columns = [col["name"] for col in inspector.get_columns("share_links")]
+
+        if "custom_slug" not in columns:
+            print("⚠️  Adding custom_slug column to share_links table...")
+            # Add column as nullable first (PostgreSQL doesn't allow UNIQUE in ADD COLUMN)
+            await conn.execute(
+                text("ALTER TABLE share_links ADD COLUMN custom_slug VARCHAR(100)")
+            )
+            # Create unique index (PostgreSQL allows unique indexes on nullable columns)
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_share_links_custom_slug ON share_links(custom_slug) WHERE custom_slug IS NOT NULL"
+                )
+            )
+            print("✓ Migration complete: custom_slug column added")
+    except Exception as e:
+        # Table might not exist yet, that's OK - create_all will handle it
+        if "does not exist" not in str(e).lower():
+            print(f"⚠️  Migration check failed (non-critical): {e}")
