@@ -47,9 +47,9 @@ services:
       APP_NAME: Client Pix API (Dev)
       DEBUG: "true"
       DATABASE_URL: postgresql+asyncpg://clientpix:clientpix_dev@postgres:5432/clientpix
-      BASE_URL: http://localhost
       UPLOAD_DIR: /app/uploads
-      JWT_SECRET: dev-secret-change-in-production-use-a-long-random-string
+      # JWT_SECRET auto-generated and saved to uploads/.jwt_secret
+      # Note: Domain auto-detected from request headers - no BASE_URL needed
     volumes:
       - ./apps/python:/app
       - uploads_data:/app/uploads
@@ -74,8 +74,8 @@ services:
     container_name: clientpix-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost
       NEXT_TELEMETRY_DISABLED: 1
+      # Note: Uses relative URLs - no NEXT_PUBLIC_API_URL needed
     volumes:
       - ./apps/nextjs:/app
       - /app/node_modules

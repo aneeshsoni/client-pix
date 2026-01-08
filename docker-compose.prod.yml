@@ -8,9 +8,13 @@
 #
 # Required environment variables (set in Coolify or .env file):
 #   - POSTGRES_PASSWORD
-#   - BASE_URL
-#   - NEXT_PUBLIC_API_URL
-#   - JWT_SECRET
+#
+# Optional (auto-generated or have defaults):
+#   - JWT_SECRET (auto-generated and persisted in uploads volume)
+#   - POSTGRES_USER (default: clientpix)
+#   - POSTGRES_DB (default: clientpix)
+#
+# Note: Domain is auto-detected from request headers - no URL config needed!
 # =============================================================================
 
 services:
@@ -44,10 +48,9 @@ services:
       APP_NAME: ${APP_NAME:-Client Pix API}
       DEBUG: "false"
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clientpix}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clientpix}
-      BASE_URL: ${BASE_URL:?Base URL is required}
       UPLOAD_DIR: /app/uploads
       WEB_MAX_DIMENSION: ${WEB_MAX_DIMENSION:-2400}
-      JWT_SECRET: ${JWT_SECRET:?JWT secret is required}
+      JWT_SECRET: ${JWT_SECRET:-}  # Optional: auto-generated if not set
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -67,8 +70,6 @@ services:
     build:
       context: ./apps/nextjs
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?API URL is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production

@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSharedImageUrl } from "@/lib/api";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost";
+// Empty string = relative URLs (works with any domain)
+const API_BASE_URL = "";
 
 interface SharedPhoto {
   id: string;

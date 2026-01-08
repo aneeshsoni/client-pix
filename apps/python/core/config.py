@@ -10,7 +10,7 @@ load_dotenv()
 # Application
 APP_NAME = os.getenv("APP_NAME", "Client Pix API")
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
-BASE_URL = os.getenv("BASE_URL", "http://localhost")
+# Note: BASE_URL removed - domain is auto-detected from request headers
 
 # Database
 DATABASE_URL = os.getenv(

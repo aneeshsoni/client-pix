@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/albums", tags=["share-links"])
 async def create_share_link(
     album_id: uuid.UUID,
     data: ShareLinkCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new share link for an album."""
@@ -62,7 +63,7 @@ async def create_share_link(
         id=share_link.id,
         album_id=share_link.album_id,
         token=share_link.token,
-        share_url=build_share_url(share_link.token),
+        share_url=build_share_url(share_link.token, request),
         is_password_protected=share_link.is_password_protected,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,
@@ -74,6 +75,7 @@ async def create_share_link(
 @router.get("/{album_id}/share", response_model=ShareLinkListResponse)
 async def list_share_links(
     album_id: uuid.UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """List all share links for an album."""
@@ -100,7 +102,7 @@ async def list_share_links(
                 id=link.id,
                 album_id=link.album_id,
                 token=link.token,
-                share_url=build_share_url(link.token),
+                share_url=build_share_url(link.token, request),
                 is_password_protected=link.is_password_protected,
                 expires_at=link.expires_at,
                 is_revoked=link.is_revoked,
@@ -118,6 +120,7 @@ async def update_share_link(
     album_id: uuid.UUID,
     share_link_id: uuid.UUID,
     data: ShareLinkUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Update a share link (password, expiration, revoke)."""
@@ -162,7 +165,7 @@ async def update_share_link(
         id=share_link.id,
         album_id=share_link.album_id,
         token=share_link.token,
-        share_url=build_share_url(share_link.token),
+        share_url=build_share_url(share_link.token, request),
         is_password_protected=share_link.is_password_protected,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,

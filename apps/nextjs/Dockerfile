@@ -26,12 +26,10 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
-# Build argument for API URL (must be set at build time for Next.js)
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
 # Disable telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Note: No NEXT_PUBLIC_API_URL needed - app uses relative URLs
 
 # Build the application
 RUN npm run build

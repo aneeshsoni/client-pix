@@ -1,10 +1,12 @@
 /**
  * API client for communicating with the Python backend
+ * 
+ * Uses relative URLs so it works automatically with any domain.
+ * No need to configure NEXT_PUBLIC_API_URL - just works!
  */
 
-// Base URL without /api - the API paths include /api prefix
-// Example: http://localhost or https://photos.example.com
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost";
+// Empty string = relative URLs (works with any domain via Nginx proxy)
+const API_BASE_URL = "";
 
 // --- Types ---
 
@@ -89,7 +91,7 @@ export async function listAlbums(): Promise<AlbumListResponse> {
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+        "Network error: Unable to connect to backend. Make sure the backend is running."
       );
     }
     throw error;
@@ -121,7 +123,7 @@ export async function getAlbumBySlug(slug: string): Promise<AlbumDetail> {
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+        "Network error: Unable to connect to backend. Make sure the backend is running."
       );
     }
     throw error;
@@ -231,7 +233,7 @@ export async function getAllPhotos(): Promise<Photo[]> {
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        `Network error: Unable to connect to backend at ${API_BASE_URL}. Make sure the backend is running.`
+        "Network error: Unable to connect to backend. Make sure the backend is running."
       );
     }
     throw error;

@@ -9,8 +9,8 @@ import {
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
-// Base URL without /api suffix - auth endpoints are at /api/auth/*
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost") + "/api";
+// Relative URL - works with any domain via Nginx proxy
+const API_URL = "/api";
 
 interface Admin {
   id: string;
