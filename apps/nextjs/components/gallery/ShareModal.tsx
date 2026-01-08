@@ -129,12 +129,12 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>Share Album</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 overflow-hidden">
           {/* Create New Link Section */}
           <div className="space-y-4 rounded-lg border p-4">
             <h3 className="text-sm font-medium">Create Share Link</h3>
@@ -243,16 +243,16 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                     key={link.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 rounded-lg border p-3"
+                    className="flex items-center gap-3 rounded-lg border p-3 overflow-hidden"
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <div className="flex items-center gap-2 mb-1">
                         {link.is_password_protected ? (
                           <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                         ) : (
                           <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                         )}
-                        <span className="text-xs text-muted-foreground truncate">
+                        <span className="text-xs text-muted-foreground truncate block overflow-hidden">
                           {link.share_url}
                         </span>
                       </div>
@@ -270,7 +270,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         variant="ghost"
                         size="sm"
