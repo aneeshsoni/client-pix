@@ -46,25 +46,27 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Run schema migrations for existing databases
-        await _migrate_share_links_custom_slug(conn)
+        await conn.run_sync(_migrate_share_links_custom_slug)
 
 
-async def _migrate_share_links_custom_slug(conn):
-    """Add custom_slug column to share_links table if it doesn't exist."""
-
+def _migrate_share_links_custom_slug(conn):
+    """Add custom_slug column to share_links table if it doesn't exist.
+    
+    This is a sync function called via run_sync from async context.
+    """
     try:
-        # Check if column exists
-        inspector = inspect(conn.sync_engine)
+        # Check if column exists using sync inspector
+        inspector = inspect(conn)
         columns = [col["name"] for col in inspector.get_columns("share_links")]
 
         if "custom_slug" not in columns:
             print("⚠️  Adding custom_slug column to share_links table...")
             # Add column as nullable first (PostgreSQL doesn't allow UNIQUE in ADD COLUMN)
-            await conn.execute(
+            conn.execute(
                 text("ALTER TABLE share_links ADD COLUMN custom_slug VARCHAR(100)")
             )
             # Create unique index (PostgreSQL allows unique indexes on nullable columns)
-            await conn.execute(
+            conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_share_links_custom_slug ON share_links(custom_slug) WHERE custom_slug IS NOT NULL"
                 )
