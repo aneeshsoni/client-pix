@@ -36,6 +36,7 @@ class PhotoResponse(BaseModel):
     caption: str | None
     sort_order: int
     captured_at: datetime | None = None
+    is_video: bool = False
     # File details (from file_hash)
     storage_path: str
     thumbnail_path: str

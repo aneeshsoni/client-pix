@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { X, ChevronLeft, ChevronRight, Info, Download, Trash2 } from "lucide-react";
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Download,
+  Trash2,
+} from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
 import type { Photo } from "@/lib/api";
 import { getSecureImageUrl, getDownloadUrl, deletePhoto } from "@/lib/api";
@@ -33,17 +40,18 @@ export function Lightbox({
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const { token } = useAuth();
 
   const handleDelete = useCallback(async () => {
     if (!onDelete) return;
-    
+
     const confirmed = window.confirm(
       `Are you sure you want to delete "${photo.original_filename}"? This cannot be undone.`
     );
-    
+
     if (!confirmed) return;
-    
+
     setIsDeleting(true);
     try {
       await deletePhoto(albumId, photo.id);
@@ -58,7 +66,14 @@ export function Lightbox({
     } finally {
       setIsDeleting(false);
     }
-  }, [albumId, photo.id, photo.original_filename, onDelete, onClose, totalCount]);
+  }, [
+    albumId,
+    photo.id,
+    photo.original_filename,
+    onDelete,
+    onClose,
+    totalCount,
+  ]);
 
   // Get the full resolution image URL with auth token
   const imageUrl = getSecureImageUrl(photo.id, "web", token || undefined);
@@ -165,7 +180,7 @@ export function Lightbox({
           </div>
         </motion.header>
 
-        {/* Main image area */}
+        {/* Main image/video area */}
         <div className="absolute inset-0 flex items-center justify-center p-4 md:p-16">
           {/* Loading indicator */}
           {!isImageLoaded && (
@@ -174,24 +189,36 @@ export function Lightbox({
             </div>
           )}
 
-          {/* Image */}
+          {/* Video or Image */}
           <motion.div
             key={photo.id}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: isImageLoaded ? 1 : 0, scale: 1 }}
             transition={{ duration: 0.3 }}
-            className="relative h-full w-full"
+            className="relative h-full w-full flex items-center justify-center"
           >
-            <Image
-              src={imageUrl}
-              alt={photo.original_filename}
-              fill
-              className="object-contain"
-              sizes="100vw"
-              priority
-              onLoad={() => setIsImageLoaded(true)}
-              unoptimized
-            />
+            {photo.is_video ? (
+              <video
+                ref={videoRef}
+                src={imageUrl}
+                controls
+                autoPlay
+                className="max-h-full max-w-full object-contain"
+                onLoadedData={() => setIsImageLoaded(true)}
+                playsInline
+              />
+            ) : (
+              <Image
+                src={imageUrl}
+                alt={photo.original_filename}
+                fill
+                className="object-contain"
+                sizes="100vw"
+                priority
+                onLoad={() => setIsImageLoaded(true)}
+                unoptimized
+              />
+            )}
           </motion.div>
         </div>
 

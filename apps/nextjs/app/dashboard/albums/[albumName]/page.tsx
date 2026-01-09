@@ -181,12 +181,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               <Upload className="h-4 w-4" />
             )}
             <span className="hidden sm:inline">
-              {isUploading ? "Uploading..." : "Add Photos"}
+              {isUploading ? "Uploading..." : "Add Media"}
             </span>
             <input
               type="file"
               multiple
-              accept="image/*"
+              accept="image/*,video/*"
               onChange={handleFileUpload}
               className="hidden"
               disabled={isUploading}

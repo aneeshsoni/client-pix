@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { Play } from "lucide-react";
 import type { Photo } from "@/lib/api";
 import { getSecureImageUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -41,7 +42,7 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
           <div className="absolute inset-0 animate-pulse bg-muted" />
         )}
 
-        {/* Photo */}
+        {/* Photo/Video thumbnail */}
         <Image
           src={thumbnailUrl}
           alt={photo.original_filename}
@@ -53,6 +54,15 @@ export function PhotoCard({ photo, index, onClick }: PhotoCardProps) {
           onLoad={() => setIsLoaded(true)}
           unoptimized // Skip Next.js image optimization for external URLs
         />
+
+        {/* Video play icon overlay */}
+        {photo.is_video && isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="rounded-full bg-black/60 p-3 transition-transform group-hover:scale-110">
+              <Play className="h-8 w-8 text-white fill-white" />
+            </div>
+          </div>
+        )}
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />

@@ -8,10 +8,11 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install uv and runtime dependencies
+# Install uv and runtime dependencies (curl for health checks, ffmpeg for video processing)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first (for layer caching)

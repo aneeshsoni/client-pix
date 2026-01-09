@@ -26,9 +26,10 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (curl for health checks, ffmpeg for video processing)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder

@@ -203,14 +203,17 @@ class StorageService:
                 await f.write(chunk)
                 file_size += len(chunk)
 
+        # Generate video thumbnail and get dimensions
+        width, height = await self._generate_video_thumbnails(storage_path, file_id)
+
         return StoredFile(
             file_id=file_id,
             storage_path=self._get_relative_video_path(file_id, extension),
             file_extension=extension,
             mime_type=self.get_mime_type(extension),
             file_size=file_size,
-            width=None,
-            height=None,
+            width=width,
+            height=height,
             is_duplicate=False,
             is_video=True,
         )
@@ -378,6 +381,116 @@ class StorageService:
             None,
             partial(self._generate_thumbnails_sync, original_path, file_id, extension),
         )
+
+    async def _generate_video_thumbnails(
+        self,
+        video_path: Path,
+        file_id: str,
+    ) -> tuple[int, int]:
+        """
+        Generate thumbnail and web poster frames from video using ffmpeg.
+
+        Returns (width, height) of the video.
+        """
+        import subprocess
+        import json
+
+        loop = asyncio.get_event_loop()
+
+        # Get video dimensions using ffprobe
+        width, height = 1920, 1080  # Default fallback
+        try:
+            probe_result = await loop.run_in_executor(
+                None,
+                partial(
+                    subprocess.run,
+                    [
+                        "ffprobe",
+                        "-v",
+                        "quiet",
+                        "-print_format",
+                        "json",
+                        "-show_streams",
+                        "-select_streams",
+                        "v:0",
+                        str(video_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                ),
+            )
+            if probe_result.returncode == 0:
+                probe_data = json.loads(probe_result.stdout)
+                if probe_data.get("streams"):
+                    stream = probe_data["streams"][0]
+                    width = stream.get("width", 1920)
+                    height = stream.get("height", 1080)
+        except Exception as e:
+            print(f"Warning: Could not probe video dimensions: {e}")
+
+        # Generate thumbnail (small poster at 1 second)
+        thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            await loop.run_in_executor(
+                None,
+                partial(
+                    subprocess.run,
+                    [
+                        "ffmpeg",
+                        "-y",  # Overwrite
+                        "-ss",
+                        "1",  # Seek to 1 second
+                        "-i",
+                        str(video_path),
+                        "-vframes",
+                        "1",
+                        "-vf",
+                        f"scale={THUMBNAIL_SIZE}:-1",
+                        "-q:v",
+                        str(
+                            100 - THUMBNAIL_QUALITY
+                        ),  # Quality (lower is better for ffmpeg)
+                        str(thumb_path),
+                    ],
+                    capture_output=True,
+                ),
+            )
+        except Exception as e:
+            print(f"Warning: Could not generate video thumbnail: {e}")
+
+        # Generate web version (larger poster)
+        web_path = self._get_storage_path(file_id, self.VARIANT_WEB, ".webp")
+        web_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            await loop.run_in_executor(
+                None,
+                partial(
+                    subprocess.run,
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-ss",
+                        "1",
+                        "-i",
+                        str(video_path),
+                        "-vframes",
+                        "1",
+                        "-vf",
+                        f"scale='min({WEB_MAX_DIMENSION},iw)':-1",
+                        "-q:v",
+                        str(100 - WEB_QUALITY),
+                        str(web_path),
+                    ],
+                    capture_output=True,
+                ),
+            )
+        except Exception as e:
+            print(f"Warning: Could not generate video web poster: {e}")
+
+        return width, height
 
     def get_file_path(
         self,

@@ -92,15 +92,11 @@ export function NewAlbumModal({
       if (files.length > 0) {
         setUploadProgress(`Uploading 0/${files.length} photos...`);
         setUploadProgressPercent(0);
-        await uploadPhotosToAlbum(
-          album.id, 
-          files,
-          (uploaded, total) => {
-            const percent = Math.round((uploaded / total) * 100);
-            setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
-            setUploadProgressPercent(percent);
-          }
-        );
+        await uploadPhotosToAlbum(album.id, files, (uploaded, total) => {
+          const percent = Math.round((uploaded / total) * 100);
+          setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+          setUploadProgressPercent(percent);
+        });
         setUploadProgress("Upload complete!");
         setUploadProgressPercent(100);
       }
@@ -218,7 +214,7 @@ export function NewAlbumModal({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,video/*"
                   onChange={handleFileInput}
                   className="hidden"
                   disabled={isUploading}
@@ -321,7 +317,9 @@ export function NewAlbumModal({
               <div className="flex items-center gap-3 mb-2">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {uploadProgress}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Please wait while photos are being uploaded...
                   </p>

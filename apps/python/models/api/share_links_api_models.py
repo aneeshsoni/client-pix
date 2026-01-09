@@ -76,6 +76,7 @@ class SharedAlbumPhotoResponse(BaseModel):
     original_filename: str
     captured_at: datetime | None = None
     created_at: datetime | None = None
+    is_video: bool = False
 
     model_config = {"from_attributes": True}
 
