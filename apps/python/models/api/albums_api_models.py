@@ -31,10 +31,11 @@ class PhotoResponse(BaseModel):
     """Photo details in API response."""
 
     id: uuid.UUID
-    album_id: uuid.UUID
+    album_id: uuid.UUID | None
     original_filename: str
     caption: str | None
     sort_order: int
+    captured_at: datetime | None = None
     # File details (from file_hash)
     storage_path: str
     thumbnail_path: str

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers deploying Client Pix to production, including security considerations, local testing, and Coolify deployment.
+This guide covers deploying Client Pix to production, including security considerations, local testing, and deployment on platforms like Coolify.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ This guide covers deploying Client Pix to production, including security conside
 You can fully test share links and all features locally using `http://localhost`. The current setup routes all traffic through Nginx on port 80.
 
 ```bash
-# Start all services
+# Start all services with the start script, it'll automatically build and start the docker containers for the project
 ./start.sh
 
 # Access the app

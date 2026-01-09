@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,10 +13,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { Loader2, Check, User, Lock } from "lucide-react";
+import { Loader2, Check, User, Lock, HardDrive } from "lucide-react";
+import { getStorageInfo, type StorageInfo } from "@/lib/api";
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+}
 
 export default function SettingsPage() {
   const { admin, updateProfile, changePassword } = useAuth();
+
+  // Storage state
+  const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [storageLoading, setStorageLoading] = useState(true);
 
   // Profile form state
   const [name, setName] = useState(admin?.name || "");
@@ -33,6 +46,20 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  useEffect(() => {
+    async function fetchStorage() {
+      try {
+        const data = await getStorageInfo();
+        setStorage(data);
+      } catch (err) {
+        console.error("Failed to fetch storage info:", err);
+      } finally {
+        setStorageLoading(false);
+      }
+    }
+    fetchStorage();
+  }, []);
+
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileError("");
@@ -47,7 +74,9 @@ export default function SettingsPage() {
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : "Failed to update profile");
+      setProfileError(
+        err instanceof Error ? err.message : "Failed to update profile"
+      );
     } finally {
       setProfileLoading(false);
     }
@@ -78,7 +107,9 @@ export default function SettingsPage() {
       setConfirmPassword("");
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : "Failed to change password");
+      setPasswordError(
+        err instanceof Error ? err.message : "Failed to change password"
+      );
     } finally {
       setPasswordLoading(false);
     }
@@ -101,6 +132,64 @@ export default function SettingsPage() {
       </header>
 
       <div className="flex flex-1 flex-col gap-6 p-4 pt-0 max-w-2xl">
+        {/* Storage Section */}
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <HardDrive className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">Storage</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Your current storage usage.
+          </p>
+
+          {storageLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : storage ? (
+            <div className="space-y-4">
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <div className="text-3xl font-bold">
+                    {formatBytes(storage.used_bytes)}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    of {formatBytes(storage.total_bytes)} used
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-semibold text-primary">
+                    {storage.used_percentage.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatBytes(storage.free_bytes)} free
+                  </div>
+                </div>
+              </div>
+
+              {/* Storage bar */}
+              <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    storage.used_percentage > 90
+                      ? "bg-destructive"
+                      : storage.used_percentage > 75
+                      ? "bg-yellow-500"
+                      : "bg-primary"
+                  }`}
+                  style={{
+                    width: `${Math.min(storage.used_percentage, 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Unable to load storage information
+            </div>
+          )}
+        </div>
+
         {/* Profile Section */}
         <div className="rounded-lg border bg-card p-6">
           <div className="flex items-center gap-2 mb-4">

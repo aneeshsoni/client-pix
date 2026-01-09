@@ -19,7 +19,7 @@ def build_album_response(
 ) -> AlbumResponse:
     """
     Build an AlbumResponse from an Album model.
-    
+
     Args:
         album: The Album model
         photo_count: Number of photos in the album
@@ -45,7 +45,7 @@ def build_album_response(
 def build_photo_response(photo: Photo) -> PhotoResponse:
     """
     Build a PhotoResponse from a Photo model with file_hash data.
-    
+
     Constructs paths for all image variants (original, thumbnail, web).
     """
     file_hash = photo.file_hash
@@ -59,6 +59,7 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         original_filename=photo.original_filename,
         caption=photo.caption,
         sort_order=photo.sort_order,
+        captured_at=photo.captured_at,
         storage_path=file_hash.storage_path,
         thumbnail_path=f"thumbnails/{shard1}/{shard2}/{filename_base}.webp",
         web_path=f"web/{shard1}/{shard2}/{filename_base}.webp",
@@ -68,4 +69,3 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         mime_type=file_hash.mime_type,
         created_at=photo.created_at,
     )
-
