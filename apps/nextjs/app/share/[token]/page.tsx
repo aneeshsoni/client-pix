@@ -13,6 +13,7 @@ import {
   Download,
   Calendar,
   Clock,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ interface SharedPhoto {
   original_filename: string;
   captured_at: string | null;
   created_at: string | null;
+  is_video: boolean;
 }
 
 interface SharedAlbum {
@@ -123,7 +125,7 @@ function SharedPhotoCard({
           <div className="absolute inset-0 animate-pulse bg-muted" />
         )}
 
-        {/* Photo */}
+        {/* Photo/Video thumbnail */}
         <Image
           src={imageUrl}
           alt={photo.original_filename}
@@ -135,6 +137,15 @@ function SharedPhotoCard({
           onLoad={() => setIsLoaded(true)}
           unoptimized
         />
+
+        {/* Video play icon overlay */}
+        {photo.is_video && isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="rounded-full bg-black/60 p-3 transition-transform group-hover:scale-110">
+              <Play className="h-8 w-8 text-white fill-white" />
+            </div>
+          </div>
+        )}
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
@@ -584,7 +595,7 @@ export default function SharePage({ params }: SharePageProps) {
                 </button>
               )}
 
-              {/* Image */}
+              {/* Image or Video */}
               <motion.div
                 key={selectedPhoto.id}
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -594,20 +605,35 @@ export default function SharePage({ params }: SharePageProps) {
                 className="max-w-[90vw] max-h-[90vh] flex items-center justify-center"
                 onClick={(e) => e.stopPropagation()}
               >
-                <Image
-                  src={getSharedImageUrl(
-                    token,
-                    selectedPhoto.id,
-                    "web",
-                    verifiedPassword || undefined
-                  )}
-                  alt={selectedPhoto.original_filename}
-                  width={selectedPhoto.width}
-                  height={selectedPhoto.height}
-                  className="max-w-full max-h-[90vh] w-auto h-auto object-contain"
-                  unoptimized
-                  priority
-                />
+                {selectedPhoto.is_video ? (
+                  <video
+                    src={getSharedImageUrl(
+                      token,
+                      selectedPhoto.id,
+                      "web",
+                      verifiedPassword || undefined
+                    )}
+                    controls
+                    autoPlay
+                    className="max-w-full max-h-[90vh] w-auto h-auto object-contain"
+                    playsInline
+                  />
+                ) : (
+                  <Image
+                    src={getSharedImageUrl(
+                      token,
+                      selectedPhoto.id,
+                      "web",
+                      verifiedPassword || undefined
+                    )}
+                    alt={selectedPhoto.original_filename}
+                    width={selectedPhoto.width}
+                    height={selectedPhoto.height}
+                    className="max-w-full max-h-[90vh] w-auto h-auto object-contain"
+                    unoptimized
+                    priority
+                  />
+                )}
               </motion.div>
             </motion.div>
           )}

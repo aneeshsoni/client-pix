@@ -83,7 +83,7 @@ async def get_share_info(
 async def access_shared_album(
     token: str,
     data: ShareLinkVerifyRequest,
-    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
+    sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -170,6 +170,7 @@ async def access_shared_album(
                     original_filename=photo.original_filename,
                     captured_at=photo.captured_at,
                     created_at=photo.created_at,
+                    is_video=photo.is_video,
                 )
             )
 

@@ -105,7 +105,7 @@ async def list_albums(
 @router.get("/{album_id}", response_model=AlbumDetailResponse)
 async def get_album(
     album_id: uuid.UUID,
-    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
+    sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -171,7 +171,7 @@ async def get_album(
 @router.get("/slug/{slug}", response_model=AlbumDetailResponse)
 async def get_album_by_slug(
     slug: str,
-    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
+    sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -419,6 +419,7 @@ async def upload_photos_to_album(
     photos = []
     duplicate_count = 0
     first_photo_id = None
+    first_image_id = None  # Track first image for cover (not video)
 
     for i, file in enumerate(files):
         # Store file on disk
@@ -426,10 +427,6 @@ async def upload_photos_to_album(
             file=file.file,
             original_filename=file.filename or "unnamed",
         )
-
-        # Skip videos for now (photos only)
-        if stored.is_video:
-            continue
 
         if stored.is_duplicate:
             duplicate_count += 1
@@ -460,22 +457,27 @@ async def upload_photos_to_album(
             album_id=album_id,
             file_hash_id=file_hash.id,
             original_filename=file.filename or "unnamed",
+            is_video=stored.is_video,
             sort_order=max_sort + i + 1,
-            captured_at=stored.captured_at,  # Store EXIF date
+            captured_at=stored.captured_at,  # Store EXIF date (None for videos)
         )
         db.add(photo)
         await db.flush()
         await db.refresh(photo, ["file_hash"])
 
-        # Track first photo for auto-cover
+        # Track first photo for auto-cover (prefer images over videos)
         if first_photo_id is None:
             first_photo_id = photo.id
+        if first_image_id is None and not stored.is_video:
+            first_image_id = photo.id
 
         photos.append(build_photo_response(photo))
 
-    # Auto-set cover photo to first uploaded photo if album had none
-    if needs_cover and first_photo_id:
-        album.cover_photo_id = first_photo_id
+    # Auto-set cover photo to first image (or first video if no images)
+    if needs_cover:
+        cover_id = first_image_id or first_photo_id
+        if cover_id:
+            album.cover_photo_id = cover_id
 
     await db.commit()
 
@@ -588,7 +590,7 @@ async def regenerate_photo_thumbnails(
 
 @router.get("/photos/all", response_model=PhotoListResponse)
 async def get_all_photos(
-    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
+    sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all photos across all albums (excludes orphaned photos).

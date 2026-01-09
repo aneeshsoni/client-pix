@@ -1,0 +1,71 @@
+# =============================================================================
+# Caddyfile for Client Pix
+# =============================================================================
+# Caddy automatically handles HTTPS with Let's Encrypt certificates.
+# Replace {$DOMAIN} with your actual domain or set the DOMAIN env variable.
+#
+# For local development without SSL, use: localhost
+# For production with SSL, use: gallery.yourdomain.com
+# =============================================================================
+
+{$DOMAIN:localhost} {
+    # -------------------------------------------------------------------------
+    # API Routes - Proxy to FastAPI backend
+    # -------------------------------------------------------------------------
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            # Timeouts for large uploads/downloads
+            transport http {
+                dial_timeout 30s
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # OpenAPI Documentation
+    # -------------------------------------------------------------------------
+    handle /docs {
+        reverse_proxy backend:8000
+    }
+    
+    handle /openapi.json {
+        reverse_proxy backend:8000
+    }
+
+    # -------------------------------------------------------------------------
+    # Health Check Endpoint
+    # -------------------------------------------------------------------------
+    handle /health {
+        reverse_proxy backend:8000/api/system/health
+    }
+
+    # -------------------------------------------------------------------------
+    # Everything Else - Proxy to Next.js frontend
+    # -------------------------------------------------------------------------
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # -------------------------------------------------------------------------
+    # Security Headers
+    # -------------------------------------------------------------------------
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove Server header
+        -Server
+    }
+
+    # -------------------------------------------------------------------------
+    # Logging
+    # -------------------------------------------------------------------------
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}

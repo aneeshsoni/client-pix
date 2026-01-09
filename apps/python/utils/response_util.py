@@ -47,6 +47,7 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
     Build a PhotoResponse from a Photo model with file_hash data.
 
     Constructs paths for all image variants (original, thumbnail, web).
+    For videos, thumbnail/web paths point to the generated poster frame.
     """
     file_hash = photo.file_hash
     shard1 = file_hash.sha256_hash[:2]
@@ -60,6 +61,7 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         caption=photo.caption,
         sort_order=photo.sort_order,
         captured_at=photo.captured_at,
+        is_video=photo.is_video,
         storage_path=file_hash.storage_path,
         thumbnail_path=f"thumbnails/{shard1}/{shard2}/{filename_base}.webp",
         web_path=f"web/{shard1}/{shard2}/{filename_base}.webp",

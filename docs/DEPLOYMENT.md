@@ -1,14 +1,16 @@
 # Deployment Guide
 
-This guide covers deploying Client Pix to production, including security considerations, local testing, and deployment on platforms like Coolify.
+This guide covers deploying Client Pix to production, including security considerations, local testing, and deployment options.
 
 ## Table of Contents
 
 1. [Local Testing](#local-testing)
 2. [Security Considerations](#security-considerations)
 3. [Environment Variables](#environment-variables)
-4. [Coolify Deployment](#coolify-deployment)
-5. [Share Links & DNS](#share-links--dns)
+4. [Self-Hosted Deployment (VPS/Server)](#self-hosted-deployment-vpsserver)
+5. [Coolify Deployment](#coolify-deployment)
+6. [Share Links & DNS](#share-links--dns)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -151,6 +153,349 @@ The production Nginx config includes:
 | `UPLOAD_DIR`        | `/app/uploads`     | Upload directory path        |
 | `WEB_MAX_DIMENSION` | `2400`             | Max dimension for web images |
 | `ALLOWED_ORIGINS`   | `http://localhost` | CORS allowed origins         |
+
+---
+
+## Self-Hosted Deployment (VPS/Server)
+
+This section covers deploying Client Pix on your own server (VPS, dedicated server, home server, etc.) using just Docker and docker-compose.
+
+### Prerequisites
+
+- A Linux server (Ubuntu 22.04+ recommended)
+- Docker and Docker Compose installed
+- A domain name pointing to your server
+- SSH access to your server
+
+### Step 1: Server Setup
+
+```bash
+# SSH into your server
+ssh user@your-server-ip
+
+# Install Docker (if not already installed)
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose plugin
+sudo apt-get update
+sudo apt-get install docker-compose-plugin
+
+# Log out and back in for group changes to take effect
+exit
+ssh user@your-server-ip
+```
+
+### Step 2: Clone the Repository
+
+```bash
+# Clone Client Pix
+git clone https://github.com/your-username/client-pix.git
+cd client-pix
+```
+
+### Step 3: Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Create .env file
+cat > .env << 'EOF'
+# Database (CHANGE THIS PASSWORD!)
+POSTGRES_PASSWORD=your-secure-password-here
+POSTGRES_USER=clientpix
+POSTGRES_DB=clientpix
+
+# App Settings
+APP_NAME=Client Pix
+DEBUG=false
+WEB_MAX_DIMENSION=2400
+
+# JWT Secret (optional - auto-generated if not set)
+# JWT_SECRET=your-secret-here
+EOF
+```
+
+### Step 4: Configure Your Domain
+
+#### Option A: Using Cloudflare (Recommended)
+
+Cloudflare provides free SSL and DDoS protection:
+
+1. Add your domain to Cloudflare
+2. Create an A record pointing to your server:
+   ```
+   Type: A
+   Name: gallery (or @ for root domain)
+   Content: YOUR_SERVER_IP
+   Proxy status: Proxied (orange cloud)
+   ```
+3. In Cloudflare SSL/TLS settings, set mode to "Full"
+
+With this setup, Cloudflare handles HTTPS termination. Your server only needs to serve HTTP on port 80.
+
+#### Option B: Direct DNS (No Cloudflare)
+
+Point your domain directly to your server:
+
+```
+Type: A
+Name: gallery (or @ for root domain)
+Content: YOUR_SERVER_IP
+TTL: Auto
+```
+
+You'll need to set up SSL separately (see Step 5b).
+
+### Step 5: Configure Nginx for Your Domain
+
+#### Step 5a: Update Nginx Config
+
+Edit `docker/nginx/nginx.conf` to use your domain:
+
+```nginx
+server {
+    listen 80;
+    server_name gallery.yourdomain.com;  # Change this to your domain
+
+    # ... rest of config stays the same
+}
+```
+
+#### Step 5b: Adding SSL with Let's Encrypt (if not using Cloudflare)
+
+If you're not using Cloudflare, you need SSL certificates. The easiest approach is using a reverse proxy with automatic SSL:
+
+**Option 1: Caddy (Simplest)**
+
+Replace the nginx service in `docker-compose.prod.yml` with Caddy:
+
+```yaml
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+```
+
+Create a `Caddyfile` in your project root:
+
+```
+gallery.yourdomain.com {
+    # API routes
+    handle /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # OpenAPI docs
+    handle /docs {
+        reverse_proxy backend:8000
+    }
+    handle /openapi.json {
+        reverse_proxy backend:8000
+    }
+
+    # Everything else to frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
+```
+
+**Option 2: Traefik**
+
+Add Traefik as a reverse proxy with automatic Let's Encrypt:
+
+```yaml
+traefik:
+  image: traefik:v2.10
+  restart: unless-stopped
+  command:
+    - "--api.insecure=true"
+    - "--providers.docker=true"
+    - "--providers.docker.exposedbydefault=false"
+    - "--entrypoints.web.address=:80"
+    - "--entrypoints.websecure.address=:443"
+    - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+    - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    - "--certificatesresolvers.letsencrypt.acme.email=your-email@example.com"
+    - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+  ports:
+    - "80:80"
+    - "443:443"
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - traefik_certs:/letsencrypt
+
+nginx:
+  # ... existing config ...
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.clientpix.rule=Host(`gallery.yourdomain.com`)"
+    - "traefik.http.routers.clientpix.entrypoints=websecure"
+    - "traefik.http.routers.clientpix.tls.certresolver=letsencrypt"
+    - "traefik.http.services.clientpix.loadbalancer.server.port=80"
+```
+
+**Option 3: Host-level Nginx + Certbot**
+
+Install Nginx and Certbot directly on the host:
+
+```bash
+# Install Nginx and Certbot
+sudo apt install nginx certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d gallery.yourdomain.com
+
+# Configure Nginx to proxy to Docker
+sudo nano /etc/nginx/sites-available/clientpix
+```
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name gallery.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/gallery.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gallery.yourdomain.com/privkey.pem;
+
+    client_max_body_size 0;  # Unlimited uploads
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;  # Docker nginx port
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Timeouts for large uploads
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+}
+
+server {
+    listen 80;
+    server_name gallery.yourdomain.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Then update `docker-compose.prod.yml` to expose nginx on 8080:
+
+```yaml
+nginx:
+  # ...
+  ports:
+    - "8080:80" # Expose on 8080, host nginx handles 80/443
+```
+
+### Step 6: Update docker-compose.prod.yml for External Access
+
+For direct deployment (without Cloudflare/Traefik), expose nginx on port 80:
+
+```yaml
+nginx:
+  build:
+    context: ./docker/nginx
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  ports:
+    - "80:80" # Expose port 80 to the internet
+  depends_on:
+    frontend:
+      condition: service_started
+    backend:
+      condition: service_healthy
+```
+
+### Step 7: Build and Deploy
+
+```bash
+# Build and start all services
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Check status
+docker compose -f docker-compose.prod.yml ps
+
+# View logs
+docker compose -f docker-compose.prod.yml logs -f
+
+# View specific service logs
+docker compose -f docker-compose.prod.yml logs -f backend
+```
+
+### Step 8: Initial Setup
+
+1. Open your browser to `https://gallery.yourdomain.com`
+2. You'll be redirected to the setup page
+3. Create your admin account
+4. Start uploading photos!
+
+### Step 9: Firewall Configuration
+
+Ensure your firewall allows web traffic:
+
+```bash
+# UFW (Ubuntu)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+
+# Or iptables
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+```
+
+### Updating Your Deployment
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Rebuild and restart
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Or rebuild specific service
+docker compose -f docker-compose.prod.yml up -d --build backend
+```
+
+### Backup Strategy
+
+```bash
+# Backup database
+docker exec clientpix-postgres pg_dump -U clientpix clientpix > backup_$(date +%Y%m%d).sql
+
+# Backup uploads (if using named volume)
+docker run --rm -v client-pix_uploads_data:/data -v $(pwd):/backup alpine \
+  tar czf /backup/uploads_backup_$(date +%Y%m%d).tar.gz -C /data .
+
+# Restore database
+cat backup_20240115.sql | docker exec -i clientpix-postgres psql -U clientpix clientpix
+
+# Restore uploads
+docker run --rm -v client-pix_uploads_data:/data -v $(pwd):/backup alpine \
+  tar xzf /backup/uploads_backup_20240115.tar.gz -C /data
+```
 
 ---
 

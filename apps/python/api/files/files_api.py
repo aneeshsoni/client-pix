@@ -56,11 +56,23 @@ async def get_admin_from_token_or_query(
     return admin
 
 
-def get_file_path(file_hash: str, variant: str, extension: str) -> Path:
+def get_file_path(
+    file_hash: str, variant: str, extension: str, is_video: bool = False
+) -> Path:
     """Get the file path for a given hash and variant."""
     prefix = file_hash[:2]
     second = file_hash[2:4]
 
+    # For videos, original/web point to the video file, thumbnail to poster frame
+    if is_video:
+        if variant == "original" or variant == "web":
+            return UPLOAD_DIR / "videos" / f"{file_hash}{extension}"
+        elif variant == "thumbnail":
+            return UPLOAD_DIR / "thumbnails" / prefix / second / f"{file_hash}.webp"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid variant")
+
+    # For images, use standard path structure
     if variant == "original":
         return UPLOAD_DIR / "originals" / prefix / second / f"{file_hash}{extension}"
     elif variant == "thumbnail":
@@ -109,20 +121,27 @@ async def get_authenticated_photo(
         raise HTTPException(status_code=404, detail="Photo not found")
 
     file_hash = photo.file_hash
-    file_path = get_file_path(file_hash.sha256_hash, variant, file_hash.file_extension)
+    is_video = photo.is_video
+    file_path = get_file_path(
+        file_hash.sha256_hash, variant, file_hash.file_extension, is_video
+    )
 
     if not file_path.exists():
         # Fallback to original if variant doesn't exist
         if variant != "original":
             file_path = get_file_path(
-                file_hash.sha256_hash, "original", file_hash.file_extension
+                file_hash.sha256_hash, "original", file_hash.file_extension, is_video
             )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = (
-        "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
-    )
+    # For videos, use proper mime type; for images use webp for variants
+    if is_video and variant != "thumbnail":
+        media_type = file_hash.mime_type
+    else:
+        media_type = (
+            "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
+        )
 
     return FileResponse(
         path=file_path,
@@ -241,19 +260,26 @@ async def get_shared_photo(
         raise HTTPException(status_code=404, detail="Photo not found in shared album")
 
     file_hash = photo.file_hash
-    file_path = get_file_path(file_hash.sha256_hash, variant, file_hash.file_extension)
+    is_video = photo.is_video
+    file_path = get_file_path(
+        file_hash.sha256_hash, variant, file_hash.file_extension, is_video
+    )
 
     if not file_path.exists():
         if variant != "original":
             file_path = get_file_path(
-                file_hash.sha256_hash, "original", file_hash.file_extension
+                file_hash.sha256_hash, "original", file_hash.file_extension, is_video
             )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = (
-        "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
-    )
+    # For videos, use proper mime type; for images use webp for variants
+    if is_video and variant != "thumbnail":
+        media_type = file_hash.mime_type
+    else:
+        media_type = (
+            "image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type
+        )
 
     return FileResponse(
         path=file_path,
@@ -317,15 +343,22 @@ async def get_shared_file_by_hash(
     if not fh:
         raise HTTPException(status_code=404, detail="File not found")
 
-    file_path = get_file_path(file_hash, variant, fh.file_extension)
+    is_video = photo.is_video
+    file_path = get_file_path(file_hash, variant, fh.file_extension, is_video)
 
     if not file_path.exists():
         if variant != "original":
-            file_path = get_file_path(file_hash, "original", fh.file_extension)
+            file_path = get_file_path(
+                file_hash, "original", fh.file_extension, is_video
+            )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
+    # For videos, use proper mime type; for images use webp for variants
+    if is_video and variant != "thumbnail":
+        media_type = fh.mime_type
+    else:
+        media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
 
     return FileResponse(
         path=file_path,

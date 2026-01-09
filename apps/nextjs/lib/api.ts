@@ -37,6 +37,7 @@ export interface Photo {
   mime_type: string;
   created_at: string;
   captured_at: string | null;
+  is_video: boolean;
 }
 
 export interface AlbumDetail extends Album {

@@ -7,12 +7,40 @@ Technical documentation for the Client Pix photography client gallery platform.
 | Document                          | Description                                                      |
 | --------------------------------- | ---------------------------------------------------------------- |
 | [Architecture](./ARCHITECTURE.md) | System architecture, technology decisions, and project structure |
+| [Deployment](./DEPLOYMENT.md)     | Production deployment guide (self-hosted, Coolify, VPS)          |
 | [PRD](./PRD_Client_Pix.md)        | Product requirements document and design specification           |
 
 ## Quick Links
 
 - **Frontend:** `apps/nextjs/` — Next.js with shadcn/ui
 - **Backend:** `apps/python/` — FastAPI (Python)
+
+## Deployment Options
+
+### Self-Hosted (Recommended for Most Users)
+
+Deploy on any VPS or server with automatic HTTPS:
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/your-username/client-pix.git
+cd client-pix
+
+# 2. Configure environment
+cp .env.example .env
+nano .env  # Set your domain and database password
+
+# 3. Deploy with Caddy (automatic SSL)
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+Your gallery will be live at `https://your-domain.com` with automatic SSL certificates.
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions including DNS setup, firewall configuration, and backup strategies.
+
+### Coolify / PaaS
+
+For platforms like Coolify, use `docker-compose.prod.yml`. See [DEPLOYMENT.md](./DEPLOYMENT.md#coolify-deployment).
 
 ## Development
 

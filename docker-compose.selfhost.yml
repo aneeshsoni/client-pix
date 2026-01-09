@@ -1,0 +1,102 @@
+# =============================================================================
+# Self-Hosted Docker Compose with Caddy (Automatic HTTPS)
+# =============================================================================
+# For easy self-hosting on any VPS or server with automatic SSL certificates.
+#
+# Prerequisites:
+#   1. A domain pointing to your server's IP address
+#   2. Ports 80 and 443 open on your firewall
+#
+# Usage:
+#   1. Copy .env.example to .env and configure your domain and password
+#   2. Run: docker compose -f docker-compose.selfhost.yml up -d
+#
+# The app will be available at https://your-domain.com
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Caddy - Reverse Proxy with Automatic HTTPS
+  # ---------------------------------------------------------------------------
+  # Caddy automatically obtains and renews Let's Encrypt certificates
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clientpix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password is required}
+      POSTGRES_DB: ${POSTGRES_DB:-clientpix}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clientpix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./apps/python
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_NAME: ${APP_NAME:-Client Pix}
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clientpix}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clientpix}
+      UPLOAD_DIR: /app/uploads
+      WEB_MAX_DIMENSION: ${WEB_MAX_DIMENSION:-2400}
+      JWT_SECRET: ${JWT_SECRET:-}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Next.js Frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./apps/nextjs
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,7 +12,7 @@ from models.db.base import Base
 
 class Photo(Base):
     """
-    Photo model - represents a single photo in an album.
+    Photo model - represents a single photo or video in an album.
 
     The actual file is referenced via file_hash_id (for deduplication).
     Multiple Photo records can share the same FileHash.
@@ -45,6 +45,9 @@ class Photo(Base):
 
     # Original filename as uploaded by the photographer
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Whether this is a video file
+    is_video: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Display order within album
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
