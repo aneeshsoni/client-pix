@@ -1,8 +1,20 @@
 "use client";
 
 import { use, useEffect, useState, useCallback } from "react";
-import { PhotoGrid, ShareModal, AlbumSettingsModal } from "@/components/gallery";
-import { Share2, Settings, Upload, Loader2 } from "lucide-react";
+import {
+  PhotoGrid,
+  PhotoGridWithDates,
+  ShareModal,
+  AlbumSettingsModal,
+} from "@/components/gallery";
+import {
+  Share2,
+  Settings,
+  Upload,
+  Loader2,
+  Calendar,
+  Clock,
+} from "lucide-react";
 import { notFound, useRouter } from "next/navigation";
 import {
   Breadcrumb,
@@ -33,12 +45,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
 
   const fetchAlbum = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAlbumBySlug(albumName);
+      const data = await getAlbumBySlug(albumName, sortBy);
       setAlbum(data);
     } catch (err) {
       console.error("Failed to fetch album:", err);
@@ -46,7 +59,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [albumName]);
+  }, [albumName, sortBy]);
 
   useEffect(() => {
     fetchAlbum();
@@ -80,7 +93,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         setUploadProgressPercent(0);
       } catch (err) {
         console.error("Failed to upload photos:", err);
-        setUploadProgress(`Error: ${err instanceof Error ? err.message : "Upload failed"}`);
+        setUploadProgress(
+          `Error: ${err instanceof Error ? err.message : "Upload failed"}`
+        );
         setUploadProgressPercent(0);
       } finally {
         setIsUploading(false);
@@ -128,6 +143,36 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
           </span>
 
+          {/* Sort Toggle */}
+          {album.photo_count > 0 && (
+            <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+              <button
+                onClick={() => setSortBy("captured")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  sortBy === "captured"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Sort by date taken (oldest first)"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Date Taken</span>
+              </button>
+              <button
+                onClick={() => setSortBy("uploaded")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  sortBy === "uploaded"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Sort by upload date (newest first)"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Uploaded</span>
+              </button>
+            </div>
+          )}
+
           {/* Upload more photos */}
           <label className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer">
             {isUploading ? (
@@ -172,7 +217,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           <div className="flex items-center gap-3 mb-2">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+              <p className="text-sm font-medium text-foreground">
+                {uploadProgress}
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Please wait while photos are being uploaded...
               </p>
@@ -210,6 +257,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               Click &quot;Add Photos&quot; to upload photos
             </p>
           </div>
+        ) : sortBy === "captured" ? (
+          <PhotoGridWithDates
+            photos={album.photos}
+            albumId={album.id}
+            onPhotoDeleted={fetchAlbum}
+          />
         ) : (
           <PhotoGrid
             photos={album.photos}

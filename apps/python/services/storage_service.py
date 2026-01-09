@@ -4,12 +4,14 @@ import asyncio
 import hashlib
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import BinaryIO
 
 import aiofiles
 from PIL import Image
+from PIL.ExifTags import TAGS
 
 from core.config import (
     THUMBNAIL_SIZE,
@@ -37,6 +39,7 @@ class StoredFile:
     height: int | None  # None for videos
     is_duplicate: bool
     is_video: bool
+    captured_at: datetime | None = None  # EXIF date for images
 
 
 class StorageService:
@@ -267,8 +270,9 @@ class StorageService:
                 # Generate thumbnails for images
                 await self._generate_thumbnails(storage_path, file_id, extension)
 
-            # Get dimensions
+            # Get dimensions and EXIF date
             width, height = self.get_image_dimensions(storage_path)
+            captured_at = self.get_exif_date(storage_path)
 
             return StoredFile(
                 file_id=file_id,
@@ -282,6 +286,7 @@ class StorageService:
                 height=height,
                 is_duplicate=is_duplicate,
                 is_video=False,
+                captured_at=captured_at,
             )
 
         except Exception:
@@ -297,6 +302,30 @@ class StorageService:
                 return img.size
         except Exception:
             return (0, 0)
+
+    def get_exif_date(self, file_path: Path) -> datetime | None:
+        """Extract the captured date from EXIF data."""
+        try:
+            with Image.open(file_path) as img:
+                exif = img.getexif()
+                if not exif:
+                    return None
+
+                # Try DateTimeOriginal (when photo was taken)
+                for tag_id, value in exif.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag == "DateTimeOriginal":
+                        # Format: "2023:12:25 14:30:45"
+                        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+
+                # Fallback to DateTime if DateTimeOriginal not found
+                for tag_id, value in exif.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    if tag == "DateTime":
+                        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+        except Exception:
+            pass
+        return None
 
     def _generate_thumbnails_sync(
         self,
@@ -347,7 +376,7 @@ class StorageService:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None,
-            partial(self._generate_thumbnails_sync, original_path, file_id, extension)
+            partial(self._generate_thumbnails_sync, original_path, file_id, extension),
         )
 
     def get_file_path(

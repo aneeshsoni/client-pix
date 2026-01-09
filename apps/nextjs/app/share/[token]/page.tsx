@@ -11,6 +11,8 @@ import {
   ChevronRight,
   X,
   Download,
+  Calendar,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +29,8 @@ interface SharedPhoto {
   width: number;
   height: number;
   original_filename: string;
+  captured_at: string | null;
+  created_at: string | null;
 }
 
 interface SharedAlbum {
@@ -45,6 +49,39 @@ interface SharePageProps {
 
 type PageState = "loading" | "password" | "album" | "error" | "expired";
 
+interface PhotoGroup {
+  date: string;
+  displayDate: string;
+  photos: SharedPhoto[];
+}
+
+function groupPhotosByDate(photos: SharedPhoto[]): PhotoGroup[] {
+  const groups: Map<string, SharedPhoto[]> = new Map();
+
+  photos.forEach((photo) => {
+    const date = photo.captured_at || photo.created_at || "";
+    const dateKey = new Date(date).toISOString().split("T")[0]; // YYYY-MM-DD
+
+    if (!groups.has(dateKey)) {
+      groups.set(dateKey, []);
+    }
+    groups.get(dateKey)!.push(photo);
+  });
+
+  // Convert to array and format display dates
+  return Array.from(groups.entries()).map(([dateKey, photos]) => {
+    const date = new Date(dateKey);
+    const displayDate = date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return { date: dateKey, displayDate, photos };
+  });
+}
+
 // Photo card component matching the admin view style
 function SharedPhotoCard({
   photo,
@@ -62,7 +99,12 @@ function SharedPhotoCard({
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Use secure share URL
-  const imageUrl = getSharedImageUrl(shareToken, photo.id, "thumbnail", password || undefined);
+  const imageUrl = getSharedImageUrl(
+    shareToken,
+    photo.id,
+    "thumbnail",
+    password || undefined
+  );
 
   return (
     <motion.div
@@ -112,6 +154,7 @@ export default function SharePage({ params }: SharePageProps) {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
     null
   );
+  const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const selectedPhoto =
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
@@ -175,7 +218,9 @@ export default function SharePage({ params }: SharePageProps) {
 
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/share/${token}/access`,
+          `${API_BASE_URL}/api/share/${token}/access?sort_by=${encodeURIComponent(
+            sortBy
+          )}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -224,7 +269,7 @@ export default function SharePage({ params }: SharePageProps) {
         setIsVerifying(false);
       }
     },
-    [token]
+    [token, sortBy]
   );
 
   useEffect(() => {
@@ -363,15 +408,45 @@ export default function SharePage({ params }: SharePageProps) {
                 {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
               </p>
             </div>
-            {album.photos.length > 0 && (
-              <a
-                href={getDownloadAllUrl()}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
-              >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Download All</span>
-              </a>
-            )}
+            <div className="flex items-center gap-3 shrink-0">
+              {album.photos.length > 0 && (
+                <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                  <button
+                    onClick={() => setSortBy("captured")}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      sortBy === "captured"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title="Sort by date taken (oldest first)"
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Date Taken</span>
+                  </button>
+                  <button
+                    onClick={() => setSortBy("uploaded")}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      sortBy === "uploaded"
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title="Sort by upload date (newest first)"
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Uploaded</span>
+                  </button>
+                </div>
+              )}
+              {album.photos.length > 0 && (
+                <a
+                  href={getDownloadAllUrl()}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Download All</span>
+                </a>
+              )}
+            </div>
           </div>
         </header>
 
@@ -381,6 +456,43 @@ export default function SharePage({ params }: SharePageProps) {
             <div className="text-center py-12">
               <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No photos in this album</p>
+            </div>
+          ) : sortBy === "captured" ? (
+            <div className="space-y-8">
+              {groupPhotosByDate(album.photos).map((group) => (
+                <div key={group.date}>
+                  {/* Date Header */}
+                  <div className="mb-4 flex items-center gap-3">
+                    <h2 className="text-lg font-semibold">
+                      {group.displayDate}
+                    </h2>
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-sm text-muted-foreground">
+                      {group.photos.length} photo
+                      {group.photos.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {/* Photo Grid */}
+                  <div className="masonry">
+                    {group.photos.map((photo) => {
+                      const globalIndex = album.photos.findIndex(
+                        (p) => p.id === photo.id
+                      );
+                      return (
+                        <SharedPhotoCard
+                          key={photo.id}
+                          photo={photo}
+                          index={globalIndex}
+                          onClick={() => setSelectedPhotoIndex(globalIndex)}
+                          shareToken={token}
+                          password={verifiedPassword}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="masonry">
@@ -483,7 +595,12 @@ export default function SharePage({ params }: SharePageProps) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <Image
-                  src={getSharedImageUrl(token, selectedPhoto.id, "web", verifiedPassword || undefined)}
+                  src={getSharedImageUrl(
+                    token,
+                    selectedPhoto.id,
+                    "web",
+                    verifiedPassword || undefined
+                  )}
                   alt={selectedPhoto.original_filename}
                   width={selectedPhoto.width}
                   height={selectedPhoto.height}

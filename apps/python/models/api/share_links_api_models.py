@@ -74,6 +74,8 @@ class SharedAlbumPhotoResponse(BaseModel):
     width: int
     height: int
     original_filename: str
+    captured_at: datetime | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

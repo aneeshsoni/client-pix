@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PhotoGrid } from "@/components/gallery";
+import { PhotoGrid, PhotoGridWithDates } from "@/components/gallery";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -11,18 +11,19 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getAllPhotos, type Photo } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { Loader2, Calendar, Clock } from "lucide-react";
 
 export default function GalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
 
   const fetchPhotos = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAllPhotos();
+      const data = await getAllPhotos(sortBy);
       setPhotos(data);
     } catch (err) {
       console.error("Failed to fetch photos:", err);
@@ -30,7 +31,7 @@ export default function GalleryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sortBy]);
 
   useEffect(() => {
     fetchPhotos();
@@ -49,6 +50,37 @@ export default function GalleryPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+
+        <div className="ml-auto flex items-center gap-2">
+          {photos.length > 0 && (
+            <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+              <button
+                onClick={() => setSortBy("captured")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  sortBy === "captured"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Sort by date taken (oldest first)"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Date Taken</span>
+              </button>
+              <button
+                onClick={() => setSortBy("uploaded")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  sortBy === "uploaded"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Sort by upload date (newest first)"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Uploaded</span>
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Content */}
@@ -74,6 +106,8 @@ export default function GalleryPage() {
               Upload photos to albums to see them here
             </p>
           </div>
+        ) : sortBy === "captured" ? (
+          <PhotoGridWithDates photos={photos} onPhotoDeleted={fetchPhotos} />
         ) : (
           <PhotoGrid photos={photos} onPhotoDeleted={fetchPhotos} />
         )}

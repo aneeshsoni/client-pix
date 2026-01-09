@@ -36,6 +36,7 @@ export interface Photo {
   file_size: number;
   mime_type: string;
   created_at: string;
+  captured_at: string | null;
 }
 
 export interface AlbumDetail extends Album {
@@ -98,8 +99,13 @@ export async function listAlbums(): Promise<AlbumListResponse> {
   }
 }
 
-export async function getAlbum(albumId: string): Promise<AlbumDetail> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}`);
+export async function getAlbum(
+  albumId: string,
+  sortBy: "captured" | "uploaded" = "captured"
+): Promise<AlbumDetail> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}?sort_by=${sortBy}`
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to fetch album: ${response.statusText}`);
@@ -108,10 +114,15 @@ export async function getAlbum(albumId: string): Promise<AlbumDetail> {
   return response.json();
 }
 
-export async function getAlbumBySlug(slug: string): Promise<AlbumDetail> {
+export async function getAlbumBySlug(
+  slug: string,
+  sortBy: "captured" | "uploaded" = "captured"
+): Promise<AlbumDetail> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(slug)}`
+      `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(
+        slug
+      )}?sort_by=${sortBy}`
     );
 
     if (!response.ok) {
@@ -215,8 +226,13 @@ export async function uploadPhotosToAlbum(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        console.error(`Batch ${batchNumber}/${totalBatches} failed:`, errorText);
+        const errorText = await response
+          .text()
+          .catch(() => response.statusText);
+        console.error(
+          `Batch ${batchNumber}/${totalBatches} failed:`,
+          errorText
+        );
         // Continue with next batch instead of failing completely
         continue;
       }
@@ -227,7 +243,7 @@ export async function uploadPhotosToAlbum(
       totalDuplicates += result.duplicate_count;
       successfullyProcessed += batch.length;
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         console.error(`Batch ${batchNumber}/${totalBatches} timed out`);
       } else {
         console.error(`Batch ${batchNumber}/${totalBatches} error:`, error);
@@ -285,11 +301,18 @@ export async function setCoverPhoto(
   return response.json();
 }
 
-export async function getAllPhotos(): Promise<Photo[]> {
+export async function getAllPhotos(
+  sortBy: "captured" | "uploaded" = "captured"
+): Promise<Photo[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/albums/photos/all`, {
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/api/albums/photos/all?sort_by=${encodeURIComponent(
+        sortBy
+      )}`,
+      {
+        cache: "no-store",
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
@@ -489,4 +512,25 @@ export async function deleteShareLink(
   if (!response.ok) {
     throw new Error(`Failed to delete share link: ${response.statusText}`);
   }
+}
+
+// --- Storage API ---
+
+export interface StorageInfo {
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  used_percentage: number;
+}
+
+export async function getStorageInfo(): Promise<StorageInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/system/storage`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch storage info: ${response.statusText}`);
+  }
+
+  return response.json();
 }

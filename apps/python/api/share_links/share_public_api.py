@@ -83,6 +83,7 @@ async def get_share_info(
 async def access_shared_album(
     token: str,
     data: ShareLinkVerifyRequest,
+    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -90,6 +91,8 @@ async def access_shared_album(
     This endpoint is public and doesn't require authentication.
 
     The `token` parameter can be either the random token or a custom slug.
+    - sort_by=captured (default): Sort by EXIF date (oldest first), NULLs last, then upload date
+    - sort_by=uploaded: Sort by upload date (newest first)
     """
     share_link = await get_share_link_by_token_or_slug(token, db)
 
@@ -127,7 +130,7 @@ async def access_shared_album(
     album_stmt = (
         select(Album)
         .where(Album.id == share_link.album_id)
-        .options(selectinload(Album.photos))
+        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
     )
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
@@ -135,11 +138,23 @@ async def access_shared_album(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
+    # Sort photos based on sort_by parameter
+    photos_list = list(album.photos)
+    if sort_by == "captured":
+        # Sort by captured_at (oldest first), NULLs last, then by created_at
+        photos_list.sort(
+            key=lambda p: (
+                p.captured_at is None,
+                p.captured_at or p.created_at,
+            )
+        )
+    else:  # uploaded
+        # Sort by created_at (newest first)
+        photos_list.sort(key=lambda p: p.created_at, reverse=True)
+
     # Build photo responses with paths from file_hash
     photos = []
-    for photo in album.photos:
-        # Eagerly load file_hash for each photo
-        await db.refresh(photo, ["file_hash"])
+    for photo in photos_list:
         if photo.file_hash:
             hash_prefix = photo.file_hash.sha256_hash[:2]
             hash_subdir = photo.file_hash.sha256_hash[2:4]
@@ -153,6 +168,8 @@ async def access_shared_album(
                     width=photo.file_hash.width or 0,
                     height=photo.file_hash.height or 0,
                     original_filename=photo.original_filename,
+                    captured_at=photo.captured_at,
+                    created_at=photo.created_at,
                 )
             )
 

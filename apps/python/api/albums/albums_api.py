@@ -105,26 +105,49 @@ async def list_albums(
 @router.get("/{album_id}", response_model=AlbumDetailResponse)
 async def get_album(
     album_id: uuid.UUID,
+    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get album details with photos."""
-    stmt = (
-        select(Album)
-        .where(Album.id == album_id)
-        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
-    )
-    result = await db.execute(stmt)
-    album = result.scalar_one_or_none()
+    """
+    Get album details with photos.
+
+    - sort_by=captured (default): Sort by EXIF date (oldest first), fallback to upload date
+    - sort_by=uploaded: Sort by upload date (newest first)
+    """
+    # Get album first
+    album_stmt = select(Album).where(Album.id == album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
 
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    photos = [build_photo_response(photo) for photo in album.photos]
+    # Get photos with sorting
+    if sort_by == "captured":
+        # Sort by captured_at (oldest first), with NULL values last, then by created_at
+        photos_stmt = (
+            select(Photo)
+            .where(Photo.album_id == album_id)
+            .options(selectinload(Photo.file_hash))
+            .order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
+        )
+    else:  # uploaded
+        photos_stmt = (
+            select(Photo)
+            .where(Photo.album_id == album_id)
+            .options(selectinload(Photo.file_hash))
+            .order_by(Photo.created_at.desc())
+        )
+
+    photos_result = await db.execute(photos_stmt)
+    photos_list = photos_result.scalars().all()
+
+    photos = [build_photo_response(photo) for photo in photos_list]
 
     # Get cover photo hash
     cover_hash = None
     if album.cover_photo_id:
-        for photo in album.photos:
+        for photo in photos_list:
             if photo.id == album.cover_photo_id:
                 cover_hash = photo.file_hash.sha256_hash
                 break
@@ -148,26 +171,48 @@ async def get_album(
 @router.get("/slug/{slug}", response_model=AlbumDetailResponse)
 async def get_album_by_slug(
     slug: str,
+    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get album by slug (for public access)."""
-    stmt = (
-        select(Album)
-        .where(Album.slug == slug)
-        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
-    )
-    result = await db.execute(stmt)
-    album = result.scalar_one_or_none()
+    """
+    Get album by slug (for public access).
+
+    - sort_by=captured (default): Sort by EXIF date (oldest first), fallback to upload date
+    - sort_by=uploaded: Sort by upload date (newest first)
+    """
+    # Get album first
+    album_stmt = select(Album).where(Album.slug == slug)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
 
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    photos = [build_photo_response(photo) for photo in album.photos]
+    # Get photos with sorting
+    if sort_by == "captured":
+        photos_stmt = (
+            select(Photo)
+            .where(Photo.album_id == album.id)
+            .options(selectinload(Photo.file_hash))
+            .order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
+        )
+    else:  # uploaded
+        photos_stmt = (
+            select(Photo)
+            .where(Photo.album_id == album.id)
+            .options(selectinload(Photo.file_hash))
+            .order_by(Photo.created_at.desc())
+        )
+
+    photos_result = await db.execute(photos_stmt)
+    photos_list = photos_result.scalars().all()
+
+    photos = [build_photo_response(photo) for photo in photos_list]
 
     # Get cover photo hash
     cover_hash = None
     if album.cover_photo_id:
-        for photo in album.photos:
+        for photo in photos_list:
             if photo.id == album.cover_photo_id:
                 cover_hash = photo.file_hash.sha256_hash
                 break
@@ -416,6 +461,7 @@ async def upload_photos_to_album(
             file_hash_id=file_hash.id,
             original_filename=file.filename or "unnamed",
             sort_order=max_sort + i + 1,
+            captured_at=stored.captured_at,  # Store EXIF date
         )
         db.add(photo)
         await db.flush()
@@ -542,14 +588,32 @@ async def regenerate_photo_thumbnails(
 
 @router.get("/photos/all", response_model=PhotoListResponse)
 async def get_all_photos(
+    sort_by: str = Query("captured", regex="^(captured|uploaded)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all photos across all albums."""
-    stmt = (
-        select(Photo)
-        .options(selectinload(Photo.file_hash))
-        .order_by(Photo.created_at.desc())
-    )
+    """Get all photos across all albums (excludes orphaned photos).
+
+    - sort_by=captured (default): Sort by EXIF date (oldest first), NULLs last, then upload date
+    - sort_by=uploaded: Sort by upload date (newest first)
+    """
+    if sort_by == "captured":
+        stmt = (
+            select(Photo)
+            .where(Photo.album_id.isnot(None))  # Filter out orphaned photos
+            .options(selectinload(Photo.file_hash))
+            .order_by(
+                Photo.captured_at.asc().nullslast(),
+                Photo.created_at.asc(),
+            )
+        )
+    else:
+        stmt = (
+            select(Photo)
+            .where(Photo.album_id.isnot(None))
+            .options(selectinload(Photo.file_hash))
+            .order_by(Photo.created_at.desc())
+        )
+
     result = await db.execute(stmt)
     photos = result.scalars().all()
 
