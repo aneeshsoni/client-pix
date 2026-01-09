@@ -1,9 +1,10 @@
 """Database connection and session management."""
 
+import os
 from collections.abc import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
+from alembic import command
+from alembic.config import Config
 from core.config import DATABASE_URL, DEBUG
 
 # Import all models to register them with SQLAlchemy
@@ -12,6 +13,8 @@ from models.db.album_db_models import Album  # noqa: F401
 from models.db.file_hash_db_models import FileHash  # noqa: F401
 from models.db.photo_db_models import Photo  # noqa: F401
 from models.db.share_link_db_models import ShareLink  # noqa: F401
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Create async engine
 engine = create_async_engine(
@@ -41,11 +44,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 def run_migrations() -> None:
     """Run Alembic migrations programmatically."""
-    from alembic.config import Config
-    from alembic import command
-    from sqlalchemy import inspect, create_engine
-    import os
-
     # Get the directory where alembic.ini is located
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

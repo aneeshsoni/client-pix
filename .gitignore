@@ -5,3 +5,6 @@ apps/python/uploads/*
 !apps/python/uploads/.gitkeep
 
 .env
+
+# Ignore vscode settings
+.vscode/

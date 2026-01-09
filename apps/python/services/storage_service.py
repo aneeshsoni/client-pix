@@ -389,14 +389,14 @@ class StorageService:
     ) -> tuple[int, int]:
         """
         Generate thumbnail and web poster frames from video using ffmpeg.
-        
+
         Returns (width, height) of the video.
         """
         import subprocess
         import json
 
         loop = asyncio.get_event_loop()
-        
+
         # Get video dimensions using ffprobe
         width, height = 1920, 1080  # Default fallback
         try:
@@ -406,10 +406,13 @@ class StorageService:
                     subprocess.run,
                     [
                         "ffprobe",
-                        "-v", "quiet",
-                        "-print_format", "json",
+                        "-v",
+                        "quiet",
+                        "-print_format",
+                        "json",
                         "-show_streams",
-                        "-select_streams", "v:0",
+                        "-select_streams",
+                        "v:0",
                         str(video_path),
                     ],
                     capture_output=True,
@@ -428,7 +431,7 @@ class StorageService:
         # Generate thumbnail (small poster at 1 second)
         thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
         thumb_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             await loop.run_in_executor(
                 None,
@@ -437,11 +440,18 @@ class StorageService:
                     [
                         "ffmpeg",
                         "-y",  # Overwrite
-                        "-ss", "1",  # Seek to 1 second
-                        "-i", str(video_path),
-                        "-vframes", "1",
-                        "-vf", f"scale={THUMBNAIL_SIZE}:-1",
-                        "-q:v", str(100 - THUMBNAIL_QUALITY),  # Quality (lower is better for ffmpeg)
+                        "-ss",
+                        "1",  # Seek to 1 second
+                        "-i",
+                        str(video_path),
+                        "-vframes",
+                        "1",
+                        "-vf",
+                        f"scale={THUMBNAIL_SIZE}:-1",
+                        "-q:v",
+                        str(
+                            100 - THUMBNAIL_QUALITY
+                        ),  # Quality (lower is better for ffmpeg)
                         str(thumb_path),
                     ],
                     capture_output=True,
@@ -453,7 +463,7 @@ class StorageService:
         # Generate web version (larger poster)
         web_path = self._get_storage_path(file_id, self.VARIANT_WEB, ".webp")
         web_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             await loop.run_in_executor(
                 None,
@@ -462,11 +472,16 @@ class StorageService:
                     [
                         "ffmpeg",
                         "-y",
-                        "-ss", "1",
-                        "-i", str(video_path),
-                        "-vframes", "1",
-                        "-vf", f"scale='min({WEB_MAX_DIMENSION},iw)':-1",
-                        "-q:v", str(100 - WEB_QUALITY),
+                        "-ss",
+                        "1",
+                        "-i",
+                        str(video_path),
+                        "-vframes",
+                        "1",
+                        "-vf",
+                        f"scale='min({WEB_MAX_DIMENSION},iw)':-1",
+                        "-q:v",
+                        str(100 - WEB_QUALITY),
                         str(web_path),
                     ],
                     capture_output=True,

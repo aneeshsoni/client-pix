@@ -2,14 +2,10 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from core.config import UPLOAD_DIR
 from core.database import get_db
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from models.api.albums_api_models import (
     AlbumCreate,
     AlbumDetailResponse,
@@ -23,12 +19,15 @@ from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from services.storage_service import storage_service
-from utils.slug_util import generate_slug
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from utils.response_util import (
     build_album_response,
     build_photo_response,
     get_thumbnail_path_for_hash,
 )
+from utils.slug_util import generate_slug
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 
@@ -353,6 +352,9 @@ async def delete_album(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
+    # Track files to delete after commit
+    files_to_delete = []
+
     if delete_photos:
         # Get all photos with their file hashes for cleanup
         photos_stmt = (
@@ -363,17 +365,19 @@ async def delete_album(
         photos_result = await db.execute(photos_stmt)
         photos = photos_result.scalars().all()
 
-        # Decrement reference counts and delete files if needed
+        # Decrement reference counts and mark files for deletion
         for photo in photos:
             file_hash = photo.file_hash
             file_hash.reference_count -= 1
 
-            # If no more references, delete the actual files
+            # If no more references, mark for deletion after commit
             if file_hash.reference_count <= 0:
-                await storage_service.delete_file(
-                    file_hash.sha256_hash,
-                    file_hash.file_extension,
-                    is_video=False,
+                files_to_delete.append(
+                    {
+                        "file_id": file_hash.sha256_hash,
+                        "extension": file_hash.file_extension,
+                        "is_video": False,
+                    }
                 )
                 await db.delete(file_hash)
 
@@ -387,7 +391,20 @@ async def delete_album(
         # Delete the album
         await db.delete(album)
 
+    # Commit DB changes first - if this fails, files remain intact
     await db.commit()
+
+    # Delete files from disk AFTER successful commit
+    for file_info in files_to_delete:
+        try:
+            await storage_service.delete_file(
+                file_info["file_id"],
+                file_info["extension"],
+                file_info["is_video"],
+            )
+        except Exception as e:
+            # Log but don't fail - DB is already consistent
+            print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
 
 
 # --- Photo Management ---
@@ -510,19 +527,36 @@ async def delete_photo(
     file_hash = photo.file_hash
     file_hash.reference_count -= 1
 
-    # Delete photo record
-    await db.delete(photo)
-
-    # If no more references, delete the actual files
+    # Capture file info before deletion (for cleanup after commit)
+    files_to_delete = []
     if file_hash.reference_count <= 0:
-        await storage_service.delete_file(
-            file_hash.sha256_hash,
-            file_hash.file_extension,
-            is_video=False,
+        files_to_delete.append(
+            {
+                "file_id": file_hash.sha256_hash,
+                "extension": file_hash.file_extension,
+                "is_video": False,
+            }
         )
         await db.delete(file_hash)
 
+    # Delete photo record
+    await db.delete(photo)
+
+    # Commit DB changes first - if this fails, files remain intact
     await db.commit()
+
+    # Delete files from disk AFTER successful commit
+    # If this fails, we have orphaned files (less severe, can be cleaned up)
+    for file_info in files_to_delete:
+        try:
+            await storage_service.delete_file(
+                file_info["file_id"],
+                file_info["extension"],
+                file_info["is_video"],
+            )
+        except Exception as e:
+            # Log but don't fail - DB is already consistent
+            print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
 
 
 @router.get("/{album_id}/photos/{photo_id}/download")
