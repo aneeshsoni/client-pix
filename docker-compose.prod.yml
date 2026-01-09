@@ -90,7 +90,7 @@ services:
       - "80"  # Internal only - Coolify/Traefik handles external routing
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_healthy
 

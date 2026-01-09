@@ -55,6 +55,11 @@ COPY --from=builder /app/.next/static ./.next/static
 # Set ownership
 RUN chown -R nextjs:nodejs /app
 
+# Install curl for health checks
+USER root
+RUN apk add --no-cache curl
+USER nextjs
+
 # Switch to non-root user
 USER nextjs
 
@@ -63,6 +68,10 @@ EXPOSE 3000
 
 # Set hostname
 ENV HOSTNAME="0.0.0.0"
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -f http://localhost:3000 || exit 1
 
 # Run the application
 CMD ["node", "server.js"]
