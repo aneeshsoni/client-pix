@@ -10,8 +10,8 @@ It represents the complete schema as of v0.1.0.
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # Revision identifiers
 revision: str = "001"
