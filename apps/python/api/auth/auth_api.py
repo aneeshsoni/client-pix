@@ -1,10 +1,7 @@
 """Authentication API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from core.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Request
 from models.api.auth_api_models import (
     AdminResponse,
     ChangePasswordRequest,
@@ -15,6 +12,8 @@ from models.api.auth_api_models import (
     UpdateProfileRequest,
 )
 from models.db.admin_db_models import Admin
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from utils.jwt_util import create_access_token, get_admin_id_from_token
 from utils.security_util import hash_password, verify_password
 

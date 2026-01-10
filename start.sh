@@ -8,6 +8,7 @@
 #   ./start.sh down   - Stop all services
 #   ./start.sh logs   - View logs
 #   ./start.sh build  - Rebuild containers
+#   ./start.sh fresh  - Remove containers & volumes, rebuild images (no cache), start
 # =============================================================================
 
 set -e
@@ -39,11 +40,23 @@ case "${1:-up}" in
         echo "Rebuilding containers..."
         docker compose -f $COMPOSE_FILE build --no-cache
         ;;
+    fresh)
+        echo "Performing fresh rebuild: removing containers & volumes, rebuilding images (no cache), starting..."
+        echo "Stopping and removing containers, networks, and volumes..."
+        docker compose -f $COMPOSE_FILE down -v --remove-orphans
+        echo "Rebuilding images with no cache and pulling latest bases..."
+        docker compose -f $COMPOSE_FILE build --no-cache --pull
+        echo "Starting services..."
+        docker compose -f $COMPOSE_FILE up -d
+        echo ""
+        echo "✓ Fresh rebuild complete"
+        echo "View logs: ./start.sh logs"
+        ;;
     restart)
         docker compose -f $COMPOSE_FILE restart
         ;;
     *)
-        echo "Usage: ./start.sh [up|down|logs|build|restart]"
+        echo "Usage: ./start.sh [up|down|logs|build|fresh|restart]"
         exit 1
         ;;
 esac
