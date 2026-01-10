@@ -111,6 +111,8 @@ def upgrade() -> None:
         sa.Column("sort_order", sa.Integer(), nullable=False, default=0),
         sa.Column("caption", sa.Text(), nullable=True),
         sa.Column("captured_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("camera_make", sa.String(100), nullable=True),
+        sa.Column("camera_model", sa.String(100), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
