@@ -93,6 +93,19 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    labels:
+      # Traefik timeout configuration for large file uploads (15 minutes)
+      # These labels configure Traefik's handling of requests to this service
+      - "traefik.http.middlewares.clientpix-timeout.buffering.maxRequestBodyBytes=0"
+      - "traefik.http.middlewares.clientpix-timeout.buffering.memRequestBodyBytes=0"
+      # Note: Read/write timeouts must be configured in Coolify's Traefik settings
+      # or via Traefik's static configuration (default is often 30-60 seconds)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   postgres_data:
