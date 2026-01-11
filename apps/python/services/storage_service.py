@@ -12,17 +12,15 @@ from pathlib import Path
 from typing import BinaryIO
 
 import aiofiles
-from PIL import Image
-from PIL.ExifTags import TAGS
-
 from core.config import (
-    THUMBNAIL_SIZE,
     THUMBNAIL_QUALITY,
+    THUMBNAIL_SIZE,
     UPLOAD_DIR,
     WEB_MAX_DIMENSION,
     WEB_QUALITY,
 )
-
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
@@ -183,7 +181,7 @@ class StorageService:
         extension: str,
     ) -> StoredFile:
         """Store video file with streaming (no hashing).
-        
+
         Thumbnail generation happens in background to avoid blocking uploads.
         """
         # Generate UUID for video
@@ -396,7 +394,7 @@ class StorageService:
     async def _get_video_dimensions(self, video_path: Path) -> tuple[int, int]:
         """Get video dimensions using ffprobe (fast operation)."""
         loop = asyncio.get_event_loop()
-        
+
         try:
             probe_result = await loop.run_in_executor(
                 None,
@@ -424,14 +422,16 @@ class StorageService:
                     return stream.get("width", 1920), stream.get("height", 1080)
         except Exception as e:
             print(f"Warning: Could not probe video dimensions: {e}")
-        
+
         return 1920, 1080  # Default fallback
 
     def _schedule_background_thumbnails(self, video_path: Path, file_id: str) -> None:
         """Schedule video thumbnail generation in background (non-blocking)."""
         try:
             loop = asyncio.get_event_loop()
-            task = loop.create_task(self._generate_video_thumbnails_background(video_path, file_id))
+            task = loop.create_task(
+                self._generate_video_thumbnails_background(video_path, file_id)
+            )
             # Keep reference to prevent garbage collection
             _background_tasks.add(task)
             task.add_done_callback(_background_tasks.discard)
