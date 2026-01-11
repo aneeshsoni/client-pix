@@ -366,6 +366,7 @@ async def delete_album(
         photos = photos_result.scalars().all()
 
         # Decrement reference counts and mark files for deletion
+        file_hashes_to_delete = []
         for photo in photos:
             file_hash = photo.file_hash
             file_hash.reference_count -= 1
@@ -376,13 +377,17 @@ async def delete_album(
                     {
                         "file_id": file_hash.sha256_hash,
                         "extension": file_hash.file_extension,
-                        "is_video": False,
+                        "is_video": file_hash.is_video,
                     }
                 )
-                await db.delete(file_hash)
+                file_hashes_to_delete.append(file_hash)
 
-        # Delete album (cascade will delete photo records)
+        # Delete album FIRST (cascade will delete photo records)
         await db.delete(album)
+
+        # Then delete orphaned file_hashes
+        for file_hash in file_hashes_to_delete:
+            await db.delete(file_hash)
     else:
         # Just unassociate photos from the album (set album_id to NULL)
         await db.execute(
@@ -529,18 +534,22 @@ async def delete_photo(
 
     # Capture file info before deletion (for cleanup after commit)
     files_to_delete = []
-    if file_hash.reference_count <= 0:
+    should_delete_file_hash = file_hash.reference_count <= 0
+    if should_delete_file_hash:
         files_to_delete.append(
             {
                 "file_id": file_hash.sha256_hash,
                 "extension": file_hash.file_extension,
-                "is_video": False,
+                "is_video": file_hash.is_video,
             }
         )
-        await db.delete(file_hash)
 
-    # Delete photo record
+    # Delete photo record FIRST (it references file_hash)
     await db.delete(photo)
+
+    # Then delete file_hash if no more references
+    if should_delete_file_hash:
+        await db.delete(file_hash)
 
     # Commit DB changes first - if this fails, files remain intact
     await db.commit()
