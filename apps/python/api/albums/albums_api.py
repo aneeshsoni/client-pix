@@ -377,7 +377,7 @@ async def delete_album(
                     {
                         "file_id": file_hash.sha256_hash,
                         "extension": file_hash.file_extension,
-                        "is_video": file_hash.is_video,
+                        "is_video": photo.is_video,
                     }
                 )
                 file_hashes_to_delete.append(file_hash)
@@ -540,7 +540,7 @@ async def delete_photo(
             {
                 "file_id": file_hash.sha256_hash,
                 "extension": file_hash.file_extension,
-                "is_video": file_hash.is_video,
+                "is_video": photo.is_video,
             }
         )
 

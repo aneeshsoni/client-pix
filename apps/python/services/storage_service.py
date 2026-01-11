@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import json
+import subprocess
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +26,9 @@ from core.config import (
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
+
+# Background tasks for video thumbnail generation
+_background_tasks: set[asyncio.Task] = set()
 
 
 @dataclass
@@ -177,7 +182,10 @@ class StorageService:
         file: BinaryIO,
         extension: str,
     ) -> StoredFile:
-        """Store video file with streaming (no hashing)."""
+        """Store video file with streaming (no hashing).
+        
+        Thumbnail generation happens in background to avoid blocking uploads.
+        """
         # Generate UUID for video
         file_id = uuid.uuid4().hex
 
@@ -203,8 +211,11 @@ class StorageService:
                 await f.write(chunk)
                 file_size += len(chunk)
 
-        # Generate video thumbnail and get dimensions
-        width, height = await self._generate_video_thumbnails(storage_path, file_id)
+        # Get video dimensions quickly with ffprobe (fast operation)
+        width, height = await self._get_video_dimensions(storage_path)
+
+        # Schedule thumbnail generation in background (don't block upload)
+        self._schedule_background_thumbnails(storage_path, file_id)
 
         return StoredFile(
             file_id=file_id,
@@ -382,23 +393,10 @@ class StorageService:
             partial(self._generate_thumbnails_sync, original_path, file_id, extension),
         )
 
-    async def _generate_video_thumbnails(
-        self,
-        video_path: Path,
-        file_id: str,
-    ) -> tuple[int, int]:
-        """
-        Generate thumbnail and web poster frames from video using ffmpeg.
-
-        Returns (width, height) of the video.
-        """
-        import subprocess
-        import json
-
+    async def _get_video_dimensions(self, video_path: Path) -> tuple[int, int]:
+        """Get video dimensions using ffprobe (fast operation)."""
         loop = asyncio.get_event_loop()
-
-        # Get video dimensions using ffprobe
-        width, height = 1920, 1080  # Default fallback
+        
         try:
             probe_result = await loop.run_in_executor(
                 None,
@@ -423,10 +421,49 @@ class StorageService:
                 probe_data = json.loads(probe_result.stdout)
                 if probe_data.get("streams"):
                     stream = probe_data["streams"][0]
-                    width = stream.get("width", 1920)
-                    height = stream.get("height", 1080)
+                    return stream.get("width", 1920), stream.get("height", 1080)
         except Exception as e:
             print(f"Warning: Could not probe video dimensions: {e}")
+        
+        return 1920, 1080  # Default fallback
+
+    def _schedule_background_thumbnails(self, video_path: Path, file_id: str) -> None:
+        """Schedule video thumbnail generation in background (non-blocking)."""
+        try:
+            loop = asyncio.get_event_loop()
+            task = loop.create_task(self._generate_video_thumbnails_background(video_path, file_id))
+            # Keep reference to prevent garbage collection
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+        except Exception as e:
+            print(f"Warning: Could not schedule background thumbnail generation: {e}")
+
+    async def _generate_video_thumbnails_background(
+        self,
+        video_path: Path,
+        file_id: str,
+    ) -> None:
+        """Generate video thumbnails in background (called from background task)."""
+        try:
+            await self._generate_video_thumbnails(video_path, file_id)
+            print(f"Background: Generated thumbnails for video {file_id}")
+        except Exception as e:
+            print(f"Background: Failed to generate thumbnails for {file_id}: {e}")
+
+    async def _generate_video_thumbnails(
+        self,
+        video_path: Path,
+        file_id: str,
+    ) -> tuple[int, int]:
+        """
+        Generate thumbnail and web poster frames from video using ffmpeg.
+
+        Returns (width, height) of the video.
+        """
+        loop = asyncio.get_event_loop()
+
+        # Get video dimensions
+        width, height = await self._get_video_dimensions(video_path)
 
         # Generate thumbnail (small poster at 1 second)
         thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
