@@ -1,10 +1,14 @@
 """Album API endpoints."""
 
+import json
+import shutil
 import uuid
+from pathlib import Path
 
+import aiofiles
 from core.config import UPLOAD_DIR
 from core.database import get_db
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from models.api.albums_api_models import (
     AlbumCreate,
@@ -28,6 +32,10 @@ from utils.response_util import (
     get_thumbnail_path_for_hash,
 )
 from utils.slug_util import generate_slug
+
+# Directory for chunked uploads in progress
+CHUNKS_DIR = UPLOAD_DIR / "chunks"
+CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 
@@ -410,6 +418,176 @@ async def delete_album(
         except Exception as e:
             # Log but don't fail - DB is already consistent
             print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
+
+
+# --- Chunked Upload for Large Files ---
+
+
+@router.post("/{album_id}/upload/init")
+async def init_chunked_upload(
+    album_id: uuid.UUID,
+    filename: str = Query(...),
+    file_size: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Initialize a chunked upload session for a large file."""
+    # Verify album exists
+    stmt = select(Album).where(Album.id == album_id)
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Generate upload ID
+    upload_id = uuid.uuid4().hex
+
+    # Create directory for this upload's chunks
+    upload_dir = CHUNKS_DIR / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata = {
+        "album_id": str(album_id),
+        "filename": filename,
+        "file_size": file_size,
+        "chunks_received": [],
+    }
+    (upload_dir / "metadata.json").write_text(json.dumps(metadata))
+
+    return {"upload_id": upload_id, "chunk_size": 1024 * 1024}  # 1MB chunks
+
+
+@router.post("/{album_id}/upload/{upload_id}/chunk")
+async def upload_chunk(
+    album_id: uuid.UUID,
+    upload_id: str,
+    chunk_index: int = Query(...),
+    request: Request = None,
+):
+    upload_dir = CHUNKS_DIR / upload_id
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    # Read the raw body (chunk data)
+    chunk_data = await request.body()
+
+    # Save chunk to disk
+    chunk_path = upload_dir / f"chunk_{chunk_index:06d}"
+    async with aiofiles.open(chunk_path, "wb") as f:
+        await f.write(chunk_data)
+
+    metadata_path = upload_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    if chunk_index not in metadata["chunks_received"]:
+        metadata["chunks_received"].append(chunk_index)
+        metadata_path.write_text(json.dumps(metadata))
+
+    return {"chunk_index": chunk_index, "size": len(chunk_data)}
+
+
+@router.post(
+    "/{album_id}/upload/{upload_id}/complete", response_model=PhotoUploadResponse
+)
+async def complete_chunked_upload(
+    album_id: uuid.UUID,
+    upload_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    upload_dir = CHUNKS_DIR / upload_id
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    # Load metadata
+    metadata_path = upload_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+
+    if str(album_id) != metadata["album_id"]:
+        raise HTTPException(status_code=400, detail="Album ID mismatch")
+
+    # Verify album exists
+    stmt = select(Album).where(Album.id == album_id)
+    result = await db.execute(stmt)
+    album = result.scalar_one_or_none()
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Assemble chunks into final file
+    filename = metadata["filename"]
+    extension = Path(filename).suffix.lower() or ".bin"
+    temp_file = upload_dir / f"assembled{extension}"
+
+    # Sort and concatenate chunks
+    chunk_files = sorted(upload_dir.glob("chunk_*"))
+    async with aiofiles.open(temp_file, "wb") as out_f:
+        for chunk_path in chunk_files:
+            async with aiofiles.open(chunk_path, "rb") as chunk_f:
+                data = await chunk_f.read()
+                await out_f.write(data)
+
+    # Process the assembled file using storage service
+    async with aiofiles.open(temp_file, "rb") as f:
+        stored = await storage_service.store_file_streaming(
+            file=f,
+            original_filename=filename,
+        )
+
+    # Clean up chunks directory
+    shutil.rmtree(upload_dir)
+
+    # Check if album needs a cover photo
+    needs_cover = album.cover_photo_id is None
+
+    # Get current max sort_order
+    sort_stmt = select(func.max(Photo.sort_order)).where(Photo.album_id == album_id)
+    sort_result = await db.execute(sort_stmt)
+    max_sort = sort_result.scalar() or 0
+
+    # Get or create FileHash record
+    hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
+    hash_result = await db.execute(hash_stmt)
+    file_hash = hash_result.scalar_one_or_none()
+
+    duplicate_count = 0
+    if file_hash:
+        file_hash.reference_count += 1
+        duplicate_count = 1
+    else:
+        file_hash = FileHash(
+            sha256_hash=stored.file_id,
+            storage_path=stored.storage_path,
+            file_extension=stored.file_extension,
+            mime_type=stored.mime_type,
+            file_size=stored.file_size,
+            width=stored.width or 0,
+            height=stored.height or 0,
+            reference_count=1,
+        )
+        db.add(file_hash)
+        await db.flush()
+
+    # Create Photo record
+    photo = Photo(
+        album_id=album_id,
+        file_hash_id=file_hash.id,
+        original_filename=filename,
+        is_video=stored.is_video,
+        sort_order=max_sort + 1,
+        captured_at=stored.captured_at,
+    )
+    db.add(photo)
+    await db.flush()
+    await db.refresh(photo, ["file_hash"])
+
+    # Auto-set cover photo if needed (prefer images)
+    if needs_cover and not stored.is_video:
+        album.cover_photo_id = photo.id
+
+    await db.commit()
+
+    return PhotoUploadResponse(
+        photos=[build_photo_response(photo)],
+        uploaded_count=1,
+        duplicate_count=duplicate_count,
+    )
 
 
 # --- Photo Management ---

@@ -38,13 +38,17 @@ export function NewAlbumModal({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
-  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number } | null>(null);
+  const [uploadBytes, setUploadBytes] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
@@ -98,12 +102,14 @@ export function NewAlbumModal({
 
       // Upload files if any (in batches for reliability)
       if (files.length > 0) {
-        setUploadProgress(`Preparing ${files.length} file${files.length > 1 ? 's' : ''}...`);
+        setUploadProgress(
+          `Preparing ${files.length} file${files.length > 1 ? "s" : ""}...`
+        );
         setUploadProgressPercent(0);
         setUploadBytes(null);
         await uploadPhotosToAlbum(
-          album.id, 
-          files, 
+          album.id,
+          files,
           (uploaded, total) => {
             // Batch progress
             setUploadProgress(`Uploaded ${uploaded}/${total} files`);
@@ -340,8 +346,10 @@ export function NewAlbumModal({
                     {uploadProgress}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {uploadBytes 
-                      ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(uploadBytes.total)}`
+                    {uploadBytes
+                      ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(
+                          uploadBytes.total
+                        )}`
                       : "Please wait while files are being uploaded..."}
                   </p>
                 </div>

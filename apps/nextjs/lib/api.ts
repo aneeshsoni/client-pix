@@ -189,7 +189,7 @@ function uploadFileWithProgress(
 ): Promise<PhotoUploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    
+
     // Track upload progress
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && onProgress) {
@@ -227,12 +227,84 @@ function uploadFileWithProgress(
   });
 }
 
+// Threshold for chunked upload (50MB)
+const CHUNKED_UPLOAD_THRESHOLD = 50 * 1024 * 1024;
+// Chunk size (1MB - small enough to pass through proxy buffers)
+const CHUNK_SIZE = 1 * 1024 * 1024;
+
+/**
+ * Upload a large file using chunked upload.
+ * Splits the file into small chunks that can pass through proxy buffers.
+ */
+async function uploadLargeFileChunked(
+  albumId: string,
+  file: File,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<PhotoUploadResponse> {
+  // Initialize upload session
+  const initResponse = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/upload/init?filename=${encodeURIComponent(
+      file.name
+    )}&file_size=${file.size}`,
+    { method: "POST" }
+  );
+
+  if (!initResponse.ok) {
+    throw new Error(`Failed to initialize upload: ${initResponse.statusText}`);
+  }
+
+  const { upload_id } = await initResponse.json();
+
+  // Upload chunks
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  let uploadedBytes = 0;
+
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    const start = chunkIndex * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+
+    const chunkResponse = await fetch(
+      `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/chunk?chunk_index=${chunkIndex}`,
+      {
+        method: "POST",
+        body: chunk,
+        headers: {
+          "Content-Type": "application/octet-stream",
+        },
+      }
+    );
+
+    if (!chunkResponse.ok) {
+      throw new Error(
+        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`
+      );
+    }
+
+    uploadedBytes += chunk.size;
+    onProgress?.(uploadedBytes, file.size);
+  }
+
+  // Complete the upload
+  const completeResponse = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/complete`,
+    { method: "POST" }
+  );
+
+  if (!completeResponse.ok) {
+    const errorText = await completeResponse.text();
+    throw new Error(`Failed to complete upload: ${errorText}`);
+  }
+
+  return completeResponse.json();
+}
+
 /**
  * Upload photos to an album in batches for reliability.
  *
  * Uploads in batches of BATCH_SIZE to prevent timeouts and memory issues.
  * Supports uploading 100+ photos at once.
- * Uses XMLHttpRequest for real-time upload progress.
+ * Uses chunked upload for files > 50MB to bypass proxy buffer limits.
  *
  * @param albumId - Album to upload to
  * @param files - Array of files to upload
@@ -256,43 +328,56 @@ export async function uploadPhotosToAlbum(
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
   let uploadedSize = 0;
 
-  // Process files in batches
-  for (let i = 0; i < files.length; i += batchSize) {
-    const batch = files.slice(i, i + batchSize);
-    const batchNumber = Math.floor(i / batchSize) + 1;
-    const totalBatches = Math.ceil(files.length / batchSize);
-    const batchSize_bytes = batch.reduce((sum, f) => sum + f.size, 0);
-
-    const formData = new FormData();
-    batch.forEach((file) => {
-      formData.append("files", file);
-    });
+  // Process files one at a time for large files, or in batches for small files
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
 
     try {
-      const result = await uploadFileWithProgress(
-        `${API_BASE_URL}/api/albums/${albumId}/photos`,
-        formData,
-        (loaded, total) => {
-          // Report real-time byte progress
-          const currentProgress = uploadedSize + loaded;
-          onUploadProgress?.(currentProgress, totalSize);
-        },
-        15 * 60 * 1000 // 15 minute timeout
-      );
+      let result: PhotoUploadResponse;
+
+      if (file.size > CHUNKED_UPLOAD_THRESHOLD) {
+        // Use chunked upload for large files
+        console.log(
+          `Using chunked upload for ${file.name} (${(
+            file.size /
+            1024 /
+            1024
+          ).toFixed(1)} MB)`
+        );
+        result = await uploadLargeFileChunked(
+          albumId,
+          file,
+          (loaded, total) => {
+            onUploadProgress?.(uploadedSize + loaded, totalSize);
+          }
+        );
+      } else {
+        // Use regular upload for small files
+        const formData = new FormData();
+        formData.append("files", file);
+
+        result = await uploadFileWithProgress(
+          `${API_BASE_URL}/api/albums/${albumId}/photos`,
+          formData,
+          (loaded, total) => {
+            onUploadProgress?.(uploadedSize + loaded, totalSize);
+          },
+          15 * 60 * 1000
+        );
+      }
 
       allPhotos.push(...result.photos);
       totalUploaded += result.uploaded_count;
       totalDuplicates += result.duplicate_count;
-      successfullyProcessed += batch.length;
-      uploadedSize += batchSize_bytes;
+      successfullyProcessed += 1;
+      uploadedSize += file.size;
     } catch (error) {
-      console.error(`Batch ${batchNumber}/${totalBatches} error:`, error);
-      // Continue with next batch
-      uploadedSize += batchSize_bytes; // Still count as "processed" for progress
+      console.error(`File ${i + 1}/${files.length} error:`, error);
+      uploadedSize += file.size; // Still count for progress
     }
 
-    // Report batch progress
-    onProgress?.(Math.min(i + batchSize, files.length), files.length);
+    // Report file progress
+    onProgress?.(i + 1, files.length);
   }
 
   // If nothing was uploaded at all, throw an error

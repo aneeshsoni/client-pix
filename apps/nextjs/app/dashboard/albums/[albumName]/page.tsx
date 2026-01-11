@@ -67,12 +67,16 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
-  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number } | null>(null);
+  const [uploadBytes, setUploadBytes] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
@@ -82,10 +86,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       if (!files || files.length === 0 || !album) return;
 
       setIsUploading(true);
-      setUploadProgress(`Preparing ${files.length} file${files.length > 1 ? 's' : ''}...`);
+      setUploadProgress(
+        `Preparing ${files.length} file${files.length > 1 ? "s" : ""}...`
+      );
       setUploadProgressPercent(0);
       setUploadBytes(null);
-      
+
       try {
         await uploadPhotosToAlbum(
           album.id,
@@ -238,8 +244,10 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 {uploadProgress}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {uploadBytes 
-                  ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(uploadBytes.total)}`
+                {uploadBytes
+                  ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(
+                      uploadBytes.total
+                    )}`
                   : "Please wait while files are being uploaded..."}
               </p>
             </div>
