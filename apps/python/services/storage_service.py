@@ -433,7 +433,9 @@ class StorageService:
         thumb_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            await loop.run_in_executor(
+            # Scale to fit within THUMBNAIL_SIZE while maintaining aspect ratio
+            thumb_max = THUMBNAIL_SIZE[0]
+            result = await loop.run_in_executor(
                 None,
                 partial(
                     subprocess.run,
@@ -447,16 +449,17 @@ class StorageService:
                         "-vframes",
                         "1",
                         "-vf",
-                        f"scale={THUMBNAIL_SIZE}:-1",
+                        f"scale='min({thumb_max},iw)':-1",
                         "-q:v",
-                        str(
-                            100 - THUMBNAIL_QUALITY
-                        ),  # Quality (lower is better for ffmpeg)
+                        "10",  # WebP quality (0-100, lower is better quality)
                         str(thumb_path),
                     ],
                     capture_output=True,
+                    text=True,
                 ),
             )
+            if result.returncode != 0:
+                print(f"Warning: ffmpeg thumbnail failed: {result.stderr}")
         except Exception as e:
             print(f"Warning: Could not generate video thumbnail: {e}")
 
@@ -465,7 +468,7 @@ class StorageService:
         web_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            await loop.run_in_executor(
+            result = await loop.run_in_executor(
                 None,
                 partial(
                     subprocess.run,
@@ -481,12 +484,15 @@ class StorageService:
                         "-vf",
                         f"scale='min({WEB_MAX_DIMENSION},iw)':-1",
                         "-q:v",
-                        str(100 - WEB_QUALITY),
+                        "8",  # WebP quality (0-100, lower is better quality)
                         str(web_path),
                     ],
                     capture_output=True,
+                    text=True,
                 ),
             )
+            if result.returncode != 0:
+                print(f"Warning: ffmpeg web poster failed: {result.stderr}")
         except Exception as e:
             print(f"Warning: Could not generate video web poster: {e}")
 
