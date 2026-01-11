@@ -50,7 +50,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clientpix}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clientpix}
       UPLOAD_DIR: /app/uploads
       WEB_MAX_DIMENSION: ${WEB_MAX_DIMENSION:-2400}
-      JWT_SECRET: ${JWT_SECRET:-}  # Optional: auto-generated if not set
+      JWT_SECRET: ${JWT_SECRET:-} # Optional: auto-generated if not set
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -87,7 +87,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     expose:
-      - "80"  # Internal only - Coolify/Traefik handles external routing
+      - "80" # Internal only - Coolify/Traefik handles external routing
     depends_on:
       frontend:
         condition: service_healthy
