@@ -38,7 +38,15 @@ export function NewAlbumModal({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
+  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 
   const handleFiles = useCallback((fileList: FileList) => {
     const mediaFiles = Array.from(fileList).filter(
@@ -90,13 +98,23 @@ export function NewAlbumModal({
 
       // Upload files if any (in batches for reliability)
       if (files.length > 0) {
-        setUploadProgress(`Uploading 0/${files.length} files...`);
+        setUploadProgress(`Preparing ${files.length} file${files.length > 1 ? 's' : ''}...`);
         setUploadProgressPercent(0);
-        await uploadPhotosToAlbum(album.id, files, (uploaded, total) => {
-          const percent = Math.round((uploaded / total) * 100);
-          setUploadProgress(`Uploading ${uploaded}/${total} files...`);
-          setUploadProgressPercent(percent);
-        });
+        setUploadBytes(null);
+        await uploadPhotosToAlbum(
+          album.id, 
+          files, 
+          (uploaded, total) => {
+            // Batch progress
+            setUploadProgress(`Uploaded ${uploaded}/${total} files`);
+          },
+          (loaded, total) => {
+            // Real-time byte progress
+            const percent = Math.round((loaded / total) * 100);
+            setUploadProgressPercent(percent);
+            setUploadBytes({ loaded, total });
+          }
+        );
         setUploadProgress("Upload complete!");
         setUploadProgressPercent(100);
       }
@@ -107,6 +125,7 @@ export function NewAlbumModal({
       setFiles([]);
       setUploadProgress("");
       setUploadProgressPercent(0);
+      setUploadBytes(null);
       onOpenChange(false);
 
       // Notify parent to refresh album list
@@ -321,7 +340,9 @@ export function NewAlbumModal({
                     {uploadProgress}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Please wait while files are being uploaded...
+                    {uploadBytes 
+                      ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(uploadBytes.total)}`
+                      : "Please wait while files are being uploaded..."}
                   </p>
                 </div>
                 {uploadProgressPercent > 0 && (

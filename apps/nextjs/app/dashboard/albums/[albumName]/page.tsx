@@ -67,6 +67,14 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
+  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number } | null>(null);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,16 +82,23 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       if (!files || files.length === 0 || !album) return;
 
       setIsUploading(true);
-      setUploadProgress(`Uploading 0/${files.length} files...`);
+      setUploadProgress(`Preparing ${files.length} file${files.length > 1 ? 's' : ''}...`);
       setUploadProgressPercent(0);
+      setUploadBytes(null);
+      
       try {
         await uploadPhotosToAlbum(
           album.id,
           Array.from(files),
           (uploaded, total) => {
-            const percent = Math.round((uploaded / total) * 100);
-            setUploadProgress(`Uploading ${uploaded}/${total} files...`);
+            // Batch progress (files completed)
+            setUploadProgress(`Uploaded ${uploaded}/${total} files`);
+          },
+          (loaded, total) => {
+            // Real-time byte progress
+            const percent = Math.round((loaded / total) * 100);
             setUploadProgressPercent(percent);
+            setUploadBytes({ loaded, total });
           }
         );
         setUploadProgress("Upload complete! Refreshing...");
@@ -91,12 +106,14 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         await fetchAlbum(); // Refresh album data
         setUploadProgress("");
         setUploadProgressPercent(0);
+        setUploadBytes(null);
       } catch (err) {
         console.error("Failed to upload photos:", err);
         setUploadProgress(
           `Error: ${err instanceof Error ? err.message : "Upload failed"}`
         );
         setUploadProgressPercent(0);
+        setUploadBytes(null);
       } finally {
         setIsUploading(false);
         // Reset input
@@ -221,7 +238,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 {uploadProgress}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Please wait while photos are being uploaded...
+                {uploadBytes 
+                  ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(uploadBytes.total)}`
+                  : "Please wait while files are being uploaded..."}
               </p>
             </div>
             {uploadProgressPercent > 0 && (

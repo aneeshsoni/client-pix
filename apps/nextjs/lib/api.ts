@@ -178,32 +178,90 @@ export async function deleteAlbum(
 }
 
 /**
+ * Upload a single file with progress tracking using XMLHttpRequest.
+ * Returns a promise that resolves with the response or rejects on error.
+ */
+function uploadFileWithProgress(
+  url: string,
+  formData: FormData,
+  onProgress?: (loaded: number, total: number) => void,
+  timeoutMs: number = 15 * 60 * 1000
+): Promise<PhotoUploadResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    // Track upload progress
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded, e.total);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Invalid JSON response"));
+        }
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error during upload"));
+    });
+
+    xhr.addEventListener("timeout", () => {
+      reject(new Error("Upload timed out"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Upload aborted"));
+    });
+
+    xhr.open("POST", url);
+    xhr.timeout = timeoutMs;
+    xhr.send(formData);
+  });
+}
+
+/**
  * Upload photos to an album in batches for reliability.
  *
  * Uploads in batches of BATCH_SIZE to prevent timeouts and memory issues.
  * Supports uploading 100+ photos at once.
+ * Uses XMLHttpRequest for real-time upload progress.
  *
  * @param albumId - Album to upload to
  * @param files - Array of files to upload
- * @param onProgress - Callback with (uploaded, total) counts
- * @param batchSize - Number of files per batch (default: 3 for large files)
+ * @param onProgress - Callback with (uploaded, total) counts for batch progress
+ * @param onUploadProgress - Callback with (loaded, total) bytes for real-time progress
+ * @param batchSize - Number of files per batch (default: 1 for large files to show progress)
  */
 export async function uploadPhotosToAlbum(
   albumId: string,
   files: File[],
   onProgress?: (uploaded: number, total: number) => void,
-  batchSize: number = 3
+  onUploadProgress?: (loaded: number, total: number) => void,
+  batchSize: number = 1 // Default to 1 for better progress tracking
 ): Promise<PhotoUploadResponse> {
   const allPhotos: Photo[] = [];
   let totalUploaded = 0;
   let totalDuplicates = 0;
   let successfullyProcessed = 0;
 
+  // Calculate total size for progress
+  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  let uploadedSize = 0;
+
   // Process files in batches
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
     const batchNumber = Math.floor(i / batchSize) + 1;
     const totalBatches = Math.ceil(files.length / batchSize);
+    const batchSize_bytes = batch.reduce((sum, f) => sum + f.size, 0);
 
     const formData = new FormData();
     batch.forEach((file) => {
@@ -211,54 +269,35 @@ export async function uploadPhotosToAlbum(
     });
 
     try {
-      const controller = new AbortController();
-      // 15 minute timeout per batch (large videos can take significant time to upload and process)
-      const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000);
-
-      const response = await fetch(
+      const result = await uploadFileWithProgress(
         `${API_BASE_URL}/api/albums/${albumId}/photos`,
-        {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-        }
+        formData,
+        (loaded, total) => {
+          // Report real-time byte progress
+          const currentProgress = uploadedSize + loaded;
+          onUploadProgress?.(currentProgress, totalSize);
+        },
+        15 * 60 * 1000 // 15 minute timeout
       );
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response
-          .text()
-          .catch(() => response.statusText);
-        console.error(
-          `Batch ${batchNumber}/${totalBatches} failed:`,
-          errorText
-        );
-        // Continue with next batch instead of failing completely
-        continue;
-      }
-
-      const result: PhotoUploadResponse = await response.json();
       allPhotos.push(...result.photos);
       totalUploaded += result.uploaded_count;
       totalDuplicates += result.duplicate_count;
       successfullyProcessed += batch.length;
+      uploadedSize += batchSize_bytes;
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        console.error(`Batch ${batchNumber}/${totalBatches} timed out`);
-      } else {
-        console.error(`Batch ${batchNumber}/${totalBatches} error:`, error);
-      }
+      console.error(`Batch ${batchNumber}/${totalBatches} error:`, error);
       // Continue with next batch
+      uploadedSize += batchSize_bytes; // Still count as "processed" for progress
     }
 
-    // Report progress after each batch
+    // Report batch progress
     onProgress?.(Math.min(i + batchSize, files.length), files.length);
   }
 
   // If nothing was uploaded at all, throw an error
   if (successfullyProcessed === 0 && files.length > 0) {
-    throw new Error("Failed to upload any photos. Please try again.");
+    throw new Error("Failed to upload any files. Please try again.");
   }
 
   return {
