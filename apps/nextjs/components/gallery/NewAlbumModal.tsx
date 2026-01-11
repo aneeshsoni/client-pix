@@ -41,10 +41,10 @@ export function NewAlbumModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback((fileList: FileList) => {
-    const imageFiles = Array.from(fileList).filter((file) =>
-      file.type.startsWith("image/")
+    const mediaFiles = Array.from(fileList).filter(
+      (file) => file.type.startsWith("image/") || file.type.startsWith("video/")
     );
-    setFiles((prev) => [...prev, ...imageFiles]);
+    setFiles((prev) => [...prev, ...mediaFiles]);
   }, []);
 
   const handleDrop = useCallback(
@@ -88,13 +88,13 @@ export function NewAlbumModal({
         description.trim() || undefined
       );
 
-      // Upload photos if any (in batches for reliability)
+      // Upload files if any (in batches for reliability)
       if (files.length > 0) {
-        setUploadProgress(`Uploading 0/${files.length} photos...`);
+        setUploadProgress(`Uploading 0/${files.length} files...`);
         setUploadProgressPercent(0);
         await uploadPhotosToAlbum(album.id, files, (uploaded, total) => {
           const percent = Math.round((uploaded / total) * 100);
-          setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+          setUploadProgress(`Uploading ${uploaded}/${total} files...`);
           setUploadProgressPercent(percent);
         });
         setUploadProgress("Upload complete!");
@@ -182,7 +182,7 @@ export function NewAlbumModal({
             <div className="relative">
               <Label className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Upload className="h-3 w-3" />
-                Drop Your Photos
+                Drop Your Media
               </Label>
               <motion.div
                 onDrop={handleDrop}
@@ -251,7 +251,7 @@ export function NewAlbumModal({
                         <ImageIcon className="h-8 w-8 text-primary-foreground" />
                       </div>
                       <p className="mt-4 text-base font-medium">
-                        {files.length} photo{files.length !== 1 ? "s" : ""}{" "}
+                        {files.length} file{files.length !== 1 ? "s" : ""}{" "}
                         selected
                       </p>
                       <div className="mt-2 max-w-xs space-y-0.5">
@@ -302,7 +302,7 @@ export function NewAlbumModal({
                         </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        PNG, JPG, WEBP, GIF
+                        Images & Videos
                       </p>
                     </motion.div>
                   )}
@@ -321,7 +321,7 @@ export function NewAlbumModal({
                     {uploadProgress}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Please wait while photos are being uploaded...
+                    Please wait while files are being uploaded...
                   </p>
                 </div>
                 {uploadProgressPercent > 0 && (

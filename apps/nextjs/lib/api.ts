@@ -212,8 +212,8 @@ export async function uploadPhotosToAlbum(
 
     try {
       const controller = new AbortController();
-      // 5 minute timeout per batch (large RAW files can take time)
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+      // 15 minute timeout per batch (large videos can take significant time to upload and process)
+      const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000);
 
       const response = await fetch(
         `${API_BASE_URL}/api/albums/${albumId}/photos`,

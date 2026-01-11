@@ -74,7 +74,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       if (!files || files.length === 0 || !album) return;
 
       setIsUploading(true);
-      setUploadProgress(`Uploading 0/${files.length} photos...`);
+      setUploadProgress(`Uploading 0/${files.length} files...`);
       setUploadProgressPercent(0);
       try {
         await uploadPhotosToAlbum(
@@ -82,7 +82,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           Array.from(files),
           (uploaded, total) => {
             const percent = Math.round((uploaded / total) * 100);
-            setUploadProgress(`Uploading ${uploaded}/${total} photos...`);
+            setUploadProgress(`Uploading ${uploaded}/${total} files...`);
             setUploadProgressPercent(percent);
           }
         );
