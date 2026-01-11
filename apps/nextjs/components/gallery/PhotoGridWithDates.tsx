@@ -22,7 +22,9 @@ function groupPhotosByDate(photos: Photo[]): PhotoGroup[] {
 
   photos.forEach((photo) => {
     const date = photo.captured_at || photo.created_at;
-    const dateKey = new Date(date).toISOString().split("T")[0]; // YYYY-MM-DD
+    const d = new Date(date);
+    // Use local date components to avoid timezone shifts
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     if (!groups.has(dateKey)) {
       groups.set(dateKey, []);
@@ -32,7 +34,9 @@ function groupPhotosByDate(photos: Photo[]): PhotoGroup[] {
 
   // Convert to array and format display dates
   return Array.from(groups.entries()).map(([dateKey, photos]) => {
-    const date = new Date(dateKey);
+    // Parse as local date (add time to avoid timezone issues)
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     const displayDate = date.toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
