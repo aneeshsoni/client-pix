@@ -16,20 +16,23 @@ interface PhotoGridProps {
 
 export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const { 
-    selectedIds, 
-    isSelectionMode, 
-    toggleSelection, 
+  const {
+    selectedIds,
+    isSelectionMode,
+    toggleSelection,
     clearSelection,
-    isSelected 
+    isSelected,
   } = usePhotoSelection();
 
-  const openLightbox = useCallback((index: number) => {
-    // Don't open lightbox if in selection mode
-    if (!isSelectionMode) {
-      setLightboxIndex(index);
-    }
-  }, [isSelectionMode]);
+  const openLightbox = useCallback(
+    (index: number) => {
+      // Don't open lightbox if in selection mode
+      if (!isSelectionMode) {
+        setLightboxIndex(index);
+      }
+    },
+    [isSelectionMode]
+  );
 
   const closeLightbox = useCallback(() => {
     setLightboxIndex(null);
@@ -72,7 +75,7 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
   const getAlbumIdForSelection = useCallback(() => {
     if (albumId) return albumId;
     // If no albumId is provided, get it from the first selected photo
-    const firstSelectedPhoto = photos.find(p => selectedIds.has(p.id));
+    const firstSelectedPhoto = photos.find((p) => selectedIds.has(p.id));
     return firstSelectedPhoto?.album_id;
   }, [albumId, photos, selectedIds]);
 
@@ -82,7 +85,7 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
 
     const photoIds = Array.from(selectedIds);
     const blob = await bulkDownloadPhotos(targetAlbumId, photoIds);
-    
+
     // Create download link
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -92,7 +95,7 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-    
+
     clearSelection();
   };
 
@@ -102,12 +105,12 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
 
     const photoIds = Array.from(selectedIds);
     await bulkDeletePhotos(targetAlbumId, photoIds);
-    
+
     // Notify parent about deletions
     for (const photoId of photoIds) {
       onPhotoDeleted?.(photoId);
     }
-    
+
     clearSelection();
   };
 

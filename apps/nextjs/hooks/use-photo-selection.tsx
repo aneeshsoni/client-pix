@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  ReactNode,
+} from "react";
 
 interface PhotoSelectionContextType {
   selectedIds: Set<string>;
@@ -13,7 +19,9 @@ interface PhotoSelectionContextType {
   exitSelectionMode: () => void;
 }
 
-const PhotoSelectionContext = createContext<PhotoSelectionContextType | null>(null);
+const PhotoSelectionContext = createContext<PhotoSelectionContextType | null>(
+  null
+);
 
 export function PhotoSelectionProvider({ children }: { children: ReactNode }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -39,9 +47,12 @@ export function PhotoSelectionProvider({ children }: { children: ReactNode }) {
     setSelectedIds(new Set());
   }, []);
 
-  const isSelected = useCallback((photoId: string) => {
-    return selectedIds.has(photoId);
-  }, [selectedIds]);
+  const isSelected = useCallback(
+    (photoId: string) => {
+      return selectedIds.has(photoId);
+    },
+    [selectedIds]
+  );
 
   const enterSelectionMode = useCallback(() => {
     setIsSelectionMode(true);
@@ -73,7 +84,9 @@ export function PhotoSelectionProvider({ children }: { children: ReactNode }) {
 export function usePhotoSelection() {
   const context = useContext(PhotoSelectionContext);
   if (!context) {
-    throw new Error("usePhotoSelection must be used within a PhotoSelectionProvider");
+    throw new Error(
+      "usePhotoSelection must be used within a PhotoSelectionProvider"
+    );
   }
   return context;
 }

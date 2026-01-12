@@ -17,10 +17,10 @@ interface PhotoCardProps {
   onToggleSelect?: () => void;
 }
 
-export function PhotoCard({ 
-  photo, 
-  index, 
-  onClick, 
+export function PhotoCard({
+  photo,
+  index,
+  onClick,
   isSelected = false,
   isSelectionMode = false,
   onToggleSelect,
@@ -60,7 +60,9 @@ export function PhotoCard({
       <button
         onClick={handleClick}
         className={`group relative block w-full overflow-hidden bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-          isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""
+          isSelected
+            ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+            : ""
         }`}
         style={{ aspectRatio: `${photo.width}/${photo.height}` }}
       >
@@ -101,7 +103,9 @@ export function PhotoCard({
                 : "bg-black/40 border-white/70 opacity-0 group-hover:opacity-100"
             } ${isSelectionMode ? "opacity-100" : ""}`}
           >
-            {isSelected && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+            {isSelected && (
+              <Check className="h-4 w-4 text-white" strokeWidth={3} />
+            )}
           </div>
         )}
 
@@ -111,9 +115,11 @@ export function PhotoCard({
         )}
 
         {/* Hover overlay */}
-        <div className={`absolute inset-0 transition-colors ${
-          isSelected ? "" : "bg-black/0 group-hover:bg-black/10"
-        }`} />
+        <div
+          className={`absolute inset-0 transition-colors ${
+            isSelected ? "" : "bg-black/0 group-hover:bg-black/10"
+          }`}
+        />
       </button>
     </motion.div>
   );

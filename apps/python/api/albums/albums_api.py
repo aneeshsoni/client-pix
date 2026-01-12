@@ -1,15 +1,17 @@
 """Album API endpoints."""
 
+import io
 import json
 import shutil
 import uuid
+import zipfile
 from pathlib import Path
 
 import aiofiles
 from core.config import UPLOAD_DIR
 from core.database import get_db
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from models.api.albums_api_models import (
     AlbumCreate,
     AlbumDetailResponse,
@@ -847,10 +849,6 @@ async def bulk_download_photos(
     db: AsyncSession = Depends(get_db),
 ):
     """Download multiple photos as a zip file."""
-    import io
-    import zipfile
-    from fastapi.responses import StreamingResponse
-
     if not photo_ids:
         raise HTTPException(status_code=400, detail="No photo IDs provided")
 
