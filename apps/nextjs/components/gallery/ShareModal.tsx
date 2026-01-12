@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check, Lock, Globe, Trash2, Loader2 } from "lucide-react";
+import { Copy, Check, Lock, Globe, Trash2, Loader2, Clock, Calendar } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +14,58 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   createShareLink,
   getShareLinks,
   deleteShareLink,
   updateShareLink,
   type ShareLink,
 } from "@/lib/api";
+
+// Helper to calculate expiration date from duration
+function getExpirationDate(duration: string): string | undefined {
+  if (duration === "never") return undefined;
+  
+  const now = new Date();
+  const days = parseInt(duration, 10);
+  
+  if (isNaN(days)) return undefined;
+  
+  now.setDate(now.getDate() + days);
+  return now.toISOString();
+}
+
+// Helper to format remaining time
+function formatTimeRemaining(expiresAt: string | null): { text: string; isExpired: boolean; isWarning: boolean } {
+  if (!expiresAt) return { text: "Never expires", isExpired: false, isWarning: false };
+  
+  const now = new Date();
+  const expiry = new Date(expiresAt);
+  const diffMs = expiry.getTime() - now.getTime();
+  
+  if (diffMs <= 0) {
+    return { text: "Expired", isExpired: true, isWarning: false };
+  }
+  
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+  
+  if (diffHours < 24) {
+    return { text: `Expires in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`, isExpired: false, isWarning: true };
+  } else if (diffDays === 1) {
+    return { text: "Expires tomorrow", isExpired: false, isWarning: true };
+  } else if (diffDays <= 7) {
+    return { text: `${diffDays} days left`, isExpired: false, isWarning: true };
+  } else {
+    return { text: `${diffDays} days left`, isExpired: false, isWarning: false };
+  }
+}
 
 interface ShareModalProps {
   albumId: string;
@@ -36,6 +82,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
   const [isPasswordProtected, setIsPasswordProtected] = useState(false);
   const [customSlug, setCustomSlug] = useState("");
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [expirationDuration, setExpirationDuration] = useState("never");
 
   const fetchShareLinks = useCallback(async () => {
     if (!open || !albumId) return;
@@ -61,15 +108,18 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
     setIsCreating(true);
     setSlugError(null);
     try {
+      const expiresAt = getExpirationDate(expirationDuration);
       const newLink = await createShareLink(
         albumId,
         isPasswordProtected ? password : undefined,
-        customSlug.trim() || undefined
+        customSlug.trim() || undefined,
+        expiresAt
       );
       setShareLinks((prev) => [newLink, ...prev]);
       setPassword("");
       setIsPasswordProtected(false);
       setCustomSlug("");
+      setExpirationDuration("never");
     } catch (error) {
       console.error("Failed to create share link:", error);
       if (error instanceof Error && error.message.includes("slug")) {
@@ -78,7 +128,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
     } finally {
       setIsCreating(false);
     }
-  }, [albumId, password, isPasswordProtected, customSlug]);
+  }, [albumId, password, isPasswordProtected, customSlug, expirationDuration]);
 
   const handleCopyLink = useCallback(async (link: ShareLink) => {
     try {
@@ -198,6 +248,32 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                 </motion.div>
               )}
 
+              {/* Expiration Setting */}
+              <div>
+                <Label htmlFor="expiration" className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Link Expiration
+                </Label>
+                <Select value={expirationDuration} onValueChange={setExpirationDuration}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Select expiration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="never">Never expires</SelectItem>
+                    <SelectItem value="1">1 day</SelectItem>
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="14">14 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="90">90 days</SelectItem>
+                    <SelectItem value="180">6 months</SelectItem>
+                    <SelectItem value="365">1 year</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Link will automatically stop working after this period.
+                </p>
+              </div>
+
               <Button
                 onClick={handleCreateLink}
                 disabled={
@@ -238,12 +314,16 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
               </p>
             ) : (
               <div className="space-y-2">
-                {shareLinks.map((link) => (
+                {shareLinks.map((link) => {
+                  const expStatus = formatTimeRemaining(link.expires_at);
+                  return (
                   <motion.div
                     key={link.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 rounded-lg border p-3 overflow-hidden"
+                    className={`flex items-center gap-3 rounded-lg border p-3 overflow-hidden ${
+                      expStatus.isExpired || link.is_revoked ? "opacity-60" : ""
+                    }`}
                   >
                     <div className="flex-1 min-w-0 overflow-hidden">
                       <div className="flex items-center gap-2 mb-1">
@@ -256,15 +336,27 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                           {link.share_url}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                         <span>
                           Created{" "}
                           {new Date(link.created_at).toLocaleDateString()}
                         </span>
-                        {link.is_revoked && (
+                        {link.is_revoked ? (
                           <>
                             <span>•</span>
                             <span className="text-destructive">Revoked</span>
+                          </>
+                        ) : expStatus.isExpired ? (
+                          <>
+                            <span>•</span>
+                            <span className="text-destructive">{expStatus.text}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>•</span>
+                            <span className={expStatus.isWarning ? "text-orange-500" : ""}>
+                              {expStatus.text}
+                            </span>
                           </>
                         )}
                       </div>
@@ -308,7 +400,8 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                       </Button>
                     </div>
                   </motion.div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

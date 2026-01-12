@@ -563,7 +563,8 @@ export interface ShareLinkListResponse {
 export async function createShareLink(
   albumId: string,
   password?: string,
-  customSlug?: string
+  customSlug?: string,
+  expiresAt?: string
 ): Promise<ShareLink> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
     method: "POST",
@@ -573,6 +574,7 @@ export async function createShareLink(
     body: JSON.stringify({
       password: password || null,
       custom_slug: customSlug || null,
+      expires_at: expiresAt || null,
     }),
   });
 
