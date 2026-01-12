@@ -11,6 +11,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getAllPhotos, type Photo } from "@/lib/api";
+import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
 import { Loader2, Calendar, Clock } from "lucide-react";
 
 export default function GalleryPage() {
@@ -38,7 +39,7 @@ export default function GalleryPage() {
   }, [fetchPhotos]);
 
   return (
-    <>
+    <PhotoSelectionProvider>
       {/* Header */}
       <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
@@ -112,6 +113,6 @@ export default function GalleryPage() {
           <PhotoGrid photos={photos} onPhotoDeleted={fetchPhotos} />
         )}
       </div>
-    </>
+    </PhotoSelectionProvider>
   );
 }

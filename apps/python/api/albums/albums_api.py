@@ -746,6 +746,69 @@ async def delete_photo(
             print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
 
 
+@router.post("/{album_id}/photos/bulk-delete", status_code=204)
+async def bulk_delete_photos(
+    album_id: uuid.UUID,
+    photo_ids: list[uuid.UUID],
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete multiple photos from an album."""
+    if not photo_ids:
+        raise HTTPException(status_code=400, detail="No photo IDs provided")
+
+    # Fetch all photos at once
+    stmt = (
+        select(Photo)
+        .where(Photo.id.in_(photo_ids), Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photos = result.scalars().all()
+
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos found")
+
+    files_to_delete = []
+    file_hashes_to_delete = []
+
+    for photo in photos:
+        # Decrement file_hash reference count
+        file_hash = photo.file_hash
+        file_hash.reference_count -= 1
+
+        # Track files to delete if no more references
+        if file_hash.reference_count <= 0:
+            files_to_delete.append(
+                {
+                    "file_id": file_hash.sha256_hash,
+                    "extension": file_hash.file_extension,
+                    "is_video": photo.is_video,
+                }
+            )
+            file_hashes_to_delete.append(file_hash)
+
+        # Delete photo record
+        await db.delete(photo)
+
+    # Delete file_hash records with no more references
+    for file_hash in file_hashes_to_delete:
+        await db.delete(file_hash)
+
+    # Commit DB changes first
+    await db.commit()
+
+    # Delete files from disk AFTER successful commit
+    for file_info in files_to_delete:
+        try:
+            await storage_service.delete_file(
+                file_info["file_id"],
+                file_info["extension"],
+                file_info["is_video"],
+            )
+        except Exception as e:
+            print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
+
+
 @router.get("/{album_id}/photos/{photo_id}/download")
 async def download_photo(
     album_id: uuid.UUID,
@@ -774,6 +837,72 @@ async def download_photo(
         path=file_path,
         filename=photo.original_filename,
         media_type=file_hash.mime_type,
+    )
+
+
+@router.post("/{album_id}/photos/bulk-download")
+async def bulk_download_photos(
+    album_id: uuid.UUID,
+    photo_ids: list[uuid.UUID],
+    db: AsyncSession = Depends(get_db),
+):
+    """Download multiple photos as a zip file."""
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+
+    if not photo_ids:
+        raise HTTPException(status_code=400, detail="No photo IDs provided")
+
+    # Fetch all photos at once
+    stmt = (
+        select(Photo)
+        .where(Photo.id.in_(photo_ids), Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photos = result.scalars().all()
+
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos found")
+
+    # Get album name for zip filename
+    album_stmt = select(Album).where(Album.id == album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+    album_name = album.name if album else "photos"
+
+    # Create zip file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        used_names = {}
+        for photo in photos:
+            file_hash = photo.file_hash
+            file_path = UPLOAD_DIR / file_hash.storage_path
+
+            if file_path.exists():
+                # Handle duplicate filenames
+                original_name = photo.original_filename
+                if original_name in used_names:
+                    used_names[original_name] += 1
+                    name_parts = original_name.rsplit(".", 1)
+                    if len(name_parts) == 2:
+                        original_name = f"{name_parts[0]}_{used_names[original_name]}.{name_parts[1]}"
+                    else:
+                        original_name = f"{original_name}_{used_names[original_name]}"
+                else:
+                    used_names[original_name] = 0
+
+                zip_file.write(file_path, original_name)
+
+    zip_buffer.seek(0)
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{album_name}_photos.zip"'
+        },
     )
 
 

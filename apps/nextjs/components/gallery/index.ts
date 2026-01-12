@@ -8,4 +8,5 @@ export { NewAlbumModal } from "./NewAlbumModal";
 export { PhotoCard } from "./PhotoCard";
 export { PhotoGrid } from "./PhotoGrid";
 export { PhotoGridWithDates } from "./PhotoGridWithDates";
+export { SelectionToolbar } from "./SelectionToolbar";
 export { ShareModal } from "./ShareModal";

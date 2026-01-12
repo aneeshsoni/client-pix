@@ -408,6 +408,48 @@ export async function deletePhoto(
   }
 }
 
+export async function bulkDeletePhotos(
+  albumId: string,
+  photoIds: string[]
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-delete`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(photoIds),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete photos: ${response.statusText}`);
+  }
+}
+
+export async function bulkDownloadPhotos(
+  albumId: string,
+  photoIds: string[]
+): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-download`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(photoIds),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to download photos: ${response.statusText}`);
+  }
+
+  return response.blob();
+}
+
 export async function setCoverPhoto(
   albumId: string,
   photoId: string
