@@ -57,6 +57,9 @@ async def get_share_info(
     """
     Get basic info about a share link (whether it requires password).
     This endpoint is public and doesn't require authentication.
+    
+    Returns album metadata for OG previews (title, description, cover image)
+    even for password-protected albums.
 
     The `token` parameter can be either the random token or a custom slug.
     """
@@ -73,9 +76,45 @@ async def get_share_info(
     if share_link.expires_at and share_link.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="This share link has expired")
 
+    # Get album info for OG metadata (public preview even for password-protected albums)
+    album_stmt = (
+        select(Album)
+        .where(Album.id == share_link.album_id)
+        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+    )
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Get cover photo URL for OG image
+    cover_photo_url = None
+    if album.cover_photo_id:
+        # Find the cover photo
+        for photo in album.photos:
+            if photo.id == album.cover_photo_id and photo.file_hash:
+                hash_prefix = photo.file_hash.sha256_hash[:2]
+                hash_subdir = photo.file_hash.sha256_hash[2:4]
+                base_name = photo.file_hash.sha256_hash
+                cover_photo_url = f"web/{hash_prefix}/{hash_subdir}/{base_name}.webp"
+                break
+    elif album.photos:
+        # Fall back to first photo as cover
+        first_photo = album.photos[0]
+        if first_photo.file_hash:
+            hash_prefix = first_photo.file_hash.sha256_hash[:2]
+            hash_subdir = first_photo.file_hash.sha256_hash[2:4]
+            base_name = first_photo.file_hash.sha256_hash
+            cover_photo_url = f"web/{hash_prefix}/{hash_subdir}/{base_name}.webp"
+
     return {
         "is_password_protected": share_link.is_password_protected,
         "album_id": str(share_link.album_id),
+        "album_title": album.title,
+        "album_description": album.description,
+        "cover_photo_url": cover_photo_url,
+        "photo_count": len(album.photos),
     }
 
 
