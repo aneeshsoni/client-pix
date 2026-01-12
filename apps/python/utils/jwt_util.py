@@ -1,12 +1,12 @@
 """JWT token utilities for admin authentication."""
 
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
-
 from core.config import UPLOAD_DIR
 
 
@@ -29,7 +29,6 @@ def _get_or_create_jwt_secret(upload_dir: Path) -> str:
         return secret_file.read_text().strip()
 
     # Generate new secret and persist it
-    import secrets
 
     new_secret = secrets.token_hex(32)  # 64 characters, cryptographically secure
 
