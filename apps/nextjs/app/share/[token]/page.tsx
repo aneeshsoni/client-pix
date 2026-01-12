@@ -82,29 +82,42 @@ export async function generateMetadata({
     `[OG Metadata] Generated metadata - title: ${title}, ogImage: ${ogImageUrl}`
   );
 
+  const getPublicUrl = () => {
+    return host ? `${protocol}://${host}` : "";
+  };
+
   return {
     title,
     description,
+    icons: {
+      icon: "/client_pix_logo.png",
+      apple: "/client_pix_logo.png",
+    },
     openGraph: {
       title,
       description,
       type: "website",
-      ...(ogImageUrl && {
-        images: [
-          {
-            url: ogImageUrl,
-            alt: title,
-          },
-        ],
-      }),
+      images: [
+        ...(ogImageUrl
+          ? [
+              {
+                url: ogImageUrl,
+                alt: title,
+              },
+            ]
+          : [
+              {
+                url: `${getPublicUrl()}/client_pix_logo.png`,
+                alt: "Client Pix",
+              },
+            ]),
+      ],
     },
     twitter: {
       card: ogImageUrl ? "summary_large_image" : "summary",
       title,
       description,
-      ...(ogImageUrl && {
-        images: [ogImageUrl],
-      }),
+      images: ogImageUrl ? [ogImageUrl] : [`${getPublicUrl()}/client_pix_logo.png`],
     },
   };
 }
