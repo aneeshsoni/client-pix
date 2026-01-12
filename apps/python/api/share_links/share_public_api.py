@@ -7,13 +7,9 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from core.config import UPLOAD_DIR
 from core.database import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from models.api.share_links_api_models import (
     SharedAlbumPhotoResponse,
     SharedAlbumResponse,
@@ -22,6 +18,9 @@ from models.api.share_links_api_models import (
 from models.db.album_db_models import Album
 from models.db.photo_db_models import Photo
 from models.db.share_link_db_models import ShareLink
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from utils.download_util import ResumableFileResponse
 from utils.security_util import verify_password
 
@@ -57,7 +56,7 @@ async def get_share_info(
     """
     Get basic info about a share link (whether it requires password).
     This endpoint is public and doesn't require authentication.
-    
+
     Returns album metadata for OG previews (title, description, cover image)
     even for password-protected albums.
 

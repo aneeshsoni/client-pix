@@ -24,8 +24,10 @@ interface ShareInfo {
 async function getShareInfo(token: string): Promise<ShareInfo | null> {
   try {
     const apiUrl = getServerApiUrl();
-    console.log(`[OG Metadata] Fetching share info from: ${apiUrl}/api/share/${token}/info`);
-    
+    console.log(
+      `[OG Metadata] Fetching share info from: ${apiUrl}/api/share/${token}/info`
+    );
+
     const response = await fetch(`${apiUrl}/api/share/${token}/info`, {
       next: { revalidate: 60 }, // Cache for 60 seconds
     });
@@ -44,7 +46,9 @@ async function getShareInfo(token: string): Promise<ShareInfo | null> {
   }
 }
 
-export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: SharePageProps): Promise<Metadata> {
   const { token } = await params;
   const shareInfo = await getShareInfo(token);
 
@@ -56,21 +60,26 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   }
 
   const title = shareInfo.album_title || "Shared Album";
-  const description = shareInfo.album_description || 
-    `View ${shareInfo.photo_count} photo${shareInfo.photo_count !== 1 ? 's' : ''} in this album`;
+  const description =
+    shareInfo.album_description ||
+    `View ${shareInfo.photo_count} photo${
+      shareInfo.photo_count !== 1 ? "s" : ""
+    } in this album`;
 
   // Get the host from headers to build absolute OG image URL
   const headersList = await headers();
   const host = headersList.get("host") || "";
   const protocol = headersList.get("x-forwarded-proto") || "https";
   const baseUrl = host ? `${protocol}://${host}` : "";
-  
+
   // Build the OG image URL - crawlers need absolute URLs
-  const ogImageUrl = shareInfo.cover_photo_url 
+  const ogImageUrl = shareInfo.cover_photo_url
     ? `${baseUrl}/api/uploads/${shareInfo.cover_photo_url}`
     : null;
 
-  console.log(`[OG Metadata] Generated metadata - title: ${title}, ogImage: ${ogImageUrl}`);
+  console.log(
+    `[OG Metadata] Generated metadata - title: ${title}, ogImage: ${ogImageUrl}`
+  );
 
   return {
     title,
