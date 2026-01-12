@@ -28,7 +28,7 @@ THUMBNAIL_QUALITY = 90  # WebP quality (0-100)
 
 # Web-optimized version for lightbox viewing
 WEB_MAX_DIMENSION = int(os.getenv("WEB_MAX_DIMENSION", "2400"))
-WEB_QUALITY = 92  # Higher quality for full-screen viewing
+WEB_QUALITY = 90  # Higher quality for full-screen viewing
 
 # CORS - comma-separated list of allowed origins
 ALLOWED_ORIGINS = os.getenv(
