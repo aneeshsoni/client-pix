@@ -117,7 +117,9 @@ export async function generateMetadata({
       card: ogImageUrl ? "summary_large_image" : "summary",
       title,
       description,
-      images: ogImageUrl ? [ogImageUrl] : [`${getPublicUrl()}/client_pix_logo.png`],
+      images: ogImageUrl
+        ? [ogImageUrl]
+        : [`${getPublicUrl()}/client_pix_logo.png`],
     },
   };
 }
