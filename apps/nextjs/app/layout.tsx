@@ -10,8 +10,11 @@ export const metadata: Metadata = {
   title: "Client Pix - Photo Gallery",
   description: "Self-hosted photography client gallery",
   icons: {
-    icon: "/client_pix_logo.png",
-    apple: "/client_pix_logo.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/client_pix_logo.png", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     images: [
