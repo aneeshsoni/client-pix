@@ -11,8 +11,9 @@ export const metadata: Metadata = {
   description: "Self-hosted photography client gallery",
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/client_pix_logo.png", type: "image/png" },
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/favicon-512.png", type: "image/png", sizes: "512x512" },
     ],
     apple: "/apple-touch-icon.png",
   },

@@ -2,7 +2,16 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check, Lock, Globe, Trash2, Loader2, Clock, Calendar } from "lucide-react";
+import {
+  Copy,
+  Check,
+  Lock,
+  Globe,
+  Trash2,
+  Loader2,
+  Clock,
+  Calendar,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,39 +40,52 @@ import {
 // Helper to calculate expiration date from duration
 function getExpirationDate(duration: string): string | undefined {
   if (duration === "never") return undefined;
-  
+
   const now = new Date();
   const days = parseInt(duration, 10);
-  
+
   if (isNaN(days)) return undefined;
-  
+
   now.setDate(now.getDate() + days);
   return now.toISOString();
 }
 
 // Helper to format remaining time
-function formatTimeRemaining(expiresAt: string | null): { text: string; isExpired: boolean; isWarning: boolean } {
-  if (!expiresAt) return { text: "Never expires", isExpired: false, isWarning: false };
-  
+function formatTimeRemaining(expiresAt: string | null): {
+  text: string;
+  isExpired: boolean;
+  isWarning: boolean;
+} {
+  if (!expiresAt)
+    return { text: "Never expires", isExpired: false, isWarning: false };
+
   const now = new Date();
   const expiry = new Date(expiresAt);
   const diffMs = expiry.getTime() - now.getTime();
-  
+
   if (diffMs <= 0) {
     return { text: "Expired", isExpired: true, isWarning: false };
   }
-  
+
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
   const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
-  
+
   if (diffHours < 24) {
-    return { text: `Expires in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`, isExpired: false, isWarning: true };
+    return {
+      text: `Expires in ${diffHours} hour${diffHours !== 1 ? "s" : ""}`,
+      isExpired: false,
+      isWarning: true,
+    };
   } else if (diffDays === 1) {
     return { text: "Expires tomorrow", isExpired: false, isWarning: true };
   } else if (diffDays <= 7) {
     return { text: `${diffDays} days left`, isExpired: false, isWarning: true };
   } else {
-    return { text: `${diffDays} days left`, isExpired: false, isWarning: false };
+    return {
+      text: `${diffDays} days left`,
+      isExpired: false,
+      isWarning: false,
+    };
   }
 }
 
@@ -199,7 +221,9 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                     id="custom-slug"
                     value={customSlug}
                     onChange={(e) => {
-                      setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                      setCustomSlug(
+                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
+                      );
                       setSlugError(null);
                     }}
                     placeholder="my-wedding-photos"
@@ -210,7 +234,8 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                   <p className="text-xs text-destructive mt-1">{slugError}</p>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                  Leave blank for a random link. Use letters, numbers, and hyphens.
+                  Leave blank for a random link. Use letters, numbers, and
+                  hyphens.
                 </p>
               </div>
 
@@ -254,7 +279,10 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                   <Clock className="h-4 w-4" />
                   Link Expiration
                 </Label>
-                <Select value={expirationDuration} onValueChange={setExpirationDuration}>
+                <Select
+                  value={expirationDuration}
+                  onValueChange={setExpirationDuration}
+                >
                   <SelectTrigger className="mt-1.5">
                     <SelectValue placeholder="Select expiration" />
                   </SelectTrigger>
@@ -277,7 +305,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
               <Button
                 onClick={handleCreateLink}
                 disabled={
-                  isCreating || 
+                  isCreating ||
                   (isPasswordProtected && password.length < 4) ||
                   (customSlug.length > 0 && customSlug.length < 3)
                 }
@@ -317,89 +345,99 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                 {shareLinks.map((link) => {
                   const expStatus = formatTimeRemaining(link.expires_at);
                   return (
-                  <motion.div
-                    key={link.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`flex items-center gap-3 rounded-lg border p-3 overflow-hidden ${
-                      expStatus.isExpired || link.is_revoked ? "opacity-60" : ""
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                      <div className="flex items-center gap-2 mb-1">
-                        {link.is_password_protected ? (
-                          <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        ) : (
-                          <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        )}
-                        <span className="text-xs text-muted-foreground truncate block overflow-hidden">
-                          {link.share_url}
-                        </span>
+                    <motion.div
+                      key={link.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex items-center gap-3 rounded-lg border p-3 overflow-hidden ${
+                        expStatus.isExpired || link.is_revoked
+                          ? "opacity-60"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 mb-1">
+                          {link.is_password_protected ? (
+                            <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          ) : (
+                            <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                          )}
+                          <span className="text-xs text-muted-foreground truncate block overflow-hidden">
+                            {link.share_url}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <span>
+                            Created{" "}
+                            {new Date(link.created_at).toLocaleDateString()}
+                          </span>
+                          {link.is_revoked ? (
+                            <>
+                              <span>•</span>
+                              <span className="text-destructive">Revoked</span>
+                            </>
+                          ) : expStatus.isExpired ? (
+                            <>
+                              <span>•</span>
+                              <span className="text-destructive">
+                                {expStatus.text}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>•</span>
+                              <span
+                                className={
+                                  expStatus.isWarning ? "text-orange-500" : ""
+                                }
+                              >
+                                {expStatus.text}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                        <span>
-                          Created{" "}
-                          {new Date(link.created_at).toLocaleDateString()}
-                        </span>
-                        {link.is_revoked ? (
-                          <>
-                            <span>•</span>
-                            <span className="text-destructive">Revoked</span>
-                          </>
-                        ) : expStatus.isExpired ? (
-                          <>
-                            <span>•</span>
-                            <span className="text-destructive">{expStatus.text}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>•</span>
-                            <span className={expStatus.isWarning ? "text-orange-500" : ""}>
-                              {expStatus.text}
-                            </span>
-                          </>
-                        )}
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCopyLink(link)}
+                          className="h-8 w-8 p-0"
+                        >
+                          {copiedLinkId === link.id ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleRevoke(link)}
+                          className="h-8 w-8 p-0"
+                          title={
+                            link.is_revoked ? "Restore link" : "Revoke link"
+                          }
+                        >
+                          {link.is_revoked ? (
+                            <Globe className="h-4 w-4" />
+                          ) : (
+                            <Lock className="h-4 w-4" />
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteLink(link.id)}
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyLink(link)}
-                        className="h-8 w-8 p-0"
-                      >
-                        {copiedLinkId === link.id ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleToggleRevoke(link)}
-                        className="h-8 w-8 p-0"
-                        title={link.is_revoked ? "Restore link" : "Revoke link"}
-                      >
-                        {link.is_revoked ? (
-                          <Globe className="h-4 w-4" />
-                        ) : (
-                          <Lock className="h-4 w-4" />
-                        )}
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteLink(link.id)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </motion.div>
+                    </motion.div>
                   );
                 })}
               </div>
