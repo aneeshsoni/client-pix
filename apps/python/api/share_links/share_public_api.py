@@ -87,32 +87,21 @@ async def get_share_info(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    # Get cover photo URL for OG image
-    cover_photo_url = None
+    # Get cover photo ID for OG image (use photo ID so frontend can build proper share URL)
+    cover_photo_id = None
     if album.cover_photo_id:
-        # Find the cover photo
-        for photo in album.photos:
-            if photo.id == album.cover_photo_id and photo.file_hash:
-                hash_prefix = photo.file_hash.sha256_hash[:2]
-                hash_subdir = photo.file_hash.sha256_hash[2:4]
-                base_name = photo.file_hash.sha256_hash
-                cover_photo_url = f"web/{hash_prefix}/{hash_subdir}/{base_name}.webp"
-                break
+        # Use explicit cover photo
+        cover_photo_id = str(album.cover_photo_id)
     elif album.photos:
         # Fall back to first photo as cover
-        first_photo = album.photos[0]
-        if first_photo.file_hash:
-            hash_prefix = first_photo.file_hash.sha256_hash[:2]
-            hash_subdir = first_photo.file_hash.sha256_hash[2:4]
-            base_name = first_photo.file_hash.sha256_hash
-            cover_photo_url = f"web/{hash_prefix}/{hash_subdir}/{base_name}.webp"
+        cover_photo_id = str(album.photos[0].id)
 
     return {
         "is_password_protected": share_link.is_password_protected,
         "album_id": str(share_link.album_id),
         "album_title": album.title,
         "album_description": album.description,
-        "cover_photo_url": cover_photo_url,
+        "cover_photo_id": cover_photo_id,
         "photo_count": len(album.photos),
     }
 

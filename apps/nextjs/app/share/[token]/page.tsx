@@ -17,7 +17,7 @@ interface ShareInfo {
   album_id: string;
   album_title: string;
   album_description: string | null;
-  cover_photo_url: string | null;
+  cover_photo_id: string | null;
   photo_count: number;
 }
 
@@ -72,9 +72,10 @@ export async function generateMetadata({
   const protocol = headersList.get("x-forwarded-proto") || "https";
   const baseUrl = host ? `${protocol}://${host}` : "";
 
-  // Build the OG image URL - crawlers need absolute URLs
-  const ogImageUrl = shareInfo.cover_photo_url
-    ? `${baseUrl}/api/uploads/${shareInfo.cover_photo_url}`
+  // Build the OG image URL using the share endpoint (publicly accessible)
+  // Format: /api/files/share/{token}/photo/{photoId}?variant=web
+  const ogImageUrl = shareInfo.cover_photo_id
+    ? `${baseUrl}/api/files/share/${token}/photo/${shareInfo.cover_photo_id}?variant=web`
     : null;
 
   console.log(
