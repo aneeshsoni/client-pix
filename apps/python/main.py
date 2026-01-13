@@ -6,7 +6,11 @@ from fastapi.staticfiles import StaticFiles
 
 from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
-from utils.cleanup_util import cleanup_old_temp_files, start_cleanup_task, stop_cleanup_task
+from utils.cleanup_util import (
+    cleanup_old_temp_files,
+    start_cleanup_task,
+    stop_cleanup_task,
+)
 
 from router import router
 
