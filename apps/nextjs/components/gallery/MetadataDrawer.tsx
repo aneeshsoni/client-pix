@@ -111,32 +111,15 @@ export function MetadataDrawer({
                 value={formatFileSize(photo.file_size)}
               />
 
-              {/* Dimensions */}
-              <div className="pt-4 mt-4 border-t border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="text-white/50">
-                    <FileImage className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-white/50 uppercase tracking-wide">
-                      Dimensions
-                    </div>
-                    <div className="text-sm text-white mt-0.5">
-                      {photo.width} × {photo.height}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Caption */}
-              {photo.caption && (
-                <div className="pt-4 mt-4 border-t border-white/10">
-                  <div className="text-xs text-white/50 uppercase tracking-wide mb-2">
-                    Caption
-                  </div>
-                  <div className="text-sm text-white">{photo.caption}</div>
-                </div>
-              )}
+              <MetadataRow
+                icon={<FileImage className="h-4 w-4" />}
+                label="Dimensions"
+                value={
+                  photo.width && photo.height
+                    ? `${photo.width} × ${photo.height}`
+                    : undefined
+                }
+              />
             </div>
           </motion.div>
         </>
