@@ -13,8 +13,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { Loader2, Check, User, Lock, HardDrive } from "lucide-react";
-import { getStorageInfo, type StorageInfo } from "@/lib/api";
+import {
+  Loader2,
+  Check,
+  User,
+  Lock,
+  HardDrive,
+  Trash2,
+  Download,
+  Upload,
+} from "lucide-react";
+import {
+  getStorageInfo,
+  getTempFilesInfo,
+  cleanupDownloadTempFiles,
+  cleanupUploadTempFiles,
+  type StorageInfo,
+  type TempFilesInfo,
+} from "@/lib/api";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -30,6 +46,13 @@ export default function SettingsPage() {
   // Storage state
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [storageLoading, setStorageLoading] = useState(true);
+
+  // Temp files state
+  const [tempFiles, setTempFiles] = useState<TempFilesInfo | null>(null);
+  const [tempFilesLoading, setTempFilesLoading] = useState(true);
+  const [cleaningDownloads, setCleaningDownloads] = useState(false);
+  const [cleaningUploads, setCleaningUploads] = useState(false);
+  const [cleanupMessage, setCleanupMessage] = useState<string | null>(null);
 
   // Profile form state
   const [name, setName] = useState(admin?.name || "");
@@ -59,6 +82,70 @@ export default function SettingsPage() {
     }
     fetchStorage();
   }, []);
+
+  useEffect(() => {
+    async function fetchTempFiles() {
+      try {
+        const data = await getTempFilesInfo();
+        setTempFiles(data);
+      } catch (err) {
+        console.error("Failed to fetch temp files info:", err);
+      } finally {
+        setTempFilesLoading(false);
+      }
+    }
+    fetchTempFiles();
+  }, []);
+
+  const handleCleanupDownloads = async () => {
+    setCleaningDownloads(true);
+    setCleanupMessage(null);
+    try {
+      const result = await cleanupDownloadTempFiles();
+      setCleanupMessage(
+        `Cleaned ${result.cleaned_count} files (${formatBytes(
+          result.cleaned_bytes
+        )})`
+      );
+      // Refresh temp files info
+      const data = await getTempFilesInfo();
+      setTempFiles(data);
+      // Also refresh storage info
+      const storageData = await getStorageInfo();
+      setStorage(storageData);
+    } catch (err) {
+      console.error("Failed to cleanup downloads:", err);
+      setCleanupMessage("Failed to cleanup download files");
+    } finally {
+      setCleaningDownloads(false);
+      setTimeout(() => setCleanupMessage(null), 5000);
+    }
+  };
+
+  const handleCleanupUploads = async () => {
+    setCleaningUploads(true);
+    setCleanupMessage(null);
+    try {
+      const result = await cleanupUploadTempFiles();
+      setCleanupMessage(
+        `Cleaned ${result.cleaned_count} files (${formatBytes(
+          result.cleaned_bytes
+        )})`
+      );
+      // Refresh temp files info
+      const data = await getTempFilesInfo();
+      setTempFiles(data);
+      // Also refresh storage info
+      const storageData = await getStorageInfo();
+      setStorage(storageData);
+    } catch (err) {
+      console.error("Failed to cleanup uploads:", err);
+      setCleanupMessage("Failed to cleanup upload files");
+    } finally {
+      setCleaningUploads(false);
+      setTimeout(() => setCleanupMessage(null), 5000);
+    }
+  };
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +273,113 @@ export default function SettingsPage() {
           ) : (
             <div className="text-sm text-muted-foreground">
               Unable to load storage information
+            </div>
+          )}
+        </div>
+
+        {/* Temporary Files Cleanup Section */}
+        <div className="rounded-lg border bg-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Trash2 className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">Temporary Files</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Orphaned temporary files from interrupted uploads or downloads.
+            These are automatically cleaned up periodically, but you can
+            manually clean them here.
+          </p>
+
+          {cleanupMessage && (
+            <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2 mb-4">
+              <Check className="h-4 w-4" />
+              {cleanupMessage}
+            </div>
+          )}
+
+          {tempFilesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : tempFiles ? (
+            <div className="space-y-4">
+              {/* Downloads temp files */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-3">
+                  <Download className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Download Temp Files</div>
+                    <div className="text-sm text-muted-foreground">
+                      {tempFiles.download_files_count} files ·{" "}
+                      {formatBytes(tempFiles.download_files_bytes)}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCleanupDownloads}
+                  disabled={
+                    cleaningDownloads || tempFiles.download_files_count === 0
+                  }
+                >
+                  {cleaningDownloads ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Clean Up"
+                  )}
+                </Button>
+              </div>
+
+              {/* Uploads temp files */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-3">
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Upload Temp Files</div>
+                    <div className="text-sm text-muted-foreground">
+                      {tempFiles.upload_temp_files_count +
+                        tempFiles.chunked_uploads_count}{" "}
+                      files ·{" "}
+                      {formatBytes(
+                        tempFiles.upload_temp_files_bytes +
+                          tempFiles.chunked_uploads_bytes
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCleanupUploads}
+                  disabled={
+                    cleaningUploads ||
+                    (tempFiles.upload_temp_files_count === 0 &&
+                      tempFiles.chunked_uploads_count === 0)
+                  }
+                >
+                  {cleaningUploads ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Clean Up"
+                  )}
+                </Button>
+              </div>
+
+              {/* Total */}
+              {tempFiles.total_bytes > 0 && (
+                <div className="pt-2 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Total reclaimable space:{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatBytes(tempFiles.total_bytes)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Unable to load temporary files information
             </div>
           )}
         </div>
