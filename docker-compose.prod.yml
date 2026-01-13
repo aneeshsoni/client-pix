@@ -24,6 +24,11 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-clientpix}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clientpix_postgres_db}
@@ -44,6 +49,11 @@ services:
       context: ./apps/python
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       APP_NAME: ${APP_NAME:-Client Pix API}
       DEBUG: "false"
@@ -71,6 +81,11 @@ services:
       context: ./apps/nextjs
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       NODE_ENV: production
     depends_on:
@@ -86,6 +101,11 @@ services:
       context: ./docker/nginx
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     expose:
       - "80" # Internal only - Coolify/Traefik handles external routing
     depends_on:

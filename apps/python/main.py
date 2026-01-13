@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
+from utils.cleanup_util import cleanup_old_temp_files, start_cleanup_task, stop_cleanup_task
 
 from router import router
 
@@ -21,8 +22,18 @@ async def lifespan(app: FastAPI):
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     print(f"✓ Upload directory ready: {UPLOAD_DIR}")
 
+    # Clean up any orphaned temp files from previous runs
+    cleanup_old_temp_files(UPLOAD_DIR)
+    print("✓ Startup temp file cleanup complete")
+
+    # Start periodic cleanup task
+    start_cleanup_task(UPLOAD_DIR)
+    print("✓ Periodic cleanup task started (runs every 30 min)")
+
     yield
-    # Shutdown: Cleanup if needed
+
+    # Shutdown: Cancel cleanup task
+    await stop_cleanup_task()
     print("✓ Shutting down")
 
 

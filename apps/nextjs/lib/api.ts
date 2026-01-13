@@ -703,3 +703,55 @@ export async function getStorageInfo(): Promise<StorageInfo> {
 
   return response.json();
 }
+
+export interface TempFilesInfo {
+  download_files_count: number;
+  download_files_bytes: number;
+  upload_temp_files_count: number;
+  upload_temp_files_bytes: number;
+  chunked_uploads_count: number;
+  chunked_uploads_bytes: number;
+  total_bytes: number;
+}
+
+export async function getTempFilesInfo(): Promise<TempFilesInfo> {
+  const response = await fetch(`${API_BASE_URL}/api/system/temp-files`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch temp files info: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export interface CleanupResult {
+  cleaned_count: number;
+  cleaned_bytes: number;
+  message: string;
+}
+
+export async function cleanupDownloadTempFiles(): Promise<CleanupResult> {
+  const response = await fetch(`${API_BASE_URL}/api/system/cleanup/downloads`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to cleanup downloads: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function cleanupUploadTempFiles(): Promise<CleanupResult> {
+  const response = await fetch(`${API_BASE_URL}/api/system/cleanup/uploads`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to cleanup uploads: ${response.statusText}`);
+  }
+
+  return response.json();
+}
