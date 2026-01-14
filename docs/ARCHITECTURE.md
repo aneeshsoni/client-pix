@@ -43,14 +43,14 @@ Client Pix is a self-hosted photography client gallery platform built as a monor
 We evaluated backend technologies for handling uploads, albums, users, and file management. The primary candidates were:
 
 1. **FastAPI (Python)** — Modern async Python framework
-2. **NestJS (TypeScript)** — Full-featured Node.js framework (used by Immich)
+2. **NestJS (TypeScript)** — Full-featured Node.js framework
 3. **Next.js API Routes** — Built-in serverless functions
 
 **Decision:**
 
-We chose **FastAPI (Python)** for the backend.
+We chose **FastAPI (Python)** for the backend mainly for my familiarty and speed at building Python apps over NestJS or Next.js API. Plus it has the best support for ML/image recognition libraries if we ever want to implement that in the future.
 
-**Rationale:**
+**Rationale (provided by AI):**
 
 | Factor             | FastAPI          | NestJS                  | Next.js API               |
 | ------------------ | ---------------- | ----------------------- | ------------------------- |
@@ -64,7 +64,7 @@ We chose **FastAPI (Python)** for the backend.
 
 **Key considerations:**
 
-1. **Performance is effectively equal** — For I/O bound operations (file uploads, database queries), both Python and TypeScript perform similarly. The bottleneck is disk/network I/O, not language runtime.
+1. **Performance is effectively equal** — For I/O bound operations (file uploads, database queries), both Python and TypeScript perform similarly. The bottleneck is disk/network I/O, not really language runtime (though this could change at scale).
 
 2. **Image processing ecosystem** — Python's Pillow and related libraries are mature and well-documented for thumbnail generation, EXIF extraction, and image optimization.
 
@@ -79,11 +79,6 @@ We chose **FastAPI (Python)** for the backend.
 - Two languages in the monorepo (TypeScript frontend, Python backend)
 - Need Python tooling (uv, pyproject.toml) alongside Node tooling
 - Clear separation of concerns between frontend and backend
-
-**Alternatives considered:**
-
-- **Immich's approach** (NestJS + Python ML service): Overkill for our simpler use case
-- **Full TypeScript stack**: Would require separate Python service if ML features needed later
 
 ---
 
@@ -108,7 +103,8 @@ client-pix/
 │       └── pyproject.toml   # Python dependencies (uv)
 │
 ├── docs/                    # Documentation
-├── docker-compose.yml       # Local development orchestration
+├── docker-compose.dev.yml   # Local development orchestration
+├── docker-compose.prod.yml  # Prod deployment orchestration
 └── README.md
 ```
 
@@ -320,6 +316,5 @@ The `start.sh` script includes:
 
 ## References
 
-- [Immich Architecture](https://immich.app/docs/developer/architecture) — Inspiration for self-hosted photo management
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Next.js App Router](https://nextjs.org/docs/app)
