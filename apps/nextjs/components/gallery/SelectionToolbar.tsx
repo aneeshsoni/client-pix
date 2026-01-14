@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -34,8 +35,12 @@ export function SelectionToolbar({
 
   const handleDownload = async () => {
     setIsDownloading(true);
+    const toastId = toast.loading("Preparing download...");
     try {
       await onDownload();
+      toast.success("Download ready!", { id: toastId });
+    } catch {
+      toast.error("Download failed", { id: toastId });
     } finally {
       setIsDownloading(false);
     }

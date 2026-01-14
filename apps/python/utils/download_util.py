@@ -1,10 +1,99 @@
 """Utilities for file downloads with resumable support."""
 
 import os
+import tempfile
+import zipfile
 from pathlib import Path
+from typing import Sequence
 
-from fastapi import Request
+from fastapi import BackgroundTasks, HTTPException, Request
 from starlette.responses import Response
+
+
+async def cleanup_temp_file(path: str) -> None:
+    """Background task to clean up temporary files."""
+    try:
+        os.unlink(path)
+    except Exception:
+        pass
+
+
+def create_photos_zip(
+    photos: Sequence,
+    album_title: str,
+    upload_dir: Path,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> "ResumableFileResponse":
+    """
+    Create a ZIP file from photos and return a resumable file response.
+
+    Args:
+        photos: Sequence of Photo objects with file_hash relationship loaded
+        album_title: Title of the album (used for ZIP filename)
+        upload_dir: Base directory where files are stored
+        request: FastAPI request object (for ResumableFileResponse)
+        background_tasks: FastAPI background tasks (for cleanup)
+
+    Returns:
+        ResumableFileResponse for streaming the ZIP file
+    """
+    # Collect file paths and names
+    files_to_zip: list[tuple[Path, str]] = []
+    used_names: dict[str, int] = {}
+
+    for photo in photos:
+        file_hash = photo.file_hash
+        if not file_hash:
+            continue
+
+        file_path = upload_dir / file_hash.storage_path
+
+        if file_path.exists():
+            # Handle duplicate filenames
+            base_name = photo.original_filename
+            if base_name in used_names:
+                used_names[base_name] += 1
+                name_parts = base_name.rsplit(".", 1)
+                if len(name_parts) == 2:
+                    archive_name = f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+                else:
+                    archive_name = f"{base_name}_{used_names[base_name]}"
+            else:
+                used_names[base_name] = 0
+                archive_name = base_name
+
+            files_to_zip.append((file_path, archive_name))
+
+    if not files_to_zip:
+        raise HTTPException(status_code=404, detail="No files available for download")
+
+    # Create ZIP file on disk (temporary file) - ZIP_STORED for speed (no compression)
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    temp_path = temp_file.name
+    temp_file.close()
+
+    try:
+        with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_STORED) as zip_file:
+            for file_path, archive_name in files_to_zip:
+                zip_file.write(file_path, archive_name)
+    except Exception as e:
+        os.unlink(temp_path)
+        raise HTTPException(status_code=500, detail=f"Failed to create ZIP: {str(e)}")
+
+    # Create safe filename for the ZIP
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in album_title)
+    zip_filename = f"{safe_title}.zip"
+
+    # Schedule cleanup after response is sent
+    background_tasks.add_task(cleanup_temp_file, temp_path)
+
+    return ResumableFileResponse(
+        path=temp_path,
+        filename=zip_filename,
+        media_type="application/zip",
+        request=request,
+    )
 
 
 class ResumableFileResponse(Response):

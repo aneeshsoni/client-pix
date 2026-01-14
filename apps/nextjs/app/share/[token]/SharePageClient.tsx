@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSharedImageUrl } from "@/lib/api";
+import { toast } from "sonner";
 
 // Empty string = relative URLs (works with any domain)
 const API_BASE_URL = "";
@@ -457,6 +458,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               {album.photos.length > 0 && (
                 <a
                   href={getDownloadAllUrl()}
+                  onClick={() => toast.info("Download starting...")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                 >
                   <Download className="h-4 w-4" />
@@ -549,7 +551,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   {/* Download button */}
                   <a
                     href={getDownloadUrl(selectedPhoto.id)}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.info("Download starting...");
+                    }}
                     className="p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
                     title="Download"
                   >

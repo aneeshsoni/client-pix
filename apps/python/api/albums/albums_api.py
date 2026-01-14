@@ -1,17 +1,16 @@
 """Album API endpoints."""
 
-import io
 import json
 import shutil
 import uuid
-import zipfile
 from pathlib import Path
 
 import aiofiles
 from core.config import UPLOAD_DIR
 from core.database import get_db
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
+from utils.download_util import create_photos_zip
 from models.api.albums_api_models import (
     AlbumCreate,
     AlbumDetailResponse,
@@ -842,10 +841,43 @@ async def download_photo(
     )
 
 
+@router.get("/{album_id}/download-all")
+async def download_all_photos(
+    album_id: uuid.UUID,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download all photos in an album as a zip file."""
+    # Verify album exists and get its title
+    album_stmt = select(Album).where(Album.id == album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Fetch all photos in the album
+    stmt = (
+        select(Photo)
+        .where(Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photos = result.scalars().all()
+
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos in album")
+
+    return create_photos_zip(photos, album.title, UPLOAD_DIR, request, background_tasks)
+
+
 @router.post("/{album_id}/photos/bulk-download")
 async def bulk_download_photos(
     album_id: uuid.UUID,
     photo_ids: list[uuid.UUID],
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """Download multiple photos as a zip file."""
@@ -868,40 +900,9 @@ async def bulk_download_photos(
     album_stmt = select(Album).where(Album.id == album_id)
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
-    album_name = album.name if album else "photos"
+    album_name = album.title if album else "photos"
 
-    # Create zip file in memory
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        used_names = {}
-        for photo in photos:
-            file_hash = photo.file_hash
-            file_path = UPLOAD_DIR / file_hash.storage_path
-
-            if file_path.exists():
-                # Handle duplicate filenames
-                original_name = photo.original_filename
-                if original_name in used_names:
-                    used_names[original_name] += 1
-                    name_parts = original_name.rsplit(".", 1)
-                    if len(name_parts) == 2:
-                        original_name = f"{name_parts[0]}_{used_names[original_name]}.{name_parts[1]}"
-                    else:
-                        original_name = f"{original_name}_{used_names[original_name]}"
-                else:
-                    used_names[original_name] = 0
-
-                zip_file.write(file_path, original_name)
-
-    zip_buffer.seek(0)
-
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{album_name}_photos.zip"'
-        },
-    )
+    return create_photos_zip(photos, album_name, UPLOAD_DIR, request, background_tasks)
 
 
 @router.post("/{album_id}/photos/{photo_id}/regenerate-thumbnails", status_code=200)

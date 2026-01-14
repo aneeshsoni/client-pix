@@ -1,9 +1,6 @@
 """Public share link access endpoints (no authentication required)."""
 
-import os
-import tempfile
 import uuid
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,7 +18,7 @@ from models.db.share_link_db_models import ShareLink
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from utils.download_util import ResumableFileResponse
+from utils.download_util import ResumableFileResponse, create_photos_zip
 from utils.security_util import verify_password
 
 router = APIRouter(prefix="/share", tags=["share-public"])
@@ -284,14 +281,6 @@ async def download_shared_photo(
     )
 
 
-def _cleanup_temp_file(path: str):
-    """Background task to clean up temporary file."""
-    try:
-        os.unlink(path)
-    except Exception:
-        pass  # Ignore errors during cleanup
-
-
 @router.get("/{token}/download-all")
 async def download_all_shared_photos(
     token: str,
@@ -307,73 +296,24 @@ async def download_all_shared_photos(
     """
     share_link = await _validate_share_link(token, password, db)
 
-    # Get album with photos
-    album_stmt = (
-        select(Album)
-        .where(Album.id == share_link.album_id)
-        .options(selectinload(Album.photos))
-    )
+    # Get album
+    album_stmt = select(Album).where(Album.id == share_link.album_id)
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
 
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    if not album.photos:
+    # Get photos with file_hash eagerly loaded
+    photos_stmt = (
+        select(Photo)
+        .where(Photo.album_id == share_link.album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photos_result = await db.execute(photos_stmt)
+    photos = photos_result.scalars().all()
+
+    if not photos:
         raise HTTPException(status_code=404, detail="No photos in album")
 
-    # Collect file paths and names first
-    files_to_zip: list[tuple[Path, str]] = []
-    used_names: dict[str, int] = {}
-
-    for photo in album.photos:
-        await db.refresh(photo, ["file_hash"])
-        if photo.file_hash:
-            file_path = UPLOAD_DIR / photo.file_hash.storage_path
-            if file_path.exists():
-                # Handle duplicate filenames
-                base_name = photo.original_filename
-                if base_name in used_names:
-                    used_names[base_name] += 1
-                    name_parts = base_name.rsplit(".", 1)
-                    if len(name_parts) == 2:
-                        archive_name = (
-                            f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
-                        )
-                    else:
-                        archive_name = f"{base_name}_{used_names[base_name]}"
-                else:
-                    used_names[base_name] = 0
-                    archive_name = base_name
-
-                files_to_zip.append((file_path, archive_name))
-
-    if not files_to_zip:
-        raise HTTPException(status_code=404, detail="No files available for download")
-
-    # Create ZIP file on disk (temporary file)
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    temp_path = temp_file.name
-    temp_file.close()
-
-    try:
-        with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_STORED) as zip_file:
-            for file_path, archive_name in files_to_zip:
-                zip_file.write(file_path, archive_name)
-    except Exception as e:
-        os.unlink(temp_path)
-        raise HTTPException(status_code=500, detail=f"Failed to create ZIP: {str(e)}")
-
-    # Create safe filename for the ZIP
-    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in album.title)
-    zip_filename = f"{safe_title}.zip"
-
-    # Schedule cleanup after response is sent
-    background_tasks.add_task(_cleanup_temp_file, temp_path)
-
-    return ResumableFileResponse(
-        path=temp_path,
-        filename=zip_filename,
-        media_type="application/zip",
-        request=request,
-    )
+    return create_photos_zip(photos, album.title, UPLOAD_DIR, request, background_tasks)

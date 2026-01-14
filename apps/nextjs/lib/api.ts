@@ -580,6 +580,11 @@ export function getDownloadUrl(albumId: string, photoId: string): string {
   return `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/download`;
 }
 
+export function getDownloadAllUrl(albumId: string): string {
+  // Direct link to download all photos in an album as a zip
+  return `${API_BASE_URL}/api/albums/${albumId}/download-all`;
+}
+
 // --- Share Link Types ---
 
 export interface ShareLink {
