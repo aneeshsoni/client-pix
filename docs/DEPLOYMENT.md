@@ -162,10 +162,9 @@ This section covers deploying Client Pix on your own server (VPS, dedicated serv
 
 ### Prerequisites
 
-- A Linux server (Ubuntu 22.04+ recommended)
-- Docker and Docker Compose installed
-- A domain name pointing to your server
-- SSH access to your server
+- Any machine that can run Docker
+- A domain name pointing to your server (if you want it publicly available)
+- SSH access to your machine/server/home lab
 
 ### Step 1: Server Setup
 
