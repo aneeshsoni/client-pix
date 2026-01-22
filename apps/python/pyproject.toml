@@ -19,6 +19,8 @@ dependencies = [
     "greenlet>=3.3.0",
     "bcrypt>=5.0.0",
     "pyjwt>=2.8.0",
+    "pyotp>=2.9.0",
+    "qrcode[pil]>=8.0",
 ]
 
 [dependency-groups]

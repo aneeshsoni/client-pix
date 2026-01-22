@@ -27,6 +27,11 @@ class Admin(Base):
     # First registered user becomes admin
     is_owner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # 2FA fields
+    totp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    backup_codes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

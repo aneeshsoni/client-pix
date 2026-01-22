@@ -5,17 +5,38 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from models.api.auth_api_models import (
     AdminResponse,
     ChangePasswordRequest,
+    Disable2FARequest,
+    Enable2FARequest,
     LoginRequest,
+    LoginResponseWith2FA,
     RegisterRequest,
+    Setup2FAResponse,
     SetupStatusResponse,
     TokenResponse,
     UpdateProfileRequest,
+    Verify2FARequest,
 )
 from models.db.admin_db_models import Admin
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from utils.jwt_util import create_access_token, get_admin_id_from_token
-from utils.security_util import hash_password, verify_password
+from utils.jwt_util import (
+    create_access_token,
+    create_temp_2fa_token,
+    get_admin_id_from_token,
+    verify_temp_2fa_token,
+)
+from utils.security_util import (
+    decode_backup_codes,
+    encode_backup_codes,
+    generate_backup_codes,
+    generate_qr_code_data_url,
+    generate_totp_secret,
+    get_totp_uri,
+    hash_password,
+    verify_backup_code,
+    verify_password,
+    verify_totp_code,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -118,12 +139,17 @@ async def register(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse | LoginResponseWith2FA)
 async def login(
     data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Login with email and password."""
+    """
+    Login with email and password.
+
+    If 2FA is enabled, returns a temporary token that must be verified
+    via the /verify-2fa endpoint before a full access token is issued.
+    """
     stmt = select(Admin).where(Admin.email == data.email)
     result = await db.execute(stmt)
     admin = result.scalar_one_or_none()
@@ -131,7 +157,16 @@ async def login(
     if not admin or not verify_password(data.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Generate token
+    # Check if 2FA is enabled
+    if admin.totp_enabled and admin.totp_secret:
+        # Return temporary token for 2FA verification
+        temp_token = create_temp_2fa_token(admin.id)
+        return LoginResponseWith2FA(
+            requires_2fa=True,
+            temp_token=temp_token,
+        )
+
+    # No 2FA, generate full access token
     token, expires_in = create_access_token(admin.id, admin.email)
 
     return TokenResponse(
@@ -148,6 +183,7 @@ async def get_current_user(admin: Admin = Depends(get_current_admin)):
         email=admin.email,
         name=admin.name,
         is_owner=admin.is_owner,
+        totp_enabled=admin.totp_enabled,
         created_at=admin.created_at,
     )
 
@@ -179,6 +215,7 @@ async def update_profile(
         email=admin.email,
         name=admin.name,
         is_owner=admin.is_owner,
+        totp_enabled=admin.totp_enabled,
         created_at=admin.created_at,
     )
 
@@ -208,3 +245,220 @@ async def logout():
     This endpoint exists for API completeness.
     """
     return {"message": "Logged out successfully"}
+
+
+# ============================================================================
+# 2FA Endpoints
+# ============================================================================
+
+
+@router.post("/verify-2fa", response_model=TokenResponse)
+async def verify_2fa(
+    data: Verify2FARequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify 2FA code and issue full access token.
+
+    Called after login when 2FA is enabled.
+    Accepts either TOTP code or backup code.
+    """
+    # Verify temporary token
+    admin_id = verify_temp_2fa_token(data.temp_token)
+    if not admin_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired 2FA session")
+
+    # Get admin
+    stmt = select(Admin).where(Admin.id == admin_id)
+    result = await db.execute(stmt)
+    admin = result.scalar_one_or_none()
+
+    if not admin or not admin.totp_enabled or not admin.totp_secret:
+        raise HTTPException(status_code=401, detail="2FA not configured")
+
+    # Normalize the code (remove spaces/dashes for TOTP)
+    code = data.code.strip().replace(" ", "").replace("-", "")
+
+    # Try TOTP verification first (6 digits)
+    if len(code) == 6 and code.isdigit():
+        if verify_totp_code(admin.totp_secret, code):
+            # Success - issue full token
+            token, expires_in = create_access_token(admin.id, admin.email)
+            return TokenResponse(access_token=token, expires_in=expires_in)
+        raise HTTPException(status_code=401, detail="Invalid verification code")
+
+    # Try backup code (8 hex characters)
+    is_valid, new_backup_codes = verify_backup_code(admin.backup_codes, code)
+    if is_valid:
+        # Update backup codes (remove used one)
+        admin.backup_codes = new_backup_codes
+        await db.commit()
+
+        # Success - issue full token
+        token, expires_in = create_access_token(admin.id, admin.email)
+        return TokenResponse(access_token=token, expires_in=expires_in)
+
+    raise HTTPException(status_code=401, detail="Invalid verification code")
+
+
+@router.get("/2fa/setup", response_model=Setup2FAResponse)
+async def setup_2fa(
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate 2FA setup data (QR code and backup codes).
+
+    This endpoint generates a new TOTP secret but does NOT enable 2FA.
+    The user must verify the code via /2fa/enable to activate it.
+    """
+    # Generate new secret and backup codes
+    secret = generate_totp_secret()
+    backup_codes = generate_backup_codes()
+
+    # Store the secret temporarily (not enabled yet)
+    admin.totp_secret = secret
+    admin.backup_codes = encode_backup_codes(backup_codes)
+    await db.commit()
+
+    # Generate QR code
+    uri = get_totp_uri(secret, admin.email)
+    qr_code = generate_qr_code_data_url(uri)
+
+    return Setup2FAResponse(
+        qr_code=qr_code,
+        secret=secret,
+        backup_codes=backup_codes,
+    )
+
+
+@router.post("/2fa/enable")
+async def enable_2fa(
+    data: Enable2FARequest,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Enable 2FA after verifying the setup.
+
+    Requires the current TOTP code to prove the authenticator is configured correctly,
+    and the user's password for security confirmation.
+    """
+    # Verify password
+    if not verify_password(data.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    # Check if secret exists (from setup)
+    if not admin.totp_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="2FA not set up. Call /2fa/setup first.",
+        )
+
+    # Verify the TOTP code
+    if not verify_totp_code(admin.totp_secret, data.code):
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    # Enable 2FA
+    admin.totp_enabled = True
+    await db.commit()
+
+    return {"message": "Two-factor authentication enabled successfully"}
+
+
+@router.post("/2fa/disable")
+async def disable_2fa(
+    data: Disable2FARequest,
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Disable 2FA.
+
+    Requires the current TOTP code (or backup code) and password.
+    """
+    # Verify password
+    if not verify_password(data.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    if not admin.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+
+    # Verify the code (TOTP or backup)
+    code = data.code.strip().replace(" ", "").replace("-", "")
+    code_valid = False
+
+    # Try TOTP first
+    if admin.totp_secret and len(code) == 6 and code.isdigit():
+        code_valid = verify_totp_code(admin.totp_secret, code)
+
+    # Try backup code if TOTP failed
+    if not code_valid:
+        is_valid, _ = verify_backup_code(admin.backup_codes, code)
+        code_valid = is_valid
+
+    if not code_valid:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    # Disable 2FA and clear secrets
+    admin.totp_enabled = False
+    admin.totp_secret = None
+    admin.backup_codes = None
+    await db.commit()
+
+    return {"message": "Two-factor authentication disabled successfully"}
+
+
+@router.get("/2fa/backup-codes")
+async def get_remaining_backup_codes(
+    admin: Admin = Depends(get_current_admin),
+):
+    """
+    Get the count of remaining backup codes.
+
+    Returns just the count, not the actual codes (for security).
+    """
+    if not admin.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+
+    codes = decode_backup_codes(admin.backup_codes)
+    return {"remaining_count": len(codes)}
+
+
+@router.post("/2fa/regenerate-backup-codes", response_model=Setup2FAResponse)
+async def regenerate_backup_codes(
+    data: Enable2FARequest,  # Reusing this model - requires code and password
+    admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Regenerate backup codes.
+
+    Requires the current TOTP code and password.
+    Returns new backup codes (old ones are invalidated).
+    """
+    # Verify password
+    if not verify_password(data.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    if not admin.totp_enabled or not admin.totp_secret:
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+
+    # Verify the TOTP code
+    if not verify_totp_code(admin.totp_secret, data.code):
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    # Generate new backup codes
+    backup_codes = generate_backup_codes()
+    admin.backup_codes = encode_backup_codes(backup_codes)
+    await db.commit()
+
+    # Return the setup response format (but with empty QR/secret since not regenerating those)
+    uri = get_totp_uri(admin.totp_secret, admin.email)
+    qr_code = generate_qr_code_data_url(uri)
+
+    return Setup2FAResponse(
+        qr_code=qr_code,
+        secret=admin.totp_secret,
+        backup_codes=backup_codes,
+    )

@@ -38,8 +38,9 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY . .
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Create uploads directory and make entrypoint executable
+RUN mkdir -p /app/uploads && \
+    chmod +x /app/docker-entrypoint.sh
 
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"
@@ -54,5 +55,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
     CMD curl -f http://localhost:8000/api/system/health || exit 1
 
-# Run with uvicorn (use full path to be explicit)
+# Run migrations on startup, then start uvicorn
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

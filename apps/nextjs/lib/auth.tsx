@@ -17,7 +17,13 @@ interface Admin {
   email: string;
   name: string | null;
   is_owner: boolean;
+  totp_enabled: boolean;
   created_at: string;
+}
+
+interface LoginResult {
+  requires2FA: boolean;
+  tempToken?: string;
 }
 
 interface AuthContextType {
@@ -25,7 +31,8 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  verify2FA: (tempToken: string, code: string) => Promise<void>;
   register: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => void;
   checkSetupStatus: () => Promise<boolean>;
@@ -87,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<LoginResult> => {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: {
@@ -99,6 +106,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || "Login failed");
+    }
+
+    const data = await response.json();
+
+    // Check if 2FA is required
+    if (data.requires_2fa) {
+      return {
+        requires2FA: true,
+        tempToken: data.temp_token,
+      };
+    }
+
+    // No 2FA, complete login
+    localStorage.setItem(TOKEN_KEY, data.access_token);
+    setToken(data.access_token);
+
+    // Fetch admin details
+    const meResponse = await fetch(`${API_URL}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${data.access_token}`,
+      },
+    });
+    const adminData = await meResponse.json();
+    setAdmin(adminData);
+
+    router.push("/dashboard");
+    return { requires2FA: false };
+  };
+
+  const verify2FA = async (tempToken: string, code: string): Promise<void> => {
+    const response = await fetch(`${API_URL}/auth/verify-2fa`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ temp_token: tempToken, code }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Verification failed");
     }
 
     const data = await response.json();
@@ -206,6 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!admin,
         login,
+        verify2FA,
         register,
         logout,
         checkSetupStatus,

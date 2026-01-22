@@ -98,3 +98,49 @@ def get_admin_id_from_token(token: str) -> uuid.UUID | None:
         except ValueError:
             return None
     return None
+
+
+# ============================================================================
+# 2FA Temporary Tokens
+# ============================================================================
+
+TEMP_2FA_EXPIRATION_MINUTES = 5
+
+
+def create_temp_2fa_token(admin_id: uuid.UUID) -> str:
+    """
+    Create a short-lived temporary token for 2FA verification.
+    This token is issued after password verification but before 2FA is complete.
+    """
+    expires_delta = timedelta(minutes=TEMP_2FA_EXPIRATION_MINUTES)
+    expire = datetime.now(timezone.utc) + expires_delta
+
+    payload = {
+        "sub": str(admin_id),
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "2fa_pending",
+    }
+
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_temp_2fa_token(token: str) -> uuid.UUID | None:
+    """
+    Verify a temporary 2FA token and return the admin ID.
+    Returns None if the token is invalid, expired, or wrong type.
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
+        # Check token type
+        if payload.get("type") != "2fa_pending":
+            return None
+
+        if "sub" in payload:
+            return uuid.UUID(payload["sub"])
+        return None
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
