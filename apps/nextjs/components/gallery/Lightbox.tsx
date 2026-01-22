@@ -10,6 +10,8 @@ import {
   Info,
   Download,
   Trash2,
+  Play,
+  Pause,
 } from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
 import type { Photo } from "@/lib/api";
@@ -40,8 +42,21 @@ export function Lightbox({
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { token } = useAuth();
+
+  // Slideshow auto-advance
+  useEffect(() => {
+    if (!isPlaying || photo.is_video) return;
+
+    const timer = setInterval(() => {
+      onNext();
+      setIsImageLoaded(false);
+    }, 5000); // 5 second interval
+
+    return () => clearInterval(timer);
+  }, [isPlaying, photo.is_video, onNext]);
 
   const handleDelete = useCallback(async () => {
     if (!onDelete) return;
@@ -87,19 +102,27 @@ export function Lightbox({
           onClose();
           break;
         case "ArrowRight":
+          setIsPlaying(false);
           onNext();
           setIsImageLoaded(false);
           break;
         case "ArrowLeft":
+          setIsPlaying(false);
           onPrev();
           setIsImageLoaded(false);
           break;
         case "i":
           setShowMetadata((prev) => !prev);
           break;
+        case " ":
+          e.preventDefault();
+          if (!photo.is_video) {
+            setIsPlaying((prev) => !prev);
+          }
+          break;
       }
     },
-    [onClose, onNext, onPrev]
+    [onClose, onNext, onPrev, photo.is_video]
   );
 
   useEffect(() => {
@@ -138,6 +161,21 @@ export function Lightbox({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Slideshow play/pause button - only for images */}
+            {!photo.is_video && (
+              <button
+                onClick={() => setIsPlaying((prev) => !prev)}
+                className={`p-2 rounded-full transition-colors ${
+                  isPlaying
+                    ? "bg-white/20 text-white"
+                    : "text-white/70 hover:text-white hover:bg-white/10"
+                }`}
+                title={isPlaying ? "Pause slideshow (Space)" : "Play slideshow (Space)"}
+              >
+                {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+              </button>
+            )}
+
             <button
               onClick={() => setShowMetadata((prev) => !prev)}
               className={`p-2 rounded-full transition-colors ${
@@ -225,6 +263,7 @@ export function Lightbox({
         {/* Navigation buttons */}
         <button
           onClick={() => {
+            setIsPlaying(false);
             onPrev();
             setIsImageLoaded(false);
           }}
@@ -236,6 +275,7 @@ export function Lightbox({
 
         <button
           onClick={() => {
+            setIsPlaying(false);
             onNext();
             setIsImageLoaded(false);
           }}

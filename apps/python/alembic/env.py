@@ -5,12 +5,21 @@ Configures Alembic to work with SQLAlchemy and our models.
 Uses synchronous psycopg2 for migrations (more reliable than async).
 """
 
+import sys
+from pathlib import Path
+
+# Add the project root to the Python path so imports work
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from logging.config import fileConfig
 
 from sqlalchemy import pool, create_engine
 from sqlalchemy.engine import Connection
 
 from alembic import context
+
+# Import database URL from app config (uses same env vars as the app)
+from core.config import DATABASE_URL
 
 # Import our models and config
 from models.db.base import Base
@@ -35,7 +44,7 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     """Get the database URL, converting async to sync if needed."""
-    url = config.get_main_option("sqlalchemy.url")
+    url = DATABASE_URL
     # Convert async driver to sync driver for migrations
     if url and "+asyncpg" in url:
         url = url.replace("+asyncpg", "")

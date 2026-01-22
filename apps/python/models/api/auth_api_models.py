@@ -50,6 +50,7 @@ class AdminResponse(BaseModel):
     email: str
     name: str | None
     is_owner: bool
+    totp_enabled: bool = False
     created_at: datetime
 
 
@@ -58,3 +59,44 @@ class SetupStatusResponse(BaseModel):
 
     needs_setup: bool
     message: str
+
+
+# ============================================================================
+# 2FA Models
+# ============================================================================
+
+
+class LoginResponseWith2FA(BaseModel):
+    """Response when 2FA verification is required."""
+
+    requires_2fa: bool = True
+    temp_token: str  # Temporary token valid only for 2FA verification
+
+
+class Verify2FARequest(BaseModel):
+    """Request to verify 2FA code."""
+
+    temp_token: str
+    code: str  # 6-digit TOTP code or backup code
+
+
+class Setup2FAResponse(BaseModel):
+    """Response with 2FA setup information."""
+
+    qr_code: str  # Data URL for QR code image
+    secret: str  # Manual entry secret (for users who can't scan QR)
+    backup_codes: list[str]  # One-time backup codes
+
+
+class Enable2FARequest(BaseModel):
+    """Request to enable 2FA after setup."""
+
+    code: str  # Current TOTP code to verify setup
+    password: str  # Require password confirmation
+
+
+class Disable2FARequest(BaseModel):
+    """Request to disable 2FA."""
+
+    code: str  # Current TOTP code or backup code
+    password: str  # Require password confirmation

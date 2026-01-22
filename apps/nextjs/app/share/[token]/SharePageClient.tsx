@@ -14,6 +14,7 @@ import {
   Calendar,
   Clock,
   Play,
+  Pause,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,6 +174,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     null
   );
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
+  const [isPlaying, setIsPlaying] = useState(false);
   const selectedPhoto =
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
@@ -302,21 +304,44 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       switch (e.key) {
         case "Escape":
           setSelectedPhotoIndex(null);
+          setIsPlaying(false);
           break;
         case "ArrowLeft":
+          setIsPlaying(false);
           setSelectedPhotoIndex(
             (selectedPhotoIndex - 1 + album.photos.length) % album.photos.length
           );
           break;
         case "ArrowRight":
+          setIsPlaying(false);
           setSelectedPhotoIndex((selectedPhotoIndex + 1) % album.photos.length);
+          break;
+        case " ":
+          e.preventDefault();
+          if (selectedPhoto && !selectedPhoto.is_video) {
+            setIsPlaying((prev) => !prev);
+          }
           break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedPhotoIndex, album]);
+  }, [selectedPhotoIndex, album, selectedPhoto]);
+
+  // Slideshow auto-advance
+  useEffect(() => {
+    if (!isPlaying || !album || selectedPhotoIndex === null) return;
+    if (selectedPhoto?.is_video) return;
+
+    const timer = setInterval(() => {
+      setSelectedPhotoIndex((prev) =>
+        prev !== null ? (prev + 1) % album.photos.length : null
+      );
+    }, 5000); // 5 second interval
+
+    return () => clearInterval(timer);
+  }, [isPlaying, album, selectedPhotoIndex, selectedPhoto?.is_video]);
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -537,7 +562,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-50 bg-black flex items-center justify-center"
-              onClick={() => setSelectedPhotoIndex(null)}
+              onClick={() => {
+                setSelectedPhotoIndex(null);
+                setIsPlaying(false);
+              }}
             >
               {/* Top bar controls */}
               <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
@@ -548,6 +576,25 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
                 {/* Right side buttons */}
                 <div className="flex items-center gap-2">
+                  {/* Slideshow play/pause button - only for images */}
+                  {!selectedPhoto.is_video && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsPlaying((prev) => !prev);
+                      }}
+                      className={`p-2 rounded-full transition-colors ${
+                        isPlaying
+                          ? "bg-white/20 text-white"
+                          : "bg-black/50 text-white/70 hover:text-white hover:bg-black/70"
+                      }`}
+                      title={isPlaying ? "Pause slideshow (Space)" : "Play slideshow (Space)"}
+                    >
+                      {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+                      <span className="sr-only">{isPlaying ? "Pause" : "Play"} slideshow</span>
+                    </button>
+                  )}
+
                   {/* Download button */}
                   <a
                     href={getDownloadUrl(selectedPhoto.id)}
@@ -564,7 +611,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
                   {/* Close button */}
                   <button
-                    onClick={() => setSelectedPhotoIndex(null)}
+                    onClick={() => {
+                      setSelectedPhotoIndex(null);
+                      setIsPlaying(false);
+                    }}
                     className="p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
                   >
                     <X className="h-6 w-6" />
@@ -578,6 +628,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    setIsPlaying(false);
                     setSelectedPhotoIndex(
                       (selectedPhotoIndex - 1 + album.photos.length) %
                         album.photos.length
@@ -595,6 +646,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    setIsPlaying(false);
                     setSelectedPhotoIndex(
                       (selectedPhotoIndex + 1) % album.photos.length
                     );
