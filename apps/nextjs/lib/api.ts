@@ -697,6 +697,25 @@ export interface StorageInfo {
   used_percentage: number;
 }
 
+export interface AlbumStorageStats {
+  album_id: string;
+  album_title: string;
+  album_slug: string;
+  photo_count: number;
+  video_count: number;
+  total_bytes: number;
+  percentage: number;
+}
+
+export interface StorageBreakdown {
+  total_bytes: number;
+  used_bytes: number;
+  free_bytes: number;
+  used_percentage: number;
+  albums: AlbumStorageStats[];
+  other_bytes: number;
+}
+
 export async function getStorageInfo(): Promise<StorageInfo> {
   const response = await fetch(`${API_BASE_URL}/api/system/storage`, {
     cache: "no-store",
@@ -704,6 +723,18 @@ export async function getStorageInfo(): Promise<StorageInfo> {
 
   if (!response.ok) {
     throw new Error(`Failed to fetch storage info: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getStorageBreakdown(): Promise<StorageBreakdown> {
+  const response = await fetch(`${API_BASE_URL}/api/system/storage/albums`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch storage breakdown: ${response.statusText}`);
   }
 
   return response.json();

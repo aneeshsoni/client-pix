@@ -38,6 +38,20 @@
     /* Gallery-specific */
     --gallery-bg: 0 0% 97%;
     --gallery-overlay: 0 0% 0%;
+
+    /* Storage bar album colors */
+    --storage-1: 220 70% 50%;
+    --storage-2: 160 60% 45%;
+    --storage-3: 30 80% 55%;
+    --storage-4: 280 65% 60%;
+    --storage-5: 340 75% 55%;
+    --storage-6: 45 90% 50%;
+    --storage-7: 200 70% 45%;
+    --storage-8: 120 50% 45%;
+    --storage-9: 0 70% 55%;
+    --storage-10: 260 50% 55%;
+    --storage-other: 0 0% 40%;
+    --storage-free: 0 0% 85%;
   }
 
   .dark {
@@ -75,6 +89,20 @@
     /* Gallery-specific */
     --gallery-bg: 0 0% 3%;
     --gallery-overlay: 0 0% 0%;
+
+    /* Storage bar album colors (dark mode) */
+    --storage-1: 220 70% 60%;
+    --storage-2: 160 60% 55%;
+    --storage-3: 30 80% 60%;
+    --storage-4: 280 65% 65%;
+    --storage-5: 340 75% 60%;
+    --storage-6: 45 90% 55%;
+    --storage-7: 200 70% 55%;
+    --storage-8: 120 50% 55%;
+    --storage-9: 0 70% 60%;
+    --storage-10: 260 50% 60%;
+    --storage-other: 0 0% 50%;
+    --storage-free: 0 0% 25%;
   }
 }
 
@@ -85,7 +113,9 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
 }
 
@@ -122,10 +152,6 @@
     .masonry {
       grid-template-columns: repeat(5, 1fr);
     }
-  }
-
-  .masonry-item {
-    /* No longer needed for grid, but keep for backwards compat */
   }
 
   /* Smooth image loading */
