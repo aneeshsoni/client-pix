@@ -3,13 +3,21 @@ import os
 import shutil
 
 from core.config import UPLOAD_DIR
-from fastapi import APIRouter
+from core.database import get_db
+from fastapi import APIRouter, Depends
 from models.api.system_api_models import (
+    AlbumStorageStats,
     CleanupResult,
     HealthCheckResponse,
+    StorageBreakdown,
     StorageInfo,
     TempFilesInfo,
 )
+from models.db.album_db_models import Album
+from models.db.file_hash_db_models import FileHash
+from models.db.photo_db_models import Photo
+from sqlalchemy import case, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -33,6 +41,67 @@ async def get_storage_info():
         used_bytes=used,
         free_bytes=free,
         used_percentage=round(used_percentage, 2),
+    )
+
+
+@router.get("/system/storage/albums", response_model=StorageBreakdown)
+async def get_storage_breakdown(db: AsyncSession = Depends(get_db)):
+    """Get storage breakdown by album."""
+    # Get disk usage
+    total, used, free = shutil.disk_usage(UPLOAD_DIR)
+
+    # Query: Album storage = SUM(file_size) of FileHashes per album
+    # Count photos vs videos separately
+    stmt = (
+        select(
+            Album.id,
+            Album.title,
+            Album.slug,
+            func.count(
+                case((Photo.is_video == False, Photo.id), else_=None)  # noqa: E712
+            ).label("photo_count"),
+            func.count(
+                case((Photo.is_video == True, Photo.id), else_=None)  # noqa: E712
+            ).label("video_count"),
+            func.coalesce(func.sum(FileHash.file_size), 0).label("total_bytes"),
+        )
+        .select_from(Album)
+        .outerjoin(Photo, Album.id == Photo.album_id)
+        .outerjoin(FileHash, Photo.file_hash_id == FileHash.id)
+        .group_by(Album.id, Album.title, Album.slug)
+        .order_by(func.coalesce(func.sum(FileHash.file_size), 0).desc())
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # Calculate percentages based on used bytes
+    albums = [
+        AlbumStorageStats(
+            album_id=row.id,
+            album_title=row.title,
+            album_slug=row.slug,
+            photo_count=row.photo_count,
+            video_count=row.video_count,
+            total_bytes=row.total_bytes,
+            percentage=round((row.total_bytes / used * 100) if used > 0 else 0, 2),
+        )
+        for row in rows
+    ]
+
+    # Calculate total storage used by albums
+    albums_total = sum(row.total_bytes for row in rows)
+
+    # Other = used - albums_total (includes system files, orphaned photos, etc.)
+    other_bytes = max(0, used - albums_total)
+
+    return StorageBreakdown(
+        total_bytes=total,
+        used_bytes=used,
+        free_bytes=free,
+        used_percentage=round((used / total * 100) if total > 0 else 0, 2),
+        albums=albums,
+        other_bytes=other_bytes,
     )
 
 

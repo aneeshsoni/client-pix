@@ -1,3 +1,5 @@
+import uuid
+
 from pydantic import BaseModel
 
 
@@ -31,3 +33,26 @@ class CleanupResult(BaseModel):
     cleaned_count: int
     cleaned_bytes: int
     message: str
+
+
+class AlbumStorageStats(BaseModel):
+    """Storage statistics for a single album."""
+
+    album_id: uuid.UUID
+    album_title: str
+    album_slug: str
+    photo_count: int
+    video_count: int
+    total_bytes: int
+    percentage: float
+
+
+class StorageBreakdown(BaseModel):
+    """Complete storage breakdown with album details."""
+
+    total_bytes: int
+    used_bytes: int
+    free_bytes: int
+    used_percentage: float
+    albums: list[AlbumStorageStats]
+    other_bytes: int
