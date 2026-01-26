@@ -56,7 +56,9 @@ def create_photos_zip(
                 used_names[base_name] += 1
                 name_parts = base_name.rsplit(".", 1)
                 if len(name_parts) == 2:
-                    archive_name = f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+                    archive_name = (
+                        f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+                    )
                 else:
                     archive_name = f"{base_name}_{used_names[base_name]}"
             else:

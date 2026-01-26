@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from core.config import UPLOAD_DIR
 from core.database import get_db

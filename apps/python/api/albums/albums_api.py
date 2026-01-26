@@ -8,7 +8,16 @@ from pathlib import Path
 import aiofiles
 from core.config import UPLOAD_DIR
 from core.database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from utils.download_util import create_photos_zip
 from models.api.albums_api_models import (

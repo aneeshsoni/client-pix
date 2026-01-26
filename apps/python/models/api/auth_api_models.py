@@ -3,14 +3,16 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
     """Request to register a new admin."""
 
     email: EmailStr
-    password: str
+    password: str = Field(
+        ..., min_length=8, description="Password must be at least 8 characters"
+    )
     name: str | None = None
 
 
@@ -18,14 +20,16 @@ class LoginRequest(BaseModel):
     """Request to login."""
 
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1)
 
 
 class ChangePasswordRequest(BaseModel):
     """Request to change password."""
 
-    current_password: str
-    new_password: str
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(
+        ..., min_length=8, description="Password must be at least 8 characters"
+    )
 
 
 class UpdateProfileRequest(BaseModel):
@@ -36,11 +40,18 @@ class UpdateProfileRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    """JWT token response."""
+    """JWT token response with access and refresh tokens."""
 
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
-    expires_in: int  # seconds
+    expires_in: int  # seconds for access token
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request to refresh an access token."""
+
+    refresh_token: str
 
 
 class AdminResponse(BaseModel):
@@ -92,11 +103,11 @@ class Enable2FARequest(BaseModel):
     """Request to enable 2FA after setup."""
 
     code: str  # Current TOTP code to verify setup
-    password: str  # Require password confirmation
+    password: str = Field(..., min_length=1)  # Require password confirmation
 
 
 class Disable2FARequest(BaseModel):
     """Request to disable 2FA."""
 
     code: str  # Current TOTP code or backup code
-    password: str  # Require password confirmation
+    password: str = Field(..., min_length=1)  # Require password confirmation

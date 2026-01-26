@@ -43,6 +43,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = "clientpix_token";
+const REFRESH_TOKEN_KEY = "clientpix_refresh_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [admin, setAdmin] = useState<Admin | null>(null);
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // No 2FA, complete login
     localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
     setToken(data.access_token);
 
     // Fetch admin details
@@ -151,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json();
     localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
     setToken(data.access_token);
 
     // Fetch admin details
@@ -181,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await response.json();
     localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
     setToken(data.access_token);
 
     // Fetch admin details
@@ -197,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     setAdmin(null);
     setToken(null);
     router.push("/login");
@@ -281,20 +286,72 @@ export function getAuthToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-// Helper to make authenticated API calls
+// Helper to get refresh token
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+// Helper to refresh tokens
+async function refreshTokens(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      // Refresh failed, clear tokens
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return null;
+    }
+
+    const data = await response.json();
+    localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+    return data.access_token;
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    return null;
+  }
+}
+
+// Helper to make authenticated API calls with automatic token refresh
 export async function authFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = getAuthToken();
+  let token = getAuthToken();
   const headers = new Headers(options.headers);
-  
+
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return fetch(url, {
+  let response = await fetch(url, {
     ...options,
     headers,
   });
+
+  // If unauthorized, try to refresh the token and retry
+  if (response.status === 401 && token) {
+    const newToken = await refreshTokens();
+    if (newToken) {
+      headers.set("Authorization", `Bearer ${newToken}`);
+      response = await fetch(url, {
+        ...options,
+        headers,
+      });
+    }
+  }
+
+  return response;
 }

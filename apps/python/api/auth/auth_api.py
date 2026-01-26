@@ -1,6 +1,7 @@
 """Authentication API endpoints."""
 
 from core.database import get_db
+from core.rate_limit import AUTH_RATE_LIMIT, REGISTER_RATE_LIMIT, limiter
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models.api.auth_api_models import (
     AdminResponse,
@@ -9,6 +10,7 @@ from models.api.auth_api_models import (
     Enable2FARequest,
     LoginRequest,
     LoginResponseWith2FA,
+    RefreshTokenRequest,
     RegisterRequest,
     Setup2FAResponse,
     SetupStatusResponse,
@@ -21,8 +23,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.jwt_util import (
     create_access_token,
+    create_refresh_token,
     create_temp_2fa_token,
     get_admin_id_from_token,
+    verify_refresh_token,
     verify_temp_2fa_token,
 )
 from utils.security_util import (
@@ -87,7 +91,9 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
+@limiter.limit(REGISTER_RATE_LIMIT)
 async def register(
+    request: Request,
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -130,17 +136,21 @@ async def register(
     await db.commit()
     await db.refresh(admin)
 
-    # Generate token
-    token, expires_in = create_access_token(admin.id, admin.email)
+    # Generate tokens
+    access_token, expires_in = create_access_token(admin.id, admin.email)
+    refresh_token, _ = create_refresh_token(admin.id)
 
     return TokenResponse(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expires_in=expires_in,
     )
 
 
 @router.post("/login", response_model=TokenResponse | LoginResponseWith2FA)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -166,11 +176,13 @@ async def login(
             temp_token=temp_token,
         )
 
-    # No 2FA, generate full access token
-    token, expires_in = create_access_token(admin.id, admin.email)
+    # No 2FA, generate full access and refresh tokens
+    access_token, expires_in = create_access_token(admin.id, admin.email)
+    refresh_token, _ = create_refresh_token(admin.id)
 
     return TokenResponse(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         expires_in=expires_in,
     )
 
@@ -247,13 +259,50 @@ async def logout():
     return {"message": "Logged out successfully"}
 
 
+@router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
+async def refresh(
+    request: Request,
+    data: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Refresh an access token using a valid refresh token.
+
+    Returns a new access token and refresh token pair.
+    """
+    admin_id = verify_refresh_token(data.refresh_token)
+    if not admin_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    # Get admin to verify they still exist
+    stmt = select(Admin).where(Admin.id == admin_id)
+    result = await db.execute(stmt)
+    admin = result.scalar_one_or_none()
+
+    if not admin:
+        raise HTTPException(status_code=401, detail="Admin not found")
+
+    # Generate new tokens
+    access_token, expires_in = create_access_token(admin.id, admin.email)
+    refresh_token, _ = create_refresh_token(admin.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=expires_in,
+    )
+
+
 # ============================================================================
 # 2FA Endpoints
 # ============================================================================
 
 
 @router.post("/verify-2fa", response_model=TokenResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def verify_2fa(
+    request: Request,
     data: Verify2FARequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -282,9 +331,14 @@ async def verify_2fa(
     # Try TOTP verification first (6 digits)
     if len(code) == 6 and code.isdigit():
         if verify_totp_code(admin.totp_secret, code):
-            # Success - issue full token
-            token, expires_in = create_access_token(admin.id, admin.email)
-            return TokenResponse(access_token=token, expires_in=expires_in)
+            # Success - issue full tokens
+            access_token, expires_in = create_access_token(admin.id, admin.email)
+            refresh_token, _ = create_refresh_token(admin.id)
+            return TokenResponse(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                expires_in=expires_in,
+            )
         raise HTTPException(status_code=401, detail="Invalid verification code")
 
     # Try backup code (8 hex characters)
@@ -294,9 +348,14 @@ async def verify_2fa(
         admin.backup_codes = new_backup_codes
         await db.commit()
 
-        # Success - issue full token
-        token, expires_in = create_access_token(admin.id, admin.email)
-        return TokenResponse(access_token=token, expires_in=expires_in)
+        # Success - issue full tokens
+        access_token, expires_in = create_access_token(admin.id, admin.email)
+        refresh_token, _ = create_refresh_token(admin.id)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+        )
 
     raise HTTPException(status_code=401, detail="Invalid verification code")
 
