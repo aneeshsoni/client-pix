@@ -11,6 +11,8 @@ This guide covers deploying Client Pix to production, including security conside
 5. [Coolify Deployment](#coolify-deployment)
 6. [Share Links & DNS](#share-links--dns)
 7. [Troubleshooting](#troubleshooting)
+   - [Forgot Admin Password](#forgot-admin-password)
+8. [Safe Upgrade Procedure](#safe-upgrade-procedure)
 
 ---
 
@@ -78,6 +80,10 @@ If you want to test with a custom domain locally:
 | Feature               | Implementation                         | Status         |
 | --------------------- | -------------------------------------- | -------------- |
 | Password hashing      | bcrypt with salt                       | ✅ Secure      |
+| Password strength     | Minimum 8 characters required          | ✅ Implemented |
+| JWT authentication    | Access + refresh tokens                | ✅ Implemented |
+| Rate limiting         | slowapi (5/min login, 3/min register)  | ✅ Implemented |
+| 2FA/TOTP              | With hashed backup codes               | ✅ Implemented |
 | Share link tokens     | `secrets.token_urlsafe(32)` (256-bit)  | ✅ Secure      |
 | Share link expiration | Configurable per link                  | ✅ Implemented |
 | Share link revocation | Can revoke links                       | ✅ Implemented |
@@ -125,11 +131,10 @@ The production Nginx config includes:
 
 ### What's NOT Implemented (Future Considerations)
 
-- User authentication (admin login)
-- JWT tokens for API authentication
-- Rate limiting
 - File scanning/virus detection
 - Audit logging
+- IP-based blocking
+- Account lockout after failed attempts
 
 ---
 
@@ -610,6 +615,51 @@ Next.js handles the `/share/[token]` route and communicates with the backend API
 
 ## Troubleshooting
 
+### Forgot Admin Password
+
+Since Client Pix is self-hosted and doesn't use email, password resets are done via a CLI script that requires server access.
+
+**Reset password via Docker (recommended):**
+
+```bash
+docker compose exec backend python /app/scripts/reset-password.py
+```
+
+This interactive script will:
+1. List all admin accounts
+2. Let you select which account to reset
+3. Prompt for a new password (min 8 characters)
+4. Optionally disable 2FA if it was enabled
+
+**If running locally (hybrid development):**
+
+```bash
+cd apps/python
+uv run python ../../scripts/reset-password.py
+```
+
+**Direct database reset (advanced):**
+
+If the script doesn't work, you can reset directly in the database:
+
+```bash
+# Generate a bcrypt hash for your new password
+docker compose exec backend python -c "
+from utils.security_util import hash_password
+print(hash_password('your-new-password'))
+"
+
+# Update the password in the database
+docker compose exec postgres psql -U clientpix -d clientpix -c "
+UPDATE admins SET password_hash = 'PASTE_HASH_HERE' WHERE email = 'your@email.com';
+"
+
+# If you also need to disable 2FA:
+docker compose exec postgres psql -U clientpix -d clientpix -c "
+UPDATE admins SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL WHERE email = 'your@email.com';
+"
+```
+
 ### Share links return 404
 
 1. Check `BASE_URL` is set correctly
@@ -633,3 +683,90 @@ Next.js handles the `/share/[token]` route and communicates with the backend API
 1. Verify `DATABASE_URL` format is correct
 2. Check PostgreSQL container is healthy
 3. Ensure password matches in both `DATABASE_URL` and `POSTGRES_PASSWORD`
+
+---
+
+## Safe Upgrade Procedure
+
+This section covers how to safely upgrade Client Pix without losing data.
+
+### Critical: Data Volumes
+
+Your data is stored in Docker named volumes:
+
+| Volume | Contains | Critical |
+|--------|----------|----------|
+| `postgres_data` | Database (albums, users, settings) | **YES** |
+| `uploads_data` | Photos, videos, thumbnails | **YES** |
+| `caddy_data` | SSL certificates (if using Caddy) | Yes |
+
+**NEVER run `docker compose down -v`** - the `-v` flag deletes volumes and all your data!
+
+### Before Upgrading
+
+Always run the pre-upgrade script to create backups:
+
+```bash
+# For self-hosted deployments
+./scripts/pre-upgrade.sh docker-compose.selfhost.yml
+
+# For production deployments
+./scripts/pre-upgrade.sh docker-compose.prod.yml
+
+# For development
+./scripts/pre-upgrade.sh docker-compose.dev.yml
+```
+
+This will:
+- Create a database backup in `./backups/YYYYMMDD_HHMMSS/`
+- Record current git version and Docker image versions
+- Display critical volumes that must be preserved
+
+### Performing the Upgrade
+
+```bash
+# 1. Pull latest changes
+git pull origin main
+
+# 2. Rebuild and restart (preserves volumes)
+docker compose -f docker-compose.selfhost.yml up -d --build
+
+# 3. Verify everything is working
+./scripts/health-check.sh docker-compose.selfhost.yml
+```
+
+### Health Check Script
+
+Use the health check script to verify all services are running:
+
+```bash
+./scripts/health-check.sh docker-compose.selfhost.yml
+```
+
+This checks:
+- All container health status
+- API health endpoint responding
+- Data volumes exist
+
+### If Something Goes Wrong
+
+Use the rollback script to restore from backup:
+
+```bash
+./scripts/rollback.sh docker-compose.selfhost.yml ./backups/YYYYMMDD_HHMMSS/database.sql
+```
+
+This will:
+- Optionally checkout the previous git version
+- Restore the database from backup
+- Rebuild and restart containers
+
+### Upgrade Checklist
+
+- [ ] Run `./scripts/pre-upgrade.sh` to create backup
+- [ ] Verify backup was created in `./backups/`
+- [ ] Pull latest code with `git pull`
+- [ ] Rebuild with `docker compose up -d --build`
+- [ ] Run `./scripts/health-check.sh` to verify
+- [ ] Test the application manually
+- [ ] Keep backup for at least a week before deleting
