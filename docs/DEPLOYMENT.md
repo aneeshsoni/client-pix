@@ -689,6 +689,8 @@ UPDATE admins SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL 
 
 ## Upgrading
 
+> **Using Coolify or a managed platform?** You don't need these scripts - Coolify handles upgrades automatically (pulls from GitHub, rebuilds containers, preserves volumes). The scripts below are for manual self-hosted deployments on a VPS or server.
+
 ### Quick Upgrade (Recommended)
 
 Use the unified upgrade script for one-command upgrades with automatic backup and rollback:
