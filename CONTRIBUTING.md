@@ -12,15 +12,18 @@ Thank you for your interest in contributing to Client Pix! This document provide
 ### Development Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/client-pix.git
    cd client-pix
    ```
 
 2. **Start the development environment**
+
    ```bash
    ./start.sh
    ```
+
    This will start all services with hot reload enabled.
 
 3. **Access the application**
@@ -43,29 +46,29 @@ Everything runs in Docker. No need to install Node.js, Python, or other dependen
 **Running Tests via Docker:**
 
 ```bash
+# From project root (~/dev/client-pix)
+
 # Backend tests
-docker compose exec backend uv run pytest tests/ -v
+docker compose -f docker-compose.dev.yml exec backend uv run pytest tests/ -v
 
 # Frontend tests
-docker compose exec frontend npm test
-
-# Run linters
-docker compose exec backend uv run ruff check .
-docker compose exec frontend npm run lint
+docker compose -f docker-compose.dev.yml exec frontend npm test
 ```
 
 **Adding Dependencies via Docker:**
 
 ```bash
+# From project root (~/dev/client-pix)
+
 # Add a Python package
-docker compose exec backend uv add package-name
+docker compose -f docker-compose.dev.yml exec backend uv add package-name
 
 # Add a Node.js package
-docker compose exec frontend npm install package-name
+docker compose -f docker-compose.dev.yml exec frontend npm install package-name
 
 # Add a dev dependency
-docker compose exec backend uv add --dev package-name
-docker compose exec frontend npm install --save-dev package-name
+docker compose -f docker-compose.dev.yml exec backend uv add --dev package-name
+docker compose -f docker-compose.dev.yml exec frontend npm install --save-dev package-name
 ```
 
 After adding dependencies, the lock files (`uv.lock`, `package-lock.json`) will be updated inside the container and synced to your local filesystem via volume mounts.
@@ -76,7 +79,7 @@ If you need a fresh install of all dependencies:
 
 ```bash
 ./start.sh down
-docker compose build --no-cache
+docker compose -f docker-compose.dev.yml build --no-cache
 ./start.sh
 ```
 
@@ -128,19 +131,19 @@ npm install package-name
 When running locally, you still use Docker Compose for the database and other services:
 
 ```bash
-# Start only the database
-docker compose up -d postgres
+# Start only the database (from project root)
+docker compose -f docker-compose.dev.yml up -d postgres
 ```
 
 #### Which Approach Should I Use?
 
-| Scenario | Recommended Approach |
-|----------|---------------------|
-| Quick bug fix or small contribution | Option 1 (Containerized) |
-| Regular development with IDE features | Option 2 (Hybrid) |
-| Don't want to install Node/Python | Option 1 (Containerized) |
-| Need debugging with breakpoints | Option 2 (Hybrid) |
-| CI/CD environment | Option 1 (Containerized) |
+| Scenario                              | Recommended Approach     |
+| ------------------------------------- | ------------------------ |
+| Quick bug fix or small contribution   | Option 1 (Containerized) |
+| Regular development with IDE features | Option 2 (Hybrid)        |
+| Don't want to install Node/Python     | Option 1 (Containerized) |
+| Need debugging with breakpoints       | Option 2 (Hybrid)        |
+| CI/CD environment                     | Option 1 (Containerized) |
 
 ### Project Structure
 
@@ -203,6 +206,7 @@ Prevents brute force attacks on login by limiting requests to 5/minute per IP.
 ### Pull Request Process
 
 1. **Create a branch** from `main`
+
    ```bash
    git checkout -b feature/your-feature
    ```
@@ -210,6 +214,7 @@ Prevents brute force attacks on login by limiting requests to 5/minute per IP.
 2. **Make your changes** and commit them
 
 3. **Run tests** before submitting
+
    ```bash
    # Backend tests
    cd apps/python
@@ -221,6 +226,7 @@ Prevents brute force attacks on login by limiting requests to 5/minute per IP.
    ```
 
 4. **Push and create a PR**
+
    ```bash
    git push origin feature/your-feature
    ```
@@ -251,15 +257,16 @@ npm test
 When making database schema changes:
 
 1. **Create a migration**
+
    ```bash
-   docker compose exec backend uv run alembic revision --autogenerate -m "description"
+   docker compose -f docker-compose.dev.yml exec backend uv run alembic revision --autogenerate -m "description"
    ```
 
 2. **Review the generated migration** in `apps/python/alembic/versions/`
 
 3. **Apply the migration**
    ```bash
-   docker compose exec backend uv run alembic upgrade head
+   docker compose -f docker-compose.dev.yml exec backend uv run alembic upgrade head
    ```
 
 ## Reporting Issues
