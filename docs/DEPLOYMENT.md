@@ -12,7 +12,7 @@ This guide covers deploying Client Pix to production, including security conside
 6. [Share Links & DNS](#share-links--dns)
 7. [Troubleshooting](#troubleshooting)
    - [Forgot Admin Password](#forgot-admin-password)
-8. [Safe Upgrade Procedure](#safe-upgrade-procedure)
+8. [Upgrading](#upgrading)
 
 ---
 
@@ -622,7 +622,7 @@ Since Client Pix is self-hosted and doesn't use email, password resets are done 
 **Reset password via Docker (recommended):**
 
 ```bash
-docker compose exec backend python /app/scripts/reset-password.py
+docker compose exec backend uv run python scripts/reset_password.py
 ```
 
 This interactive script will:
@@ -636,7 +636,7 @@ This interactive script will:
 
 ```bash
 cd apps/python
-uv run python ../../scripts/reset-password.py
+uv run python scripts/reset_password.py
 ```
 
 **Direct database reset (advanced):**
@@ -687,90 +687,61 @@ UPDATE admins SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL 
 
 ---
 
-## Safe Upgrade Procedure
+## Upgrading
 
-This section covers how to safely upgrade Client Pix without losing data.
+### Quick Upgrade (Recommended)
 
-### Critical: Data Volumes
-
-Your data is stored in Docker named volumes:
-
-| Volume          | Contains                           | Critical |
-| --------------- | ---------------------------------- | -------- |
-| `postgres_data` | Database (albums, users, settings) | **YES**  |
-| `uploads_data`  | Photos, videos, thumbnails         | **YES**  |
-| `caddy_data`    | SSL certificates (if using Caddy)  | Yes      |
-
-**NEVER run `docker compose down -v`** - the `-v` flag deletes volumes and all your data!
-
-### Before Upgrading
-
-Always run the pre-upgrade script to create backups:
+Use the unified upgrade script for one-command upgrades with automatic backup and rollback:
 
 ```bash
-# For self-hosted deployments
+./upgrade.sh
+```
+
+This will:
+
+1. Create a database backup
+2. Pull latest code from git
+3. Rebuild and restart containers
+4. Run health checks
+5. Offer automatic rollback if something fails
+
+**Options:**
+
+```bash
+./upgrade.sh --help              # Show all options
+./upgrade.sh --no-backup         # Skip backup (fresh installs)
+./upgrade.sh --rollback <file>   # Rollback from backup
+```
+
+### Rollback
+
+If you need to restore from a previous backup:
+
+```bash
+./upgrade.sh --rollback ./backups/YYYYMMDD_HHMMSS/database.sql
+```
+
+### Data Safety
+
+Your data is stored in Docker volumes (`postgres_data`, `uploads_data`). These are preserved during normal upgrades. The upgrade script automatically creates backups and keeps the last 5.
+
+> **Note:** The `-v` flag in `docker compose down -v` deletes volumes. The upgrade script never uses this flag.
+
+### Manual Upgrade (Advanced)
+
+If you prefer manual control:
+
+```bash
+# 1. Create backup
 ./scripts/pre-upgrade.sh docker-compose.selfhost.yml
 
-# For production deployments
-./scripts/pre-upgrade.sh docker-compose.prod.yml
-
-# For development
-./scripts/pre-upgrade.sh docker-compose.dev.yml
-```
-
-This will:
-
-- Create a database backup in `./backups/YYYYMMDD_HHMMSS/`
-- Record current git version and Docker image versions
-- Display critical volumes that must be preserved
-
-### Performing the Upgrade
-
-```bash
-# 1. Pull latest changes
+# 2. Pull and rebuild
 git pull origin main
-
-# 2. Rebuild and restart (preserves volumes)
 docker compose -f docker-compose.selfhost.yml up -d --build
 
-# 3. Verify everything is working
+# 3. Verify
 ./scripts/health-check.sh docker-compose.selfhost.yml
+
+# 4. Rollback if needed
+./scripts/rollback.sh docker-compose.selfhost.yml ./backups/*/database.sql
 ```
-
-### Health Check Script
-
-Use the health check script to verify all services are running:
-
-```bash
-./scripts/health-check.sh docker-compose.selfhost.yml
-```
-
-This checks:
-
-- All container health status
-- API health endpoint responding
-- Data volumes exist
-
-### If Something Goes Wrong
-
-Use the rollback script to restore from backup:
-
-```bash
-./scripts/rollback.sh docker-compose.selfhost.yml ./backups/YYYYMMDD_HHMMSS/database.sql
-```
-
-This will:
-
-- Optionally checkout the previous git version
-- Restore the database from backup
-- Rebuild and restart containers
-
-### Upgrade Checklist
-
-- [ ] Run `./scripts/pre-upgrade.sh` to create backup
-- [ ] Verify backup was created in `./backups/`
-- [ ] Pull latest code with `git pull`
-- [ ] Rebuild with `docker compose up -d --build`
-- [ ] Run `./scripts/health-check.sh` to verify
-- [ ] Test the application manually
-- [ ] Keep backup for at least a week before deleting
