@@ -41,7 +41,18 @@ case "${1:-up}" in
         docker compose -f $COMPOSE_FILE build --no-cache
         ;;
     fresh)
-        echo "Performing fresh rebuild: removing containers & volumes, rebuilding images (no cache), starting..."
+        echo ""
+        echo "⚠️  WARNING: This will DELETE ALL DATA including:"
+        echo "   - Database (albums, users, settings)"
+        echo "   - Uploaded photos and videos"
+        echo ""
+        read -p "Are you sure? Type 'yes' to confirm: " CONFIRM
+        if [[ "$CONFIRM" != "yes" ]]; then
+            echo "Cancelled."
+            exit 0
+        fi
+        echo ""
+        echo "Performing fresh rebuild..."
         echo "Stopping and removing containers, networks, and volumes..."
         docker compose -f $COMPOSE_FILE down -v --remove-orphans
         echo "Rebuilding images with no cache and pulling latest bases..."
