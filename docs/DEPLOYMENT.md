@@ -626,6 +626,7 @@ docker compose exec backend python /app/scripts/reset-password.py
 ```
 
 This interactive script will:
+
 1. List all admin accounts
 2. Let you select which account to reset
 3. Prompt for a new password (min 8 characters)
@@ -694,11 +695,11 @@ This section covers how to safely upgrade Client Pix without losing data.
 
 Your data is stored in Docker named volumes:
 
-| Volume | Contains | Critical |
-|--------|----------|----------|
-| `postgres_data` | Database (albums, users, settings) | **YES** |
-| `uploads_data` | Photos, videos, thumbnails | **YES** |
-| `caddy_data` | SSL certificates (if using Caddy) | Yes |
+| Volume          | Contains                           | Critical |
+| --------------- | ---------------------------------- | -------- |
+| `postgres_data` | Database (albums, users, settings) | **YES**  |
+| `uploads_data`  | Photos, videos, thumbnails         | **YES**  |
+| `caddy_data`    | SSL certificates (if using Caddy)  | Yes      |
 
 **NEVER run `docker compose down -v`** - the `-v` flag deletes volumes and all your data!
 
@@ -718,6 +719,7 @@ Always run the pre-upgrade script to create backups:
 ```
 
 This will:
+
 - Create a database backup in `./backups/YYYYMMDD_HHMMSS/`
 - Record current git version and Docker image versions
 - Display critical volumes that must be preserved
@@ -744,6 +746,7 @@ Use the health check script to verify all services are running:
 ```
 
 This checks:
+
 - All container health status
 - API health endpoint responding
 - Data volumes exist
@@ -757,6 +760,7 @@ Use the rollback script to restore from backup:
 ```
 
 This will:
+
 - Optionally checkout the previous git version
 - Restore the database from backup
 - Rebuild and restart containers
