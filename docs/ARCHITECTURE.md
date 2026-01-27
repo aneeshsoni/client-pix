@@ -48,7 +48,7 @@ We evaluated backend technologies for handling uploads, albums, users, and file 
 
 **Decision:**
 
-We chose **FastAPI (Python)** for the backend mainly for my familiarty and speed at building Python apps over NestJS or Next.js API. Plus it has the best support for ML/image recognition libraries if we ever want to implement that in the future.
+We chose **FastAPI (Python)** for the backend mainly for my familiarty and speed at building Python apps over NestJS or Next.js API. Plus it has some fo the best support for ML/image recognition libraries if we ever want to implement that in the future.
 
 **Rationale (provided by AI):**
 

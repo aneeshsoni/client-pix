@@ -564,7 +564,7 @@ Click "Deploy" and monitor the build logs.
 
 1. Use Coolify's "Environment Variables" UI to set variables
 2. See `.env.example` in the repo for all available options
-3. Only `POSTGRES_PASSWORD` is required - everything else has sensible defaults
+3. Only `POSTGRES_PASSWORD` is required - everything else already has defaults which you are free to change
 
 Coolify will inject environment variables into your containers at runtime.
 
