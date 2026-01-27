@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { StorageBreakdown, AlbumStorageStats } from "@/lib/api";
-import { StorageSegment, type SegmentData } from "./StorageSegment";
+import { StorageSegment } from "./StorageSegment";
 import { StorageLegend } from "./StorageLegend";
 import { AlbumDetailPanel } from "./AlbumDetailPanel";
 
@@ -18,7 +18,7 @@ interface ProcessedAlbums {
 
 function processAlbumsForDisplay(
   albums: AlbumStorageStats[],
-  totalBytes: number
+  totalBytes: number,
 ): ProcessedAlbums {
   // Sort by size (largest first) - already sorted from API
   const sortedAlbums = [...albums];
@@ -30,7 +30,7 @@ function processAlbumsForDisplay(
   // Calculate grouped stats
   const groupedTotalBytes = groupedAlbums.reduce(
     (sum, a) => sum + a.total_bytes,
-    0
+    0,
   );
   const groupedPercentage =
     totalBytes > 0 ? (groupedTotalBytes / totalBytes) * 100 : 0;

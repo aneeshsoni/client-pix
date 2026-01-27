@@ -129,8 +129,8 @@ export default function SettingsPage() {
       const result = await cleanupDownloadTempFiles();
       setCleanupMessage(
         `Cleaned ${result.cleaned_count} files (${formatBytes(
-          result.cleaned_bytes
-        )})`
+          result.cleaned_bytes,
+        )})`,
       );
       const data = await getTempFilesInfo();
       setTempFiles(data);
@@ -152,8 +152,8 @@ export default function SettingsPage() {
       const result = await cleanupUploadTempFiles();
       setCleanupMessage(
         `Cleaned ${result.cleaned_count} files (${formatBytes(
-          result.cleaned_bytes
-        )})`
+          result.cleaned_bytes,
+        )})`,
       );
       const data = await getTempFilesInfo();
       setTempFiles(data);
@@ -183,7 +183,7 @@ export default function SettingsPage() {
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
       setProfileError(
-        err instanceof Error ? err.message : "Failed to update profile"
+        err instanceof Error ? err.message : "Failed to update profile",
       );
     } finally {
       setProfileLoading(false);
@@ -216,7 +216,7 @@ export default function SettingsPage() {
       setTimeout(() => setPasswordSuccess(false), 3000);
     } catch (err) {
       setPasswordError(
-        err instanceof Error ? err.message : "Failed to change password"
+        err instanceof Error ? err.message : "Failed to change password",
       );
     } finally {
       setPasswordLoading(false);
@@ -265,7 +265,7 @@ export default function SettingsPage() {
       window.location.reload();
     } catch (err) {
       setTwoFAError(
-        err instanceof Error ? err.message : "Failed to enable 2FA"
+        err instanceof Error ? err.message : "Failed to enable 2FA",
       );
     } finally {
       setTwoFALoading(false);
@@ -293,7 +293,7 @@ export default function SettingsPage() {
       window.location.reload();
     } catch (err) {
       setTwoFAError(
-        err instanceof Error ? err.message : "Failed to disable 2FA"
+        err instanceof Error ? err.message : "Failed to disable 2FA",
       );
     } finally {
       setTwoFALoading(false);
@@ -445,7 +445,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <Label htmlFor="confirmPassword">
+                      Confirm New Password
+                    </Label>
                     <Input
                       id="confirmPassword"
                       type="password"
@@ -526,7 +528,9 @@ export default function SettingsPage() {
                               placeholder="000000"
                               value={twoFACode}
                               onChange={(e) =>
-                                setTwoFACode(e.target.value.replace(/[^0-9]/g, ""))
+                                setTwoFACode(
+                                  e.target.value.replace(/[^0-9]/g, ""),
+                                )
                               }
                               maxLength={6}
                               required
@@ -582,7 +586,10 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        <Button onClick={handleSetup2FA} disabled={twoFALoading}>
+                        <Button
+                          onClick={handleSetup2FA}
+                          disabled={twoFALoading}
+                        >
                           {twoFALoading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -606,7 +613,6 @@ export default function SettingsPage() {
                           <p className="text-sm text-muted-foreground mb-3">
                             Scan with your authenticator app
                           </p>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={twoFAData.qr_code}
                             alt="2FA QR Code"
@@ -685,7 +691,9 @@ export default function SettingsPage() {
                               placeholder="000000"
                               value={twoFACode}
                               onChange={(e) =>
-                                setTwoFACode(e.target.value.replace(/[^0-9]/g, ""))
+                                setTwoFACode(
+                                  e.target.value.replace(/[^0-9]/g, ""),
+                                )
                               }
                               maxLength={6}
                               required
@@ -802,7 +810,8 @@ export default function SettingsPage() {
                   <h3 className="text-lg font-semibold">Temporary Files</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Orphaned temporary files from interrupted uploads or downloads.
+                  Orphaned temporary files from interrupted uploads or
+                  downloads.
                 </p>
 
                 {cleanupMessage && (
@@ -859,7 +868,7 @@ export default function SettingsPage() {
                             files ·{" "}
                             {formatBytes(
                               tempFiles.upload_temp_files_bytes +
-                                tempFiles.chunked_uploads_bytes
+                                tempFiles.chunked_uploads_bytes,
                             )}
                           </div>
                         </div>

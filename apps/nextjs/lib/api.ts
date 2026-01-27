@@ -59,7 +59,7 @@ export interface PhotoUploadResponse {
 
 export async function createAlbum(
   title: string,
-  description?: string
+  description?: string,
 ): Promise<Album> {
   const response = await fetch(`${API_BASE_URL}/api/albums`, {
     method: "POST",
@@ -85,7 +85,7 @@ export async function listAlbums(): Promise<AlbumListResponse> {
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
       throw new Error(
-        `Failed to fetch albums: ${response.status} ${errorText}`
+        `Failed to fetch albums: ${response.status} ${errorText}`,
       );
     }
 
@@ -93,7 +93,7 @@ export async function listAlbums(): Promise<AlbumListResponse> {
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        "Network error: Unable to connect to backend. Make sure the backend is running."
+        "Network error: Unable to connect to backend. Make sure the backend is running.",
       );
     }
     throw error;
@@ -102,10 +102,10 @@ export async function listAlbums(): Promise<AlbumListResponse> {
 
 export async function getAlbum(
   albumId: string,
-  sortBy: "captured" | "uploaded" = "captured"
+  sortBy: "captured" | "uploaded" = "captured",
 ): Promise<AlbumDetail> {
   const response = await fetch(
-    `${API_BASE_URL}/api/albums/${albumId}?sort_by=${sortBy}`
+    `${API_BASE_URL}/api/albums/${albumId}?sort_by=${sortBy}`,
   );
 
   if (!response.ok) {
@@ -117,13 +117,13 @@ export async function getAlbum(
 
 export async function getAlbumBySlug(
   slug: string,
-  sortBy: "captured" | "uploaded" = "captured"
+  sortBy: "captured" | "uploaded" = "captured",
 ): Promise<AlbumDetail> {
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(
-        slug
-      )}?sort_by=${sortBy}`
+        slug,
+      )}?sort_by=${sortBy}`,
     );
 
     if (!response.ok) {
@@ -135,7 +135,7 @@ export async function getAlbumBySlug(
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        "Network error: Unable to connect to backend. Make sure the backend is running."
+        "Network error: Unable to connect to backend. Make sure the backend is running.",
       );
     }
     throw error;
@@ -144,7 +144,7 @@ export async function getAlbumBySlug(
 
 export async function updateAlbum(
   albumId: string,
-  data: { title?: string; description?: string; cover_photo_id?: string }
+  data: { title?: string; description?: string; cover_photo_id?: string },
 ): Promise<Album> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}`, {
     method: "PATCH",
@@ -163,13 +163,13 @@ export async function updateAlbum(
 
 export async function deleteAlbum(
   albumId: string,
-  deletePhotos: boolean = false
+  deletePhotos: boolean = false,
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}?delete_photos=${deletePhotos}`,
     {
       method: "DELETE",
-    }
+    },
   );
 
   if (!response.ok) {
@@ -185,7 +185,7 @@ function uploadFileWithProgress(
   url: string,
   formData: FormData,
   onProgress?: (loaded: number, total: number) => void,
-  timeoutMs: number = 15 * 60 * 1000
+  timeoutMs: number = 15 * 60 * 1000,
 ): Promise<PhotoUploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -239,14 +239,14 @@ const CHUNK_SIZE = 1 * 1024 * 1024;
 async function uploadLargeFileChunked(
   albumId: string,
   file: File,
-  onProgress?: (loaded: number, total: number) => void
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<PhotoUploadResponse> {
   // Initialize upload session
   const initResponse = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/upload/init?filename=${encodeURIComponent(
-      file.name
+      file.name,
     )}&file_size=${file.size}`,
-    { method: "POST" }
+    { method: "POST" },
   );
 
   if (!initResponse.ok) {
@@ -272,12 +272,12 @@ async function uploadLargeFileChunked(
         headers: {
           "Content-Type": "application/octet-stream",
         },
-      }
+      },
     );
 
     if (!chunkResponse.ok) {
       throw new Error(
-        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`
+        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`,
       );
     }
 
@@ -288,7 +288,7 @@ async function uploadLargeFileChunked(
   // Complete the upload
   const completeResponse = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/complete`,
-    { method: "POST" }
+    { method: "POST" },
   );
 
   if (!completeResponse.ok) {
@@ -317,7 +317,7 @@ export async function uploadPhotosToAlbum(
   files: File[],
   onProgress?: (uploaded: number, total: number) => void,
   onUploadProgress?: (loaded: number, total: number) => void,
-  batchSize: number = 1 // Default to 1 for better progress tracking
+  _batchSize: number = 1, // Default to 1 for better progress tracking
 ): Promise<PhotoUploadResponse> {
   const allPhotos: Photo[] = [];
   let totalUploaded = 0;
@@ -342,14 +342,14 @@ export async function uploadPhotosToAlbum(
             file.size /
             1024 /
             1024
-          ).toFixed(1)} MB)`
+          ).toFixed(1)} MB)`,
         );
         result = await uploadLargeFileChunked(
           albumId,
           file,
-          (loaded, total) => {
+          (loaded, _total) => {
             onUploadProgress?.(uploadedSize + loaded, totalSize);
-          }
+          },
         );
       } else {
         // Use regular upload for small files
@@ -359,10 +359,10 @@ export async function uploadPhotosToAlbum(
         result = await uploadFileWithProgress(
           `${API_BASE_URL}/api/albums/${albumId}/photos`,
           formData,
-          (loaded, total) => {
+          (loaded, _total) => {
             onUploadProgress?.(uploadedSize + loaded, totalSize);
           },
-          15 * 60 * 1000
+          15 * 60 * 1000,
         );
       }
 
@@ -394,13 +394,13 @@ export async function uploadPhotosToAlbum(
 
 export async function deletePhoto(
   albumId: string,
-  photoId: string
+  photoId: string,
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}`,
     {
       method: "DELETE",
-    }
+    },
   );
 
   if (!response.ok) {
@@ -410,7 +410,7 @@ export async function deletePhoto(
 
 export async function bulkDeletePhotos(
   albumId: string,
-  photoIds: string[]
+  photoIds: string[],
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-delete`,
@@ -420,7 +420,7 @@ export async function bulkDeletePhotos(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(photoIds),
-    }
+    },
   );
 
   if (!response.ok) {
@@ -430,7 +430,7 @@ export async function bulkDeletePhotos(
 
 export async function bulkDownloadPhotos(
   albumId: string,
-  photoIds: string[]
+  photoIds: string[],
 ): Promise<Blob> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-download`,
@@ -440,7 +440,7 @@ export async function bulkDownloadPhotos(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(photoIds),
-    }
+    },
   );
 
   if (!response.ok) {
@@ -452,13 +452,13 @@ export async function bulkDownloadPhotos(
 
 export async function setCoverPhoto(
   albumId: string,
-  photoId: string
+  photoId: string,
 ): Promise<Album> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/cover/${photoId}`,
     {
       method: "PUT",
-    }
+    },
   );
 
   if (!response.ok) {
@@ -469,22 +469,22 @@ export async function setCoverPhoto(
 }
 
 export async function getAllPhotos(
-  sortBy: "captured" | "uploaded" = "captured"
+  sortBy: "captured" | "uploaded" = "captured",
 ): Promise<Photo[]> {
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/albums/photos/all?sort_by=${encodeURIComponent(
-        sortBy
+        sortBy,
       )}`,
       {
         cache: "no-store",
-      }
+      },
     );
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
       throw new Error(
-        `Failed to fetch photos: ${response.status} ${errorText}`
+        `Failed to fetch photos: ${response.status} ${errorText}`,
       );
     }
 
@@ -493,7 +493,7 @@ export async function getAllPhotos(
   } catch (error) {
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       throw new Error(
-        "Network error: Unable to connect to backend. Make sure the backend is running."
+        "Network error: Unable to connect to backend. Make sure the backend is running.",
       );
     }
     throw error;
@@ -513,7 +513,7 @@ export async function getAllPhotos(
 export function getSecureImageUrl(
   photoId: string,
   variant: "thumbnail" | "web" | "original" = "web",
-  token?: string
+  token?: string,
 ): string {
   let url = `${API_BASE_URL}/api/files/photo/${photoId}?variant=${variant}`;
   if (token) {
@@ -531,7 +531,7 @@ export function getSecureImageUrl(
 export function getSecureImageUrlByHash(
   fileHash: string,
   variant: "thumbnail" | "web" | "original" = "web",
-  token?: string
+  token?: string,
 ): string {
   let url = `${API_BASE_URL}/api/files/hash/${fileHash}?variant=${variant}`;
   if (token) {
@@ -552,7 +552,7 @@ export function getSharedImageUrl(
   shareToken: string,
   photoId: string,
   variant: "thumbnail" | "web" | "original" = "web",
-  password?: string
+  password?: string,
 ): string {
   let url = `${API_BASE_URL}/api/files/share/${shareToken}/photo/${photoId}?variant=${variant}`;
   if (password) {
@@ -567,11 +567,11 @@ export function getSharedImageUrl(
  */
 export function getImageUrl(path: string): string {
   console.warn(
-    "getImageUrl is deprecated. Use getSecureImageUrl or getSharedImageUrl instead."
+    "getImageUrl is deprecated. Use getSecureImageUrl or getSharedImageUrl instead.",
   );
   // Return a placeholder that will 404 - this helps identify code that needs updating
   return `${API_BASE_URL}/api/files/deprecated?path=${encodeURIComponent(
-    path
+    path,
   )}`;
 }
 
@@ -611,7 +611,7 @@ export async function createShareLink(
   albumId: string,
   password?: string,
   customSlug?: string,
-  expiresAt?: string
+  expiresAt?: string,
 ): Promise<ShareLink> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
     method: "POST",
@@ -651,7 +651,7 @@ export async function updateShareLink(
     password?: string | null;
     expires_at?: string | null;
     is_revoked?: boolean;
-  }
+  },
 ): Promise<ShareLink> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
@@ -661,7 +661,7 @@ export async function updateShareLink(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(updates),
-    }
+    },
   );
 
   if (!response.ok) {
@@ -674,13 +674,13 @@ export async function updateShareLink(
 
 export async function deleteShareLink(
   albumId: string,
-  shareLinkId: string
+  shareLinkId: string,
 ): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
     {
       method: "DELETE",
-    }
+    },
   );
 
   if (!response.ok) {
@@ -734,7 +734,9 @@ export async function getStorageBreakdown(): Promise<StorageBreakdown> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch storage breakdown: ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch storage breakdown: ${response.statusText}`,
+    );
   }
 
   return response.json();

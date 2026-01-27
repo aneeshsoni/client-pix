@@ -2,16 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import {
-  Copy,
-  Check,
-  Lock,
-  Globe,
-  Trash2,
-  Loader2,
-  Clock,
-  Calendar,
-} from "lucide-react";
+import { Copy, Check, Lock, Globe, Trash2, Loader2, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -135,7 +126,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
         albumId,
         isPasswordProtected ? password : undefined,
         customSlug.trim() || undefined,
-        expiresAt
+        expiresAt,
       );
       setShareLinks((prev) => [newLink, ...prev]);
       setPassword("");
@@ -173,7 +164,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
         console.error("Failed to delete share link:", error);
       }
     },
-    [albumId]
+    [albumId],
   );
 
   const handleToggleRevoke = useCallback(
@@ -185,13 +176,13 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
           is_revoked: !link.is_revoked,
         });
         setShareLinks((prev) =>
-          prev.map((l) => (l.id === link.id ? updated : l))
+          prev.map((l) => (l.id === link.id ? updated : l)),
         );
       } catch (error) {
         console.error("Failed to update share link:", error);
       }
     },
-    [albumId]
+    [albumId],
   );
 
   const handleClose = useCallback(() => {
@@ -222,7 +213,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                     value={customSlug}
                     onChange={(e) => {
                       setCustomSlug(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")
+                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
                       );
                       setSlugError(null);
                     }}

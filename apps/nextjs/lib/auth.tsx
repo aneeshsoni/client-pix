@@ -37,7 +37,10 @@ interface AuthContextType {
   logout: () => void;
   checkSetupStatus: () => Promise<boolean>;
   updateProfile: (data: { email?: string; name?: string }) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -50,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
+  const _pathname = usePathname();
 
   // Check for existing session on mount
   useEffect(() => {
@@ -95,7 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string): Promise<LoginResult> => {
+  const login = async (
+    email: string,
+    password: string,
+  ): Promise<LoginResult> => {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: {
@@ -229,7 +235,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAdmin(updatedAdmin);
   };
 
-  const changePassword = async (currentPassword: string, newPassword: string) => {
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string,
+  ) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) throw new Error("Not authenticated");
 
@@ -327,9 +336,9 @@ async function refreshTokens(): Promise<string | null> {
 // Helper to make authenticated API calls with automatic token refresh
 export async function authFetch(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
-  let token = getAuthToken();
+  const token = getAuthToken();
   const headers = new Headers(options.headers);
 
   if (token) {

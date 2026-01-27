@@ -22,7 +22,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { isAuthenticated } = useAuth();
   const pathname = usePathname();
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [isLoadingAlbums, setIsLoadingAlbums] = useState(true);
+  const [_isLoadingAlbums, setIsLoadingAlbums] = useState(true);
 
   // Fetch albums for sidebar
   useEffect(() => {
@@ -67,7 +67,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       title: "Settings",
       url: "/dashboard/settings",
       icon: Settings2,
-      isActive: pathname === "/dashboard/settings" || pathname?.startsWith("/dashboard/settings"),
+      isActive:
+        pathname === "/dashboard/settings" ||
+        pathname?.startsWith("/dashboard/settings"),
     };
 
     return [galleryItem, albumsItem, settingsItem];

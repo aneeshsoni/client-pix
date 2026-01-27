@@ -29,7 +29,7 @@ export function StorageLegend({
   onAlbumClick,
 }: StorageLegendProps) {
   const otherPercentage = totalBytes > 0 ? (otherBytes / totalBytes) * 100 : 0;
-  const freePercentage = totalBytes > 0 ? (freeBytes / totalBytes) * 100 : 0;
+  const _freePercentage = totalBytes > 0 ? (freeBytes / totalBytes) * 100 : 0;
 
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
