@@ -16,7 +16,8 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only"
 os.environ["ALLOWED_ORIGINS"] = "http://localhost,http://testserver"
 
-from core.database import Base, get_db
+from core.database import get_db
+from models.db.base import Base
 from main import app
 from models.db.admin_db_models import Admin
 from utils.security_util import hash_password
