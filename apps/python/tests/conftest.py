@@ -10,21 +10,39 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
-# Set test environment variables before importing app
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
-os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only"
-os.environ["ALLOWED_ORIGINS"] = "http://localhost,http://testserver"
+# Determine test database URL
+# Use PostgreSQL if DATABASE_URL is set (CI), otherwise fall back to SQLite (local dev)
+TEST_DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "sqlite+aiosqlite:///:memory:"
+)
 
+# Set environment variables before importing app (only if not already set)
+if "DATABASE_URL" not in os.environ:
+    os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+if "JWT_SECRET" not in os.environ:
+    os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only"
+if "ALLOWED_ORIGINS" not in os.environ:
+    os.environ["ALLOWED_ORIGINS"] = "http://localhost,http://testserver"
+
+# ruff: noqa: E402
+# Imports must happen after setting environment variables
 from core.database import get_db
-from models.db.base import Base
+from core.rate_limit import limiter
 from main import app
 from models.db.admin_db_models import Admin
+from models.db.base import Base
 from utils.security_util import hash_password
 
 # Create test database engine
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+# Use NullPool for PostgreSQL to avoid connection issues in tests
+engine_kwargs = {"echo": False}
+if "postgresql" in TEST_DATABASE_URL:
+    engine_kwargs["poolclass"] = NullPool
+
+test_engine = create_async_engine(TEST_DATABASE_URL, **engine_kwargs)
 TestSessionLocal = sessionmaker(
     test_engine, class_=AsyncSession, expire_on_commit=False
 )
@@ -59,6 +77,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Disable rate limiter for tests
+    limiter.enabled = False
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
