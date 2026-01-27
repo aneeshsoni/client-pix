@@ -14,10 +14,7 @@ from sqlalchemy.pool import NullPool
 
 # Determine test database URL
 # Use PostgreSQL if DATABASE_URL is set (CI), otherwise fall back to SQLite (local dev)
-TEST_DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "sqlite+aiosqlite:///:memory:"
-)
+TEST_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 # Set environment variables before importing app (only if not already set)
 if "DATABASE_URL" not in os.environ:
