@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class ShareLinkCreate(BaseModel):
     """Request to create a share link."""
 
-    password: str | None = Field(None, min_length=4, max_length=100)
+    password: str | None = Field(None, min_length=8, max_length=100)
     expires_at: datetime | None = None
     custom_slug: str | None = Field(
         None,
@@ -47,7 +47,7 @@ class ShareLinkListResponse(BaseModel):
 class ShareLinkUpdate(BaseModel):
     """Request to update a share link."""
 
-    password: str | None = Field(None, min_length=4, max_length=100)
+    password: str | None = Field(None, min_length=8, max_length=100)
     expires_at: datetime | None = None
     is_revoked: bool | None = None
     custom_slug: str | None = Field(

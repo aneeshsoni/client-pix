@@ -1,8 +1,13 @@
-#!/bin/bash
 set -e
 
+# Ensure dependencies are installed (handles anonymous volume sync issues in dev)
+if [[ ! -f "/app/.venv/bin/alembic" ]]; then
+    echo "Syncing dependencies..."
+    uv sync --frozen
+fi
+
 echo "Running database migrations..."
-alembic upgrade head
+uv run alembic upgrade head
 
 echo "Starting application..."
 exec "$@"

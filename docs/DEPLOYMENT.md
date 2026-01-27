@@ -11,6 +11,8 @@ This guide covers deploying Client Pix to production, including security conside
 5. [Coolify Deployment](#coolify-deployment)
 6. [Share Links & DNS](#share-links--dns)
 7. [Troubleshooting](#troubleshooting)
+   - [Forgot Admin Password](#forgot-admin-password)
+8. [Upgrading](#upgrading)
 
 ---
 
@@ -78,6 +80,10 @@ If you want to test with a custom domain locally:
 | Feature               | Implementation                         | Status         |
 | --------------------- | -------------------------------------- | -------------- |
 | Password hashing      | bcrypt with salt                       | ✅ Secure      |
+| Password strength     | Minimum 8 characters required          | ✅ Implemented |
+| JWT authentication    | Access + refresh tokens                | ✅ Implemented |
+| Rate limiting         | slowapi (5/min login, 3/min register)  | ✅ Implemented |
+| 2FA/TOTP              | With hashed backup codes               | ✅ Implemented |
 | Share link tokens     | `secrets.token_urlsafe(32)` (256-bit)  | ✅ Secure      |
 | Share link expiration | Configurable per link                  | ✅ Implemented |
 | Share link revocation | Can revoke links                       | ✅ Implemented |
@@ -125,11 +131,10 @@ The production Nginx config includes:
 
 ### What's NOT Implemented (Future Considerations)
 
-- User authentication (admin login)
-- JWT tokens for API authentication
-- Rate limiting
 - File scanning/virus detection
 - Audit logging
+- IP-based blocking
+- Account lockout after failed attempts
 
 ---
 
@@ -555,13 +560,11 @@ Click "Deploy" and monitor the build logs.
 
 ### Coolify & Environment Variables
 
-**Q: Does Coolify pick up `.env.template` files?**
-
-No, Coolify doesn't automatically read `.env.template`. Instead:
+**Q: How do I set environment variables in Coolify?**
 
 1. Use Coolify's "Environment Variables" UI to set variables
-2. Or create a `.env` file in the Coolify UI
-3. The `.env.template` serves as documentation for which variables are needed
+2. See `.env.example` in the repo for all available options
+3. Only `POSTGRES_PASSWORD` is required - everything else already has defaults which you are free to change
 
 Coolify will inject environment variables into your containers at runtime.
 
@@ -610,6 +613,52 @@ Next.js handles the `/share/[token]` route and communicates with the backend API
 
 ## Troubleshooting
 
+### Forgot Admin Password
+
+Since Client Pix is self-hosted and doesn't use email, password resets are done via a CLI script that requires server access.
+
+**Reset password via Docker (recommended):**
+
+```bash
+docker compose exec backend uv run python scripts/reset_password.py
+```
+
+This interactive script will:
+
+1. List all admin accounts
+2. Let you select which account to reset
+3. Prompt for a new password (min 8 characters)
+4. Optionally disable 2FA if it was enabled
+
+**If running locally (hybrid development):**
+
+```bash
+cd apps/python
+uv run python scripts/reset_password.py
+```
+
+**Direct database reset (advanced):**
+
+If the script doesn't work, you can reset directly in the database:
+
+```bash
+# Generate a bcrypt hash for your new password
+docker compose exec backend python -c "
+from utils.security_util import hash_password
+print(hash_password('your-new-password'))
+"
+
+# Update the password in the database
+docker compose exec postgres psql -U clientpix -d clientpix -c "
+UPDATE admins SET password_hash = 'PASTE_HASH_HERE' WHERE email = 'your@email.com';
+"
+
+# If you also need to disable 2FA:
+docker compose exec postgres psql -U clientpix -d clientpix -c "
+UPDATE admins SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL WHERE email = 'your@email.com';
+"
+```
+
 ### Share links return 404
 
 1. Check `BASE_URL` is set correctly
@@ -633,3 +682,66 @@ Next.js handles the `/share/[token]` route and communicates with the backend API
 1. Verify `DATABASE_URL` format is correct
 2. Check PostgreSQL container is healthy
 3. Ensure password matches in both `DATABASE_URL` and `POSTGRES_PASSWORD`
+
+---
+
+## Upgrading
+
+> **Using Coolify or a managed platform?** You don't need these scripts - Coolify handles upgrades automatically (pulls from GitHub, rebuilds containers, preserves volumes). The scripts below are for manual self-hosted deployments on a VPS or server.
+
+### Quick Upgrade (Recommended)
+
+Use the unified upgrade script for one-command upgrades with automatic backup and rollback:
+
+```bash
+./upgrade.sh
+```
+
+This will:
+
+1. Create a database backup
+2. Pull latest code from git
+3. Rebuild and restart containers
+4. Run health checks
+5. Offer automatic rollback if something fails
+
+**Options:**
+
+```bash
+./upgrade.sh --help              # Show all options
+./upgrade.sh --no-backup         # Skip backup (fresh installs)
+./upgrade.sh --rollback <file>   # Rollback from backup
+```
+
+### Rollback
+
+If you need to restore from a previous backup:
+
+```bash
+./upgrade.sh --rollback ./backups/YYYYMMDD_HHMMSS/database.sql
+```
+
+### Data Safety
+
+Your data is stored in Docker volumes (`postgres_data`, `uploads_data`). These are preserved during normal upgrades. The upgrade script automatically creates backups and keeps the last 5.
+
+> **Note:** The `-v` flag in `docker compose down -v` deletes volumes. The upgrade script never uses this flag.
+
+### Manual Upgrade (Advanced)
+
+If you prefer manual control:
+
+```bash
+# 1. Create backup
+./scripts/pre-upgrade.sh docker-compose.selfhost.yml
+
+# 2. Pull and rebuild
+git pull origin main
+docker compose -f docker-compose.selfhost.yml up -d --build
+
+# 3. Verify
+./scripts/health-check.sh docker-compose.selfhost.yml
+
+# 4. Rollback if needed
+./scripts/rollback.sh docker-compose.selfhost.yml ./backups/*/database.sql
+```

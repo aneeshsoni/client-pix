@@ -1,18 +1,19 @@
 from contextlib import asynccontextmanager
 
+from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
+from core.database import init_db
+from core.rate_limit import limiter
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
-from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
-from core.database import init_db
+from router import router
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from utils.cleanup_util import (
     cleanup_old_temp_files,
     start_cleanup_task,
     stop_cleanup_task,
 )
-
-from router import router
 
 
 @asynccontextmanager
@@ -47,14 +48,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware for frontend
 # Origins are configured via ALLOWED_ORIGINS environment variable
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 app.include_router(router)

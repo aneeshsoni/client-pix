@@ -68,7 +68,7 @@ function groupPhotosByDate(photos: SharedPhoto[]): PhotoGroup[] {
     // Use local date components to avoid timezone shifts
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}-${String(d.getDate()).padStart(2, "0")}`;
 
     if (!groups.has(dateKey)) {
@@ -114,7 +114,7 @@ function SharedPhotoCard({
     shareToken,
     photo.id,
     "thumbnail",
-    password || undefined
+    password || undefined,
   );
 
   return (
@@ -171,7 +171,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(
-    null
+    null,
   );
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -229,6 +229,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       setError("Unable to load share link. Please try again later.");
       setState("error");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const accessAlbum = useCallback(
@@ -239,13 +240,13 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/share/${token}/access?sort_by=${encodeURIComponent(
-            sortBy
+            sortBy,
           )}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password: pwd || null }),
-          }
+          },
         );
 
         if (response.status === 401) {
@@ -257,7 +258,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         if (response.status === 410) {
           const data = await response.json();
           setError(
-            data.detail || "This share link has expired or been revoked."
+            data.detail || "This share link has expired or been revoked.",
           );
           setState("expired");
           return;
@@ -289,7 +290,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         setIsVerifying(false);
       }
     },
-    [token, sortBy]
+    [token, sortBy],
   );
 
   useEffect(() => {
@@ -309,7 +310,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         case "ArrowLeft":
           setIsPlaying(false);
           setSelectedPhotoIndex(
-            (selectedPhotoIndex - 1 + album.photos.length) % album.photos.length
+            (selectedPhotoIndex - 1 + album.photos.length) %
+              album.photos.length,
           );
           break;
         case "ArrowRight":
@@ -336,7 +338,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
     const timer = setInterval(() => {
       setSelectedPhotoIndex((prev) =>
-        prev !== null ? (prev + 1) % album.photos.length : null
+        prev !== null ? (prev + 1) % album.photos.length : null,
       );
     }, 5000); // 5 second interval
 
@@ -521,7 +523,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   <div className="masonry">
                     {group.photos.map((photo) => {
                       const globalIndex = album.photos.findIndex(
-                        (p) => p.id === photo.id
+                        (p) => p.id === photo.id,
                       );
                       return (
                         <SharedPhotoCard
@@ -588,10 +590,20 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                           ? "bg-white/20 text-white"
                           : "bg-black/50 text-white/70 hover:text-white hover:bg-black/70"
                       }`}
-                      title={isPlaying ? "Pause slideshow (Space)" : "Play slideshow (Space)"}
+                      title={
+                        isPlaying
+                          ? "Pause slideshow (Space)"
+                          : "Play slideshow (Space)"
+                      }
                     >
-                      {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
-                      <span className="sr-only">{isPlaying ? "Pause" : "Play"} slideshow</span>
+                      {isPlaying ? (
+                        <Pause className="h-6 w-6" />
+                      ) : (
+                        <Play className="h-6 w-6" />
+                      )}
+                      <span className="sr-only">
+                        {isPlaying ? "Pause" : "Play"} slideshow
+                      </span>
                     </button>
                   )}
 
@@ -631,7 +643,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     setIsPlaying(false);
                     setSelectedPhotoIndex(
                       (selectedPhotoIndex - 1 + album.photos.length) %
-                        album.photos.length
+                        album.photos.length,
                     );
                   }}
                   className="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
@@ -648,7 +660,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     e.stopPropagation();
                     setIsPlaying(false);
                     setSelectedPhotoIndex(
-                      (selectedPhotoIndex + 1) % album.photos.length
+                      (selectedPhotoIndex + 1) % album.photos.length,
                     );
                   }}
                   className="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
@@ -674,7 +686,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                       token,
                       selectedPhoto.id,
                       "web",
-                      verifiedPassword || undefined
+                      verifiedPassword || undefined,
                     )}
                     controls
                     autoPlay
@@ -687,7 +699,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                       token,
                       selectedPhoto.id,
                       "web",
-                      verifiedPassword || undefined
+                      verifiedPassword || undefined,
                     )}
                     alt={selectedPhoto.original_filename}
                     width={selectedPhoto.width}

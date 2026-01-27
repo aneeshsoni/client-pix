@@ -41,7 +41,8 @@ def _get_or_create_jwt_secret(upload_dir: Path) -> str:
 
 JWT_SECRET = _get_or_create_jwt_secret(UPLOAD_DIR)
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
+JWT_EXPIRATION_HOURS = 1  # 1 hour for access tokens
+REFRESH_EXPIRATION_DAYS = 7  # 7 days for refresh tokens
 
 
 def create_access_token(admin_id: uuid.UUID, email: str) -> tuple[str, int]:
@@ -98,6 +99,60 @@ def get_admin_id_from_token(token: str) -> uuid.UUID | None:
         except ValueError:
             return None
     return None
+
+
+# ============================================================================
+# Refresh Tokens
+# ============================================================================
+
+
+def create_refresh_token(admin_id: uuid.UUID) -> tuple[str, int]:
+    """
+    Create a JWT refresh token for session continuity.
+
+    Refresh tokens have longer expiration and are used to obtain new access tokens
+    without requiring the user to re-authenticate.
+
+    Returns:
+        tuple: (token_string, expires_in_seconds)
+    """
+    expires_delta = timedelta(days=REFRESH_EXPIRATION_DAYS)
+    expire = datetime.now(timezone.utc) + expires_delta
+
+    payload = {
+        "sub": str(admin_id),
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "refresh",
+    }
+
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    expires_in = int(expires_delta.total_seconds())
+
+    return token, expires_in
+
+
+def verify_refresh_token(token: str) -> uuid.UUID | None:
+    """
+    Verify a refresh token and return the admin ID.
+
+    Returns:
+        uuid.UUID: Admin ID if valid, None if invalid or expired
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
+        # Check token type
+        if payload.get("type") != "refresh":
+            return None
+
+        if "sub" in payload:
+            return uuid.UUID(payload["sub"])
+        return None
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
 
 # ============================================================================

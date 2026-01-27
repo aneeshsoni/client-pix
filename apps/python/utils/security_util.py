@@ -56,12 +56,25 @@ def generate_backup_codes(count: int = 10) -> list[str]:
 
 
 def encode_backup_codes(codes: list[str]) -> str:
-    """Encode backup codes as JSON for database storage."""
-    return json.dumps(codes)
+    """
+    Hash and encode backup codes for secure database storage.
+
+    Backup codes are hashed with bcrypt before storage so they cannot
+    be read if the database is compromised.
+    """
+    hashed_codes = [
+        bcrypt.hashpw(code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        for code in codes
+    ]
+    return json.dumps(hashed_codes)
 
 
 def decode_backup_codes(encoded: str | None) -> list[str]:
-    """Decode backup codes from database storage."""
+    """
+    Decode backup codes from database storage.
+
+    Note: Returns hashed codes. Use verify_backup_code() for verification.
+    """
     if not encoded:
         return []
     return json.loads(encoded)
@@ -69,19 +82,23 @@ def decode_backup_codes(encoded: str | None) -> list[str]:
 
 def verify_backup_code(encoded_codes: str | None, code: str) -> tuple[bool, str | None]:
     """
-    Verify a backup code and return updated codes if valid.
+    Verify a backup code against hashed storage and return updated codes if valid.
+
     Returns (is_valid, new_encoded_codes).
-    Backup codes are single-use, so the used code is removed.
+    Backup codes are single-use, so the used code is removed after successful verification.
     """
-    codes = decode_backup_codes(encoded_codes)
+    hashed_codes = decode_backup_codes(encoded_codes)
+    if not hashed_codes:
+        return False, None
+
     # Normalize the input code (uppercase, no spaces/dashes)
     normalized_code = code.upper().replace("-", "").replace(" ", "")
 
-    for stored_code in codes:
-        if stored_code == normalized_code:
+    for i, stored_hash in enumerate(hashed_codes):
+        if bcrypt.checkpw(normalized_code.encode("utf-8"), stored_hash.encode("utf-8")):
             # Remove the used code
-            codes.remove(stored_code)
-            return True, encode_backup_codes(codes) if codes else None
+            remaining_codes = hashed_codes[:i] + hashed_codes[i + 1 :]
+            return True, json.dumps(remaining_codes) if remaining_codes else None
 
     return False, None
 
