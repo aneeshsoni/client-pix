@@ -560,13 +560,11 @@ Click "Deploy" and monitor the build logs.
 
 ### Coolify & Environment Variables
 
-**Q: Does Coolify pick up `.env.template` files?**
-
-No, Coolify doesn't automatically read `.env.template`. Instead:
+**Q: How do I set environment variables in Coolify?**
 
 1. Use Coolify's "Environment Variables" UI to set variables
-2. Or create a `.env` file in the Coolify UI
-3. The `.env.template` serves as documentation for which variables are needed
+2. See `.env.example` in the repo for all available options
+3. Only `POSTGRES_PASSWORD` is required - everything else has sensible defaults
 
 Coolify will inject environment variables into your containers at runtime.
 
