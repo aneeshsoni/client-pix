@@ -6,17 +6,17 @@ A self-hosted photography client gallery for professional photographers. Share p
 
 ## Features
 
-- 📸 **Photo & Video Uploads** — Support for images and videos with automatic thumbnail generation
-- 🖼️ **Smart Galleries** — Organize photos into albums with drag-and-drop
-- 🔗 **Secure Sharing** — Generate expiring share links for client delivery
-- 📱 **Responsive Design** — Beautiful on desktop, tablet, and mobile
-- 🎨 **Modern UI** — Built with Next.js and shadcn/ui
-- 🔒 **Self-Hosted** — Your data stays on your server
-- 🚀 **Easy Deploy** — One-command deployment
+- 📸 **Photo & Video Uploads** - Support for images and videos with automatic thumbnail generation
+- 🖼️ **Smart Galleries** - Organize photos into albums with drag-and-drop
+- 🔗 **Secure Sharing** - Generate expiring share links for client delivery
+- 📱 **Responsive Design** - Beautiful on desktop, tablet, and mobile
+- 🎨 **Modern UI** - Built with Next.js and shadcn/ui
+- 🔒 **Self-Hosted** - Your data stays on your server
+- 🚀 **Easy Deploy** - One-command deployment
 
 ## Quick Start
 
-This is the fastest way to get this project up and running locally, more deployment options are outlined in [DEPLOYMENT.md](docs/DEPLOYMENT.md) including deploying on a VPS, deploying via a PaaS like Coolify, or deploying on any machine that supports Docker.
+This is the fastest way to get this project up and running locally, more deployment options are outlined in [DEPLOYMENT.md](docs/DEPLOYMENT.md) including deploying on a VPS, deploying via a PaaS like Coolify, or deploying on any machine t hat supports Docker.
 
 ### Requirements
 
