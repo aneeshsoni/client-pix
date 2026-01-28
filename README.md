@@ -102,7 +102,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - 🐛 [Issue Tracker](https://github.com/aneeshsoni/client-pix/issues)
 - 💬 [Discussions](https://github.com/aneeshsoni/client-pix/discussions)
-
-```
-
-```
