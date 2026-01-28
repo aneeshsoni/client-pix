@@ -20,8 +20,8 @@ This is the fastest way to get this project up and running locally, more deploym
 
 ### Requirements
 
-- **Docker:** Docker Engine 20.10+ with Compose
-- **Domain:** A domain name pointing to your server (if you want it publicly accessible HTTPS)
+- **Docker:** Install Docker Desktop or Docker Engine
+- **Domain (Optional):** A domain name pointing to your server if you want it publicly accessible HTTPS
 
 ### Local Development
 

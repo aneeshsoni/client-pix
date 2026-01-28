@@ -1,3 +1,4 @@
+#!/bin/bash
 # Rollback script for Client Pix
 # Restores from backup if an upgrade fails
 

@@ -1,3 +1,4 @@
+#!/bin/bash
 # Ruff linting and formatting for Python files
 
 cd apps/python
