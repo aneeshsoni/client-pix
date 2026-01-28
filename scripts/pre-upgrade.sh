@@ -1,3 +1,4 @@
+#!/bin/bash
 # Pre-upgrade safety script for Client Pix
 # Creates backups and performs safety checks before upgrading
 

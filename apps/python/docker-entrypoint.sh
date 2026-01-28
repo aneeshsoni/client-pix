@@ -1,7 +1,8 @@
+#!/bin/sh
 set -e
 
 # Ensure dependencies are installed (handles anonymous volume sync issues in dev)
-if [[ ! -f "/app/.venv/bin/alembic" ]]; then
+if [ ! -f "/app/.venv/bin/alembic" ]; then
     echo "Syncing dependencies..."
     uv sync --frozen
 fi

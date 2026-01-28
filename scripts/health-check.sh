@@ -1,3 +1,4 @@
+#!/bin/bash
 # Health check script for Client Pix containers
 # Verifies all services are running and healthy
 

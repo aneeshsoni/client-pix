@@ -1,3 +1,4 @@
+#!/bin/bash
 # =============================================================================
 # Unified upgrade script for Client Pix
 # Handles backup, upgrade, health check, and rollback in one command
