@@ -20,7 +20,7 @@ from core.config import (
     WEB_QUALITY,
 )
 from PIL import Image
-from PIL.ExifTags import TAGS
+from PIL.ExifTags import Base, IFD, TAGS
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
@@ -316,25 +316,36 @@ class StorageService:
             return (0, 0)
 
     def get_exif_date(self, file_path: Path) -> datetime | None:
-        """Extract the captured date from EXIF data."""
+        """Extract the captured date from EXIF data.
+
+        Prioritizes DateTimeOriginal (when photo was taken) over DateTime (modify date).
+        DateTimeOriginal is stored in the Exif sub-IFD, not the main IFD.
+        """
         try:
             with Image.open(file_path) as img:
                 exif = img.getexif()
                 if not exif:
                     return None
 
-                # Try DateTimeOriginal (when photo was taken)
-                for tag_id, value in exif.items():
-                    tag = TAGS.get(tag_id, tag_id)
-                    if tag == "DateTimeOriginal":
+                # DateTimeOriginal is in the Exif sub-IFD, not the main IFD
+                exif_ifd = exif.get_ifd(IFD.Exif)
+                if exif_ifd:
+                    # Try DateTimeOriginal (tag 36867) - when photo was taken
+                    date_original = exif_ifd.get(Base.DateTimeOriginal)
+                    if date_original:
                         # Format: "2023:12:25 14:30:45"
-                        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+                        return datetime.strptime(date_original, "%Y:%m:%d %H:%M:%S")
 
-                # Fallback to DateTime if DateTimeOriginal not found
-                for tag_id, value in exif.items():
-                    tag = TAGS.get(tag_id, tag_id)
-                    if tag == "DateTime":
-                        return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+                    # Try DateTimeDigitized (tag 36868) as second choice
+                    date_digitized = exif_ifd.get(Base.DateTimeDigitized)
+                    if date_digitized:
+                        return datetime.strptime(date_digitized, "%Y:%m:%d %H:%M:%S")
+
+                # DateTime in main IFD is the modify date - only use as last resort
+                # and only if we have no better option (not ideal for photos)
+                date_time = exif.get(Base.DateTime)
+                if date_time:
+                    return datetime.strptime(date_time, "%Y:%m:%d %H:%M:%S")
         except Exception:
             pass
         return None
