@@ -20,7 +20,7 @@ from core.config import (
     WEB_QUALITY,
 )
 from PIL import Image
-from PIL.ExifTags import Base, IFD, TAGS
+from PIL.ExifTags import Base, IFD
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
