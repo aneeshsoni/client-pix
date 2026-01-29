@@ -43,14 +43,18 @@ export function MetadataDrawer({
   isOpen,
   onClose,
 }: MetadataDrawerProps) {
-  const formattedDate = new Date(photo.created_at).toLocaleDateString("en-US", {
+  // Prefer captured_at (EXIF date when photo was taken) over created_at (upload date)
+  const displayDate = photo.captured_at || photo.created_at;
+  const dateLabel = photo.captured_at ? "Taken" : "Uploaded";
+
+  const formattedDate = new Date(displayDate).toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  const formattedTime = new Date(photo.created_at).toLocaleTimeString("en-US", {
+  const formattedTime = new Date(displayDate).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -100,7 +104,7 @@ export function MetadataDrawer({
               {/* Date & Time */}
               <MetadataRow
                 icon={<Calendar className="h-4 w-4" />}
-                label="Uploaded"
+                label={dateLabel}
                 value={`${formattedDate} at ${formattedTime}`}
               />
 
