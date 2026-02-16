@@ -12,6 +12,7 @@ interface PhotoGridWithDatesProps {
   photos: Photo[];
   albumId?: string;
   onPhotoDeleted?: (photoId: string) => void;
+  dateField?: "captured" | "uploaded";
 }
 
 interface PhotoGroup {
@@ -20,11 +21,11 @@ interface PhotoGroup {
   photos: Photo[];
 }
 
-function groupPhotosByDate(photos: Photo[]): PhotoGroup[] {
+function groupPhotosByDate(photos: Photo[], dateField: "captured" | "uploaded"): PhotoGroup[] {
   const groups: Map<string, Photo[]> = new Map();
 
   photos.forEach((photo) => {
-    const date = photo.captured_at || photo.created_at;
+    const date = dateField === "uploaded" ? photo.created_at : (photo.captured_at || photo.created_at);
     const d = new Date(date);
     // Use local date components to avoid timezone shifts
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -58,6 +59,7 @@ export function PhotoGridWithDates({
   photos,
   albumId,
   onPhotoDeleted,
+  dateField = "captured",
 }: PhotoGridWithDatesProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const {
@@ -68,7 +70,7 @@ export function PhotoGridWithDates({
     isSelected,
   } = usePhotoSelection();
 
-  const photoGroups = useMemo(() => groupPhotosByDate(photos), [photos]);
+  const photoGroups = useMemo(() => groupPhotosByDate(photos, dateField), [photos, dateField]);
 
   const openLightbox = useCallback(
     (index: number) => {
