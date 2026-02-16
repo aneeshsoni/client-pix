@@ -2,7 +2,6 @@
 
 import { use, useEffect, useState, useCallback } from "react";
 import {
-  PhotoGrid,
   PhotoGridWithDates,
   ShareModal,
   AlbumSettingsModal,
@@ -300,17 +299,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               Click &quot;Add Photos&quot; to upload photos
             </p>
           </div>
-        ) : sortBy === "captured" ? (
+        ) : (
           <PhotoGridWithDates
             photos={album.photos}
             albumId={album.id}
             onPhotoDeleted={fetchAlbum}
-          />
-        ) : (
-          <PhotoGrid
-            photos={album.photos}
-            albumId={album.id}
-            onPhotoDeleted={fetchAlbum}
+            dateField={sortBy}
           />
         )}
       </div>
