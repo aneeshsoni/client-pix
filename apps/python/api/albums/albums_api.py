@@ -32,6 +32,7 @@ from models.api.albums_api_models import (
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
+from models.db.share_link_db_models import ShareLink
 from services.storage_service import storage_service
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,6 +106,26 @@ async def list_albums(
         cover_result = await db.execute(cover_stmt)
         cover_hashes = {row[0]: row[1] for row in cover_result.all()}
 
+    # Get active share links to determine share status per album
+    album_ids = [album.id for album, _ in rows]
+    share_statuses: dict[uuid.UUID, str] = {}
+    if album_ids:
+        share_stmt = select(ShareLink.album_id, ShareLink.is_password_protected).where(
+            ShareLink.album_id.in_(album_ids),
+            ShareLink.is_revoked.is_(False),
+            (ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > func.now()),
+        )
+        share_result = await db.execute(share_stmt)
+        for album_id_val, is_password_protected in share_result.all():
+            if album_id_val in share_statuses:
+                # If any link is public, album is "public" (most permissive wins)
+                if not is_password_protected:
+                    share_statuses[album_id_val] = "public"
+            else:
+                share_statuses[album_id_val] = (
+                    "password" if is_password_protected else "public"
+                )
+
     albums = [
         build_album_response(
             album,
@@ -112,6 +133,7 @@ async def list_albums(
             cover_photo_hash=cover_hashes.get(album.cover_photo_id)
             if album.cover_photo_id
             else None,
+            share_status=share_statuses.get(album.id),
         )
         for album, photo_count in rows
     ]
