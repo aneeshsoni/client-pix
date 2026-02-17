@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { ImageIcon, Settings } from "lucide-react";
+import { Globe, ImageIcon, Lock, Settings } from "lucide-react";
 import type { Album } from "@/lib/api";
 import { getSecureImageUrlByHash } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -108,6 +108,20 @@ export function AlbumCard({ album, index, onSettingsClick }: AlbumCardProps) {
           </div>
         </div>
       </Link>
+
+      {/* Share status indicator */}
+      {album.share_status && (
+        <div
+          className="absolute top-3 left-3 p-1.5 rounded-full bg-black/40 text-white/80 backdrop-blur-sm"
+          title={album.share_status === "password" ? "Shared (password protected)" : "Shared (public)"}
+        >
+          {album.share_status === "password" ? (
+            <Lock className="h-3.5 w-3.5" />
+          ) : (
+            <Globe className="h-3.5 w-3.5" />
+          )}
+        </div>
+      )}
 
       {/* Settings button */}
       {onSettingsClick && (

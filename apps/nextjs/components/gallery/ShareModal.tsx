@@ -217,7 +217,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                       );
                       setSlugError(null);
                     }}
-                    placeholder="my-wedding-photos"
+                    placeholder="insert-your-custom-link-name-here"
                     className="flex-1"
                   />
                 </div>
