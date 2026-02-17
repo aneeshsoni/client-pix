@@ -558,6 +558,23 @@ async def complete_chunked_upload(
 
     duplicate_count = 0
     if file_hash:
+        # Check if photo already exists in this album
+        existing_photo_stmt = select(Photo).where(
+            Photo.album_id == album_id,
+            Photo.file_hash_id == file_hash.id,
+        )
+        existing_photo_result = await db.execute(existing_photo_stmt)
+        existing_photo = existing_photo_result.scalar_one_or_none()
+
+        if existing_photo:
+            await db.refresh(existing_photo, ["file_hash"])
+            await db.commit()
+            return PhotoUploadResponse(
+                photos=[build_photo_response(existing_photo)],
+                uploaded_count=0,
+                duplicate_count=1,
+            )
+
         file_hash.reference_count += 1
         duplicate_count = 1
     else:
@@ -647,6 +664,21 @@ async def upload_photos_to_album(
         file_hash = hash_result.scalar_one_or_none()
 
         if file_hash:
+            # Check if photo already exists in this album
+            existing_photo_stmt = select(Photo).where(
+                Photo.album_id == album_id,
+                Photo.file_hash_id == file_hash.id,
+            )
+            existing_photo_result = await db.execute(existing_photo_stmt)
+            existing_photo = existing_photo_result.scalar_one_or_none()
+
+            if existing_photo:
+                # Already in this album — skip, count as duplicate
+                duplicate_count += 1
+                await db.refresh(existing_photo, ["file_hash"])
+                photos.append(build_photo_response(existing_photo))
+                continue
+
             file_hash.reference_count += 1
         else:
             file_hash = FileHash(
