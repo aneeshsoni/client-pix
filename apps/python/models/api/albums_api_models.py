@@ -60,6 +60,7 @@ class AlbumResponse(BaseModel):
     cover_photo_id: uuid.UUID | None
     cover_photo_thumbnail: str | None  # Path to cover photo thumbnail
     photo_count: int
+    share_status: str | None = None  # None, "public", or "password"
     created_at: datetime
     updated_at: datetime
 

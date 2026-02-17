@@ -18,6 +18,7 @@ export interface Album {
   cover_photo_id: string | null;
   cover_photo_thumbnail: string | null;
   photo_count: number;
+  share_status: "public" | "password" | null;
   created_at: string;
   updated_at: string;
 }
