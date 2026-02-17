@@ -16,7 +16,6 @@ def build_album_response(
     album: Album,
     photo_count: int,
     cover_photo_hash: str | None = None,
-    share_status: str | None = None,
 ) -> AlbumResponse:
     """
     Build an AlbumResponse from an Album model.
@@ -25,7 +24,6 @@ def build_album_response(
         album: The Album model
         photo_count: Number of photos in the album
         cover_photo_hash: SHA256 hash of the cover photo's file (if any)
-        share_status: None (not shared), "public", or "password"
     """
     cover_thumbnail = None
     if cover_photo_hash:
@@ -39,7 +37,6 @@ def build_album_response(
         cover_photo_id=album.cover_photo_id,
         cover_photo_thumbnail=cover_thumbnail,
         photo_count=photo_count,
-        share_status=share_status,
         created_at=album.created_at,
         updated_at=album.updated_at,
     )
