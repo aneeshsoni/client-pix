@@ -655,9 +655,6 @@ async def upload_photos_to_album(
             original_filename=file.filename or "unnamed",
         )
 
-        if stored.is_duplicate:
-            duplicate_count += 1
-
         # Get or create FileHash record
         hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
         hash_result = await db.execute(hash_stmt)
@@ -675,8 +672,6 @@ async def upload_photos_to_album(
             if existing_photo:
                 # Already in this album — skip, count as duplicate
                 duplicate_count += 1
-                await db.refresh(existing_photo, ["file_hash"])
-                photos.append(build_photo_response(existing_photo))
                 continue
 
             file_hash.reference_count += 1
