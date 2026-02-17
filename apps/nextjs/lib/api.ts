@@ -317,6 +317,7 @@ export async function uploadPhotosToAlbum(
   files: File[],
   onProgress?: (uploaded: number, total: number) => void,
   onUploadProgress?: (loaded: number, total: number) => void,
+  onDuplicate?: (duplicateCount: number) => void,
   _batchSize: number = 1, // Default to 1 for better progress tracking
 ): Promise<PhotoUploadResponse> {
   const allPhotos: Photo[] = [];
@@ -369,6 +370,9 @@ export async function uploadPhotosToAlbum(
       allPhotos.push(...result.photos);
       totalUploaded += result.uploaded_count;
       totalDuplicates += result.duplicate_count;
+      if (result.duplicate_count > 0) {
+        onDuplicate?.(totalDuplicates);
+      }
       successfullyProcessed += 1;
       uploadedSize += file.size;
     } catch (error) {

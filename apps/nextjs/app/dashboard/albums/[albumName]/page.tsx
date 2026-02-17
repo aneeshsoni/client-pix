@@ -70,6 +70,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
+  const [uploadDuplicates, setUploadDuplicates] = useState<number>(0);
   const [uploadBytes, setUploadBytes] = useState<{
     loaded: number;
     total: number;
@@ -93,6 +94,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         `Preparing ${files.length} file${files.length > 1 ? "s" : ""}...`
       );
       setUploadProgressPercent(0);
+      setUploadDuplicates(0);
       setUploadBytes(null);
 
       try {
@@ -108,6 +110,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             const percent = Math.round((loaded / total) * 100);
             setUploadProgressPercent(percent);
             setUploadBytes({ loaded, total });
+          },
+          (duplicateCount) => {
+            setUploadDuplicates(duplicateCount);
           }
         );
         setUploadProgress("Upload complete! Refreshing...");
@@ -115,6 +120,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         await fetchAlbum(); // Refresh album data
         setUploadProgress("");
         setUploadProgressPercent(0);
+        setUploadDuplicates(0);
         setUploadBytes(null);
       } catch (err) {
         console.error("Failed to upload photos:", err);
@@ -264,6 +270,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                       uploadBytes.total
                     )}`
                   : "Please wait while files are being uploaded..."}
+                {uploadDuplicates > 0 && (
+                  <span className="ml-2">
+                    ({uploadDuplicates} duplicate{uploadDuplicates !== 1 ? "s" : ""} skipped)
+                  </span>
+                )}
               </p>
             </div>
             {uploadProgressPercent > 0 && (
