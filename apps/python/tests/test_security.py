@@ -61,8 +61,8 @@ class TestBackupCodes:
         codes = generate_backup_codes(count=3)
         for code in codes:
             assert len(code) == 8
-            assert code.isupper()
-            # Should be valid hex
+            # Should be valid hex with no lowercase letters
+            assert code == code.upper()
             int(code, 16)
 
     def test_encode_backup_codes_hashed(self):

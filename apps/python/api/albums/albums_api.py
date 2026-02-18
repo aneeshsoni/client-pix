@@ -200,6 +200,8 @@ async def get_album(
         cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
         if cover_hash
         else None,
+        cover_photo_position_x=album.cover_photo_position_x,
+        cover_photo_position_y=album.cover_photo_position_y,
         photo_count=len(photos),
         created_at=album.created_at,
         updated_at=album.updated_at,
@@ -265,6 +267,8 @@ async def get_album_by_slug(
         cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
         if cover_hash
         else None,
+        cover_photo_position_x=album.cover_photo_position_x,
+        cover_photo_position_y=album.cover_photo_position_y,
         photo_count=len(photos),
         created_at=album.created_at,
         updated_at=album.updated_at,
@@ -303,6 +307,17 @@ async def update_album(
         if not photo_check.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Photo not in this album")
         album.cover_photo_id = data.cover_photo_id
+        # Reset position to center when cover photo changes,
+        # unless new position is explicitly provided in the same request
+        if data.cover_photo_position_x is None:
+            album.cover_photo_position_x = 50.0
+        if data.cover_photo_position_y is None:
+            album.cover_photo_position_y = 50.0
+
+    if data.cover_photo_position_x is not None:
+        album.cover_photo_position_x = data.cover_photo_position_x
+    if data.cover_photo_position_y is not None:
+        album.cover_photo_position_y = data.cover_photo_position_y
 
     await db.commit()
     await db.refresh(album)
@@ -355,6 +370,8 @@ async def set_cover_photo(
         raise HTTPException(status_code=404, detail="Photo not found in this album")
 
     album.cover_photo_id = photo_id
+    album.cover_photo_position_x = 50.0
+    album.cover_photo_position_y = 50.0
     await db.commit()
     await db.refresh(album)
 

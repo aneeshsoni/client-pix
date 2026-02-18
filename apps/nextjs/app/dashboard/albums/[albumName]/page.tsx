@@ -339,6 +339,8 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             slug: album.slug,
             cover_photo_id: album.cover_photo_id,
             cover_photo_thumbnail: null, // Not needed for settings modal
+            cover_photo_position_x: album.cover_photo_position_x,
+            cover_photo_position_y: album.cover_photo_position_y,
             photo_count: album.photo_count,
             share_status: album.share_status ?? null,
             created_at: album.created_at,
