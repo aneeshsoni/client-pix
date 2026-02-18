@@ -24,6 +24,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+const CROP_ASPECT = 4 / 3;
+
 function CoverPositionAdjuster({
   photoId,
   token,
@@ -39,66 +41,112 @@ function CoverPositionAdjuster({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const dragStartRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
 
   const imageUrl = getSecureImageUrl(photoId, "web", token || undefined);
 
-  const updatePosition = (e: React.PointerEvent) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-    onPositionChange(Math.round(x), Math.round(y));
-  };
+  // Load natural image dimensions
+  useEffect(() => {
+    const img = new window.Image();
+    img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = imageUrl;
+  }, [imageUrl]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     setIsDragging(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    updatePosition(e);
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: positionX,
+      startPosY: positionY,
+    };
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    updatePosition(e);
+    if (!isDragging || !dragStartRef.current || !containerRef.current || !imgSize) return;
+
+    const container = containerRef.current;
+    const containerW = container.offsetWidth;
+    const containerH = container.offsetHeight;
+
+    const imgAspect = imgSize.w / imgSize.h;
+    const containerAspect = CROP_ASPECT;
+
+    // Determine how much overflow exists on each axis
+    // When object-cover is used, the image scales to fill the container
+    // If image is wider than container aspect, there's horizontal overflow
+    // If image is taller, there's vertical overflow
+    let overflowX = 0;
+    let overflowY = 0;
+
+    if (imgAspect > containerAspect) {
+      // Image is wider — horizontal overflow
+      const scaledImgW = containerH * imgAspect;
+      overflowX = scaledImgW - containerW;
+    } else {
+      // Image is taller — vertical overflow
+      const scaledImgH = containerW / imgAspect;
+      overflowY = scaledImgH - containerH;
+    }
+
+    const dx = e.clientX - dragStartRef.current.startX;
+    const dy = e.clientY - dragStartRef.current.startY;
+
+    // Convert pixel drag to percentage change
+    // Dragging left/up should increase position (show more of right/bottom)
+    let newX = dragStartRef.current.startPosX;
+    let newY = dragStartRef.current.startPosY;
+
+    if (overflowX > 0) {
+      newX = dragStartRef.current.startPosX - (dx / overflowX) * 100;
+    }
+    if (overflowY > 0) {
+      newY = dragStartRef.current.startPosY - (dy / overflowY) * 100;
+    }
+
+    newX = Math.max(0, Math.min(100, Math.round(newX)));
+    newY = Math.max(0, Math.min(100, Math.round(newY)));
+
+    onPositionChange(newX, newY);
   };
 
   const handlePointerUp = () => {
     setIsDragging(false);
+    dragStartRef.current = null;
   };
 
   return (
-    <div
-      ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      className="relative aspect-[4/3] overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-crosshair select-none touch-none"
-    >
-      <Image
-        src={imageUrl}
-        alt="Cover preview"
-        fill
-        className="object-cover pointer-events-none"
-        style={{
-          objectPosition: `${positionX}% ${positionY}%`,
-        }}
-        sizes="500px"
-        unoptimized
-        draggable={false}
-      />
-      {/* Focal point indicator */}
+    <div className="space-y-2">
       <div
-        className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white pointer-events-none"
-        style={{
-          left: `${positionX}%`,
-          top: `${positionY}%`,
-          boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)",
-        }}
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        className={`relative aspect-[4/3] overflow-hidden rounded-lg border-2 select-none touch-none transition-colors ${
+          isDragging
+            ? "border-primary cursor-grabbing"
+            : "border-dashed border-muted-foreground/30 cursor-grab"
+        }`}
       >
-        <div className="absolute inset-0 rounded-full bg-white/30" />
-      </div>
-      <div className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded backdrop-blur-sm pointer-events-none">
-        Click or drag to set focal point
+        {/* The actual cover image with object-position applied */}
+        <img
+          src={imageUrl}
+          alt="Cover preview"
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          style={{
+            objectPosition: `${positionX}% ${positionY}%`,
+          }}
+          draggable={false}
+        />
+        {/* Instruction hint */}
+        <div className="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none">
+          <span className="text-xs bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-sm">
+            Drag to reposition
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -336,9 +384,9 @@ export function AlbumSettingsModal({
           {/* Cover Position Adjustment */}
           {selectedCoverId && !isLoading && (
             <div>
-              <Label className="text-sm font-medium">Adjust Cover Position</Label>
+              <Label className="text-sm font-medium">Reposition Cover</Label>
               <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-                Drag the focal point to adjust which part of the image is visible
+                Drag the image to adjust which part is visible as the cover
               </p>
               <CoverPositionAdjuster
                 photoId={selectedCoverId}
