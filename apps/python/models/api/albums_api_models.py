@@ -22,6 +22,8 @@ class AlbumUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     cover_photo_id: uuid.UUID | None = None
+    cover_photo_position_x: float | None = Field(None, ge=0, le=100)
+    cover_photo_position_y: float | None = Field(None, ge=0, le=100)
 
 
 # --- Response Models ---
@@ -59,6 +61,8 @@ class AlbumResponse(BaseModel):
     slug: str
     cover_photo_id: uuid.UUID | None
     cover_photo_thumbnail: str | None  # Path to cover photo thumbnail
+    cover_photo_position_x: float
+    cover_photo_position_y: float
     photo_count: int
     share_status: str | None = None  # None, "public", or "password"
     created_at: datetime

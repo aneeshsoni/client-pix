@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Loader2, Check, Trash2 } from "lucide-react";
@@ -18,12 +18,91 @@ import {
   updateAlbum,
   deleteAlbum,
   getAlbum,
-  setCoverPhoto,
   getSecureImageUrl,
   type Album,
   type Photo,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+
+function CoverPositionAdjuster({
+  photoId,
+  token,
+  positionX,
+  positionY,
+  onPositionChange,
+}: {
+  photoId: string;
+  token: string | null;
+  positionX: number;
+  positionY: number;
+  onPositionChange: (x: number, y: number) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const imageUrl = getSecureImageUrl(photoId, "web", token || undefined);
+
+  const updatePosition = (e: React.PointerEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+    onPositionChange(Math.round(x), Math.round(y));
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    updatePosition(e);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    updatePosition(e);
+  };
+
+  const handlePointerUp = () => {
+    setIsDragging(false);
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      className="relative aspect-[4/3] overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/30 cursor-crosshair select-none touch-none"
+    >
+      <Image
+        src={imageUrl}
+        alt="Cover preview"
+        fill
+        className="object-cover pointer-events-none"
+        style={{
+          objectPosition: `${positionX}% ${positionY}%`,
+        }}
+        sizes="500px"
+        unoptimized
+        draggable={false}
+      />
+      {/* Focal point indicator */}
+      <div
+        className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white pointer-events-none"
+        style={{
+          left: `${positionX}%`,
+          top: `${positionY}%`,
+          boxShadow: "0 0 0 1px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)",
+        }}
+      >
+        <div className="absolute inset-0 rounded-full bg-white/30" />
+      </div>
+      <div className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-1 rounded backdrop-blur-sm pointer-events-none">
+        Click or drag to set focal point
+      </div>
+    </div>
+  );
+}
 
 interface AlbumSettingsModalProps {
   album: Album | null;
@@ -44,6 +123,8 @@ export function AlbumSettingsModal({
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedCoverId, setSelectedCoverId] = useState<string | null>(null);
+  const [positionX, setPositionX] = useState(50);
+  const [positionY, setPositionY] = useState(50);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -56,6 +137,8 @@ export function AlbumSettingsModal({
       setTitle(album.title);
       setDescription(album.description || "");
       setSelectedCoverId(album.cover_photo_id);
+      setPositionX(album.cover_photo_position_x);
+      setPositionY(album.cover_photo_position_y);
       setShowDeleteConfirm(false);
 
       // Fetch photos for cover selection
@@ -69,21 +152,49 @@ export function AlbumSettingsModal({
     }
   }, [open, album]);
 
+  const handleCoverSelect = useCallback(
+    (photoId: string) => {
+      if (photoId !== selectedCoverId) {
+        setPositionX(50);
+        setPositionY(50);
+      }
+      setSelectedCoverId(photoId);
+    },
+    [selectedCoverId]
+  );
+
   const handleSave = useCallback(async () => {
     if (!album) return;
 
     setIsSaving(true);
     try {
-      // Update title and description
-      await updateAlbum(album.id, {
+      const updates: {
+        title?: string;
+        description?: string;
+        cover_photo_id?: string;
+        cover_photo_position_x?: number;
+        cover_photo_position_y?: number;
+      } = {
         title: title.trim(),
         description: description.trim() || undefined,
-      });
+      };
 
-      // Update cover photo if changed
+      // Include cover photo if changed
       if (selectedCoverId && selectedCoverId !== album.cover_photo_id) {
-        await setCoverPhoto(album.id, selectedCoverId);
+        updates.cover_photo_id = selectedCoverId;
       }
+
+      // Include position if changed or if cover photo changed
+      if (
+        positionX !== album.cover_photo_position_x ||
+        positionY !== album.cover_photo_position_y ||
+        selectedCoverId !== album.cover_photo_id
+      ) {
+        updates.cover_photo_position_x = positionX;
+        updates.cover_photo_position_y = positionY;
+      }
+
+      await updateAlbum(album.id, updates);
 
       onOpenChange(false);
       onAlbumUpdated?.();
@@ -97,6 +208,8 @@ export function AlbumSettingsModal({
     title,
     description,
     selectedCoverId,
+    positionX,
+    positionY,
     onOpenChange,
     onAlbumUpdated,
   ]);
@@ -185,7 +298,7 @@ export function AlbumSettingsModal({
                 {photos.map((photo) => (
                   <motion.button
                     key={photo.id}
-                    onClick={() => setSelectedCoverId(photo.id)}
+                    onClick={() => handleCoverSelect(photo.id)}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className={`relative aspect-square rounded-md overflow-hidden border-2 transition-colors ${
@@ -219,6 +332,26 @@ export function AlbumSettingsModal({
               </div>
             )}
           </div>
+
+          {/* Cover Position Adjustment */}
+          {selectedCoverId && !isLoading && (
+            <div>
+              <Label className="text-sm font-medium">Adjust Cover Position</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+                Drag the focal point to adjust which part of the image is visible
+              </p>
+              <CoverPositionAdjuster
+                photoId={selectedCoverId}
+                token={token}
+                positionX={positionX}
+                positionY={positionY}
+                onPositionChange={(x, y) => {
+                  setPositionX(x);
+                  setPositionY(y);
+                }}
+              />
+            </div>
+          )}
 
           {/* Danger Zone */}
           <div className="border-t pt-6">

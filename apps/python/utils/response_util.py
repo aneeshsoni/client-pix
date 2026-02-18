@@ -38,6 +38,8 @@ def build_album_response(
         slug=album.slug,
         cover_photo_id=album.cover_photo_id,
         cover_photo_thumbnail=cover_thumbnail,
+        cover_photo_position_x=album.cover_photo_position_x,
+        cover_photo_position_y=album.cover_photo_position_y,
         photo_count=photo_count,
         share_status=share_status,
         created_at=album.created_at,

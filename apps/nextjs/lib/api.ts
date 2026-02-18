@@ -17,6 +17,8 @@ export interface Album {
   slug: string;
   cover_photo_id: string | null;
   cover_photo_thumbnail: string | null;
+  cover_photo_position_x: number;
+  cover_photo_position_y: number;
   photo_count: number;
   share_status: "public" | "password" | null;
   created_at: string;
@@ -145,7 +147,7 @@ export async function getAlbumBySlug(
 
 export async function updateAlbum(
   albumId: string,
-  data: { title?: string; description?: string; cover_photo_id?: string },
+  data: { title?: string; description?: string; cover_photo_id?: string; cover_photo_position_x?: number; cover_photo_position_y?: number },
 ): Promise<Album> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}`, {
     method: "PATCH",

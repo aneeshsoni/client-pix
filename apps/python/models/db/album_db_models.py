@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, Float, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,14 @@ class Album(Base):
     cover_photo_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
+    )
+
+    # Cover photo crop position (0-100, default 50 = center)
+    cover_photo_position_x: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="50"
+    )
+    cover_photo_position_y: Mapped[float] = mapped_column(
+        Float, nullable=False, server_default="50"
     )
 
     # Timestamps
