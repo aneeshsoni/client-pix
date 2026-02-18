@@ -59,11 +59,11 @@ interface PhotoGroup {
   photos: SharedPhoto[];
 }
 
-function groupPhotosByDate(photos: SharedPhoto[]): PhotoGroup[] {
+function groupPhotosByDate(photos: SharedPhoto[], dateField: "captured" | "uploaded" = "captured"): PhotoGroup[] {
   const groups: Map<string, SharedPhoto[]> = new Map();
 
   photos.forEach((photo) => {
-    const date = photo.captured_at || photo.created_at || "";
+    const date = dateField === "uploaded" ? (photo.created_at || "") : (photo.captured_at || photo.created_at || "");
     const d = new Date(date);
     // Use local date components to avoid timezone shifts
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -503,9 +503,9 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No photos in this album</p>
             </div>
-          ) : sortBy === "captured" ? (
+          ) : (
             <div className="space-y-8">
-              {groupPhotosByDate(album.photos).map((group) => (
+              {groupPhotosByDate(album.photos, sortBy).map((group) => (
                 <div key={group.date}>
                   {/* Date Header */}
                   <div className="mb-4 flex items-center gap-3">
@@ -538,19 +538,6 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     })}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="masonry">
-              {album.photos.map((photo, index) => (
-                <SharedPhotoCard
-                  key={photo.id}
-                  photo={photo}
-                  index={index}
-                  onClick={() => setSelectedPhotoIndex(index)}
-                  shareToken={token}
-                  password={verifiedPassword}
-                />
               ))}
             </div>
           )}
