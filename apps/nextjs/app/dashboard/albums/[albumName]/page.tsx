@@ -152,29 +152,38 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   return (
     <PhotoSelectionProvider>
-      {/* Header */}
-      <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard/albums">Albums</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage className="flex items-center gap-2">
-                {album.title}
-              </BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 bg-background border-b">
+        {/* Row 1: Title bar */}
+        <header className="flex h-14 shrink-0 items-center gap-2 px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-sm text-muted-foreground hidden sm:inline">
+          {/* Desktop: full breadcrumb */}
+          <Breadcrumb className="hidden sm:flex">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/dashboard/albums">Albums</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{album.title}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+
+          {/* Mobile: just album title */}
+          <h1 className="sm:hidden text-base font-semibold truncate">
+            {album.title}
+          </h1>
+
+          <span className="ml-auto text-sm text-muted-foreground">
             {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
           </span>
+        </header>
 
+        {/* Row 2: Action toolbar */}
+        <div className="flex items-center gap-2 px-4 pb-3 overflow-x-auto">
           {/* Sort Toggle */}
           {album.photo_count > 0 && (
             <div className="flex items-center gap-1 rounded-full border bg-background p-1">
@@ -205,55 +214,57 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             </div>
           )}
 
-          {/* Upload more photos */}
-          <label className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer">
-            {isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
+          <div className="ml-auto flex items-center gap-2">
+            {/* Upload more photos */}
+            <label className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer">
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">
+                {isUploading ? "Uploading..." : "Add Media"}
+              </span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={handleFileUpload}
+                className="hidden"
+                disabled={isUploading}
+              />
+            </label>
+
+            {/* Download All button */}
+            {album.photo_count > 0 && (
+              <a
+                href={getDownloadAllUrl(album.id)}
+                onClick={() => toast.info("Download starting...")}
+                className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Download All</span>
+              </a>
             )}
-            <span className="hidden sm:inline">
-              {isUploading ? "Uploading..." : "Add Media"}
-            </span>
-            <input
-              type="file"
-              multiple
-              accept="image/*,video/*"
-              onChange={handleFileUpload}
-              className="hidden"
-              disabled={isUploading}
-            />
-          </label>
 
-          {/* Download All button */}
-          {album.photo_count > 0 && (
-            <a
-              href={getDownloadAllUrl(album.id)}
-              onClick={() => toast.info("Download starting...")}
-              className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
+            <button
+              onClick={() => setShareModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Download All</span>
-            </a>
-          )}
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Share</span>
+            </button>
 
-          <button
-            onClick={() => setShareModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            <Share2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Share</span>
-          </button>
-
-          <button
-            onClick={() => setSettingsModalOpen(true)}
-            className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Album settings"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
+            <button
+              onClick={() => setSettingsModalOpen(true)}
+              className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Album settings"
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
       {/* Upload Progress Banner */}
       {uploadProgress && (
