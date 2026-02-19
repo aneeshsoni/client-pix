@@ -72,6 +72,14 @@ export function PhotoGridWithDates({
 
   const photoGroups = useMemo(() => groupPhotosByDate(photos, dateField), [photos, dateField]);
 
+  const photoIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < photos.length; i++) {
+      map.set(photos[i].id, i);
+    }
+    return map;
+  }, [photos]);
+
   const openLightbox = useCallback(
     (index: number) => {
       // Don't open lightbox if in selection mode
@@ -176,16 +184,16 @@ export function PhotoGridWithDates({
             {/* Photo Grid */}
             <div className="masonry">
               {group.photos.map((photo) => {
-                const globalIndex = photos.findIndex((p) => p.id === photo.id);
+                const globalIndex = photoIndexMap.get(photo.id) ?? 0;
                 return (
                   <PhotoCard
                     key={photo.id}
                     photo={photo}
                     index={globalIndex}
-                    onClick={() => openLightbox(globalIndex)}
+                    onOpenLightbox={openLightbox}
                     isSelected={isSelected(photo.id)}
                     isSelectionMode={isSelectionMode}
-                    onToggleSelect={() => toggleSelection(photo.id)}
+                    onToggleSelect={toggleSelection}
                   />
                 );
               })}

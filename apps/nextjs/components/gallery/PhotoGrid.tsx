@@ -122,10 +122,10 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
             key={photo.id}
             photo={photo}
             index={index}
-            onClick={() => openLightbox(index)}
+            onOpenLightbox={openLightbox}
             isSelected={isSelected(photo.id)}
             isSelectionMode={isSelectionMode}
-            onToggleSelect={() => toggleSelection(photo.id)}
+            onToggleSelect={toggleSelection}
           />
         ))}
       </div>
