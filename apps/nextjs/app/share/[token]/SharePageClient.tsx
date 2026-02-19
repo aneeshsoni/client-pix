@@ -118,11 +118,9 @@ function SharedPhotoCard({
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, delay: Math.min(index * 0.03, 0.5) }}
-      className="masonry-item"
+    <div
+      className="masonry-item animate-fade-in"
+      style={{ animationDelay: `${Math.min(index * 30, 500)}ms` }}
     >
       <button
         onClick={onClick}
@@ -139,10 +137,11 @@ function SharedPhotoCard({
           src={imageUrl}
           alt={photo.original_filename}
           fill
-          className={`object-cover transition-all duration-300 group-hover:scale-[1.02] ${
+          className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          loading={index < 8 ? "eager" : "lazy"}
           onLoad={() => setIsLoaded(true)}
           unoptimized
         />
@@ -159,7 +158,7 @@ function SharedPhotoCard({
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
       </button>
-    </motion.div>
+    </div>
   );
 }
 

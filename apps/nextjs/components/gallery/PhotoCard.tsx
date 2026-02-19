@@ -77,6 +77,7 @@ function PhotoCardInner({
             isLoaded ? "opacity-100" : "opacity-0"
           } ${isSelected ? "brightness-90" : ""}`}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          loading={index < 8 ? "eager" : "lazy"}
           onLoad={() => setIsLoaded(true)}
           unoptimized // Skip Next.js image optimization for external URLs
         />
