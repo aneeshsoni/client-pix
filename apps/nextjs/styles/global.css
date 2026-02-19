@@ -158,4 +158,14 @@
   .image-loading {
     @apply bg-muted animate-pulse;
   }
+
+  /* Photo card fade-in animation (replaces Framer Motion for performance) */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-in {
+    opacity: 0;
+    animation: fade-in 0.4s ease forwards;
+  }
 }

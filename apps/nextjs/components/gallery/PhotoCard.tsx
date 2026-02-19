@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, memo } from "react";
 import Image from "next/image";
 import { Play, Check } from "lucide-react";
 import type { Photo } from "@/lib/api";
@@ -11,16 +10,16 @@ import { useAuth } from "@/lib/auth";
 interface PhotoCardProps {
   photo: Photo;
   index: number;
-  onClick: () => void;
+  onOpenLightbox: (index: number) => void;
   isSelected?: boolean;
   isSelectionMode?: boolean;
-  onToggleSelect?: () => void;
+  onToggleSelect?: (photoId: string) => void;
 }
 
-export function PhotoCard({
+function PhotoCardInner({
   photo,
   index,
-  onClick,
+  onOpenLightbox,
   isSelected = false,
   isSelectionMode = false,
   onToggleSelect,
@@ -39,23 +38,21 @@ export function PhotoCard({
     // If in selection mode or shift/cmd clicking, toggle selection
     if (isSelectionMode || e.shiftKey || e.metaKey || e.ctrlKey) {
       e.preventDefault();
-      onToggleSelect?.();
+      onToggleSelect?.(photo.id);
     } else {
-      onClick();
+      onOpenLightbox(index);
     }
   };
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleSelect?.();
+    onToggleSelect?.(photo.id);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, delay: Math.min(index * 0.03, 0.5) }}
-      className="masonry-item"
+    <div
+      className="masonry-item animate-fade-in"
+      style={{ animationDelay: `${Math.min(index * 30, 500)}ms` }}
     >
       <button
         onClick={handleClick}
@@ -76,7 +73,7 @@ export function PhotoCard({
           src={thumbnailUrl}
           alt={photo.original_filename}
           fill
-          className={`object-cover transition-all duration-300 group-hover:scale-[1.02] ${
+          className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           } ${isSelected ? "brightness-90" : ""}`}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
@@ -97,7 +94,7 @@ export function PhotoCard({
         {onToggleSelect && (
           <div
             onClick={handleCheckboxClick}
-            className={`absolute top-2 left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all cursor-pointer ${
+            className={`absolute top-2 left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-[opacity,background-color,border-color] cursor-pointer ${
               isSelected
                 ? "bg-primary border-primary"
                 : "bg-black/40 border-white/70 opacity-0 group-hover:opacity-100"
@@ -121,6 +118,8 @@ export function PhotoCard({
           }`}
         />
       </button>
-    </motion.div>
+    </div>
   );
 }
+
+export const PhotoCard = memo(PhotoCardInner);
