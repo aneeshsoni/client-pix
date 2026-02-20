@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState, useCallback } from "react";
 import {
-  PhotoGridWithDates,
+  VirtualizedPhotoGrid,
   ShareModal,
   AlbumSettingsModal,
 } from "@/components/gallery";
@@ -313,23 +313,22 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       )}
 
       {/* Photos grid */}
-      <div className="flex-1 overflow-auto p-6">
-        {album.photos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground">No photos in this album yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Click &quot;Add Photos&quot; to upload photos
-            </p>
-          </div>
-        ) : (
-          <PhotoGridWithDates
-            photos={album.photos}
-            albumId={album.id}
-            onPhotoDeleted={fetchAlbum}
-            dateField={sortBy}
-          />
-        )}
-      </div>
+      {album.photos.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+          <p className="text-muted-foreground">No photos in this album yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Click &quot;Add Photos&quot; to upload photos
+          </p>
+        </div>
+      ) : (
+        <VirtualizedPhotoGrid
+          photos={album.photos}
+          albumId={album.id}
+          onPhotoDeleted={fetchAlbum}
+          dateField={sortBy}
+          groupByDate={sortBy === "captured"}
+        />
+      )}
 
       {/* Share Modal */}
       {album && (
