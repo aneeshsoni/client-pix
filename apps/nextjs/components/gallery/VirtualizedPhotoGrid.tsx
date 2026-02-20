@@ -153,6 +153,7 @@ export function VirtualizedPhotoGrid({
       return row.type === "header" ? 56 : 300;
     },
     overscan: 5,
+    gap: 16,
   });
 
   const openLightbox = useCallback(
@@ -273,12 +274,7 @@ export function VirtualizedPhotoGrid({
                     </span>
                   </div>
                 ) : (
-                  <div
-                    className="grid gap-4"
-                    style={{
-                      gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
-                    }}
-                  >
+                  <div className="masonry">
                     {row.photos.map((photo) => {
                       const globalIndex = photoIndexMap.get(photo.id) ?? 0;
                       return (
