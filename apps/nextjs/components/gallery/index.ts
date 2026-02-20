@@ -10,3 +10,4 @@ export { PhotoGrid } from "./PhotoGrid";
 export { PhotoGridWithDates } from "./PhotoGridWithDates";
 export { SelectionToolbar } from "./SelectionToolbar";
 export { ShareModal } from "./ShareModal";
+export { VirtualizedPhotoGrid } from "./VirtualizedPhotoGrid";

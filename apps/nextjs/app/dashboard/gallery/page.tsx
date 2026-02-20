@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PhotoGrid, PhotoGridWithDates } from "@/components/gallery";
+import { VirtualizedPhotoGrid } from "@/components/gallery";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -85,34 +85,35 @@ export default function GalleryPage() {
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-destructive">{error}</p>
-            <button
-              onClick={fetchPhotos}
-              className="mt-4 text-sm text-primary hover:underline"
-            >
-              Try again
-            </button>
-          </div>
-        ) : photos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground">No photos yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Upload photos to albums to see them here
-            </p>
-          </div>
-        ) : sortBy === "captured" ? (
-          <PhotoGridWithDates photos={photos} onPhotoDeleted={fetchPhotos} />
-        ) : (
-          <PhotoGrid photos={photos} onPhotoDeleted={fetchPhotos} />
-        )}
-      </div>
+      {isLoading ? (
+        <div className="flex flex-1 items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+          <p className="text-destructive">{error}</p>
+          <button
+            onClick={fetchPhotos}
+            className="mt-4 text-sm text-primary hover:underline"
+          >
+            Try again
+          </button>
+        </div>
+      ) : photos.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+          <p className="text-muted-foreground">No photos yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upload photos to albums to see them here
+          </p>
+        </div>
+      ) : (
+        <VirtualizedPhotoGrid
+          photos={photos}
+          onPhotoDeleted={fetchPhotos}
+          dateField={sortBy}
+          groupByDate={sortBy === "captured"}
+        />
+      )}
     </PhotoSelectionProvider>
   );
 }
