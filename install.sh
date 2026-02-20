@@ -79,7 +79,7 @@ if [ -z "${DOMAIN:-}" ]; then
   echo "  Enter your domain for automatic HTTPS (e.g. photos.example.com)"
   echo "  Leave blank for local/LAN access (HTTP only, good for NAS installs)"
   echo ""
-  read -rp "  Domain: " DOMAIN
+  read -rp "  Domain: " DOMAIN < /dev/tty
 fi
 DOMAIN="${DOMAIN:-localhost}"
 
