@@ -1,0 +1,326 @@
+"use client";
+
+import { useState, useCallback, useMemo, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { PhotoCard } from "./PhotoCard";
+import { Lightbox } from "./Lightbox";
+import { SelectionToolbar } from "./SelectionToolbar";
+import { usePhotoSelection } from "@/hooks/use-photo-selection";
+import { useColumnCount } from "@/hooks/use-column-count";
+import { bulkDeletePhotos, bulkDownloadPhotos } from "@/lib/api";
+import type { Photo } from "@/lib/api";
+
+interface VirtualizedPhotoGridProps {
+  photos: Photo[];
+  albumId?: string;
+  onPhotoDeleted?: (photoId: string) => void;
+  dateField?: "captured" | "uploaded";
+  groupByDate?: boolean;
+}
+
+interface PhotoGroup {
+  date: string;
+  displayDate: string;
+  photos: Photo[];
+}
+
+type VirtualRow =
+  | { type: "header"; date: string; displayDate: string; photoCount: number }
+  | { type: "photoRow"; photos: Photo[] };
+
+function groupPhotosByDate(
+  photos: Photo[],
+  dateField: "captured" | "uploaded"
+): PhotoGroup[] {
+  const groups: Map<string, Photo[]> = new Map();
+
+  photos.forEach((photo) => {
+    const date =
+      dateField === "uploaded"
+        ? photo.created_at
+        : photo.captured_at || photo.created_at;
+    const d = new Date(date);
+    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getDate()).padStart(2, "0")}`;
+
+    if (!groups.has(dateKey)) {
+      groups.set(dateKey, []);
+    }
+    groups.get(dateKey)!.push(photo);
+  });
+
+  return Array.from(groups.entries()).map(([dateKey, groupPhotos]) => {
+    const [year, month, day] = dateKey.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    const displayDate = date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return { date: dateKey, displayDate, photos: groupPhotos };
+  });
+}
+
+function flattenToVirtualRows(
+  groups: PhotoGroup[],
+  columnCount: number
+): VirtualRow[] {
+  const rows: VirtualRow[] = [];
+
+  for (const group of groups) {
+    rows.push({
+      type: "header",
+      date: group.date,
+      displayDate: group.displayDate,
+      photoCount: group.photos.length,
+    });
+
+    for (let i = 0; i < group.photos.length; i += columnCount) {
+      rows.push({
+        type: "photoRow",
+        photos: group.photos.slice(i, i + columnCount),
+      });
+    }
+  }
+
+  return rows;
+}
+
+function flattenToVirtualRowsFlat(
+  photos: Photo[],
+  columnCount: number
+): VirtualRow[] {
+  const rows: VirtualRow[] = [];
+
+  for (let i = 0; i < photos.length; i += columnCount) {
+    rows.push({
+      type: "photoRow",
+      photos: photos.slice(i, i + columnCount),
+    });
+  }
+
+  return rows;
+}
+
+export function VirtualizedPhotoGrid({
+  photos,
+  albumId,
+  onPhotoDeleted,
+  dateField = "captured",
+  groupByDate = true,
+}: VirtualizedPhotoGridProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const columnCount = useColumnCount(scrollContainerRef);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const {
+    selectedIds,
+    isSelectionMode,
+    toggleSelection,
+    clearSelection,
+    isSelected,
+  } = usePhotoSelection();
+
+  const photoGroups = useMemo(
+    () => groupPhotosByDate(photos, dateField),
+    [photos, dateField]
+  );
+
+  const virtualRows = useMemo(
+    () =>
+      groupByDate
+        ? flattenToVirtualRows(photoGroups, columnCount)
+        : flattenToVirtualRowsFlat(photos, columnCount),
+    [groupByDate, photoGroups, photos, columnCount]
+  );
+
+  const photoIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < photos.length; i++) {
+      map.set(photos[i].id, i);
+    }
+    return map;
+  }, [photos]);
+
+  const virtualizer = useVirtualizer({
+    count: virtualRows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: (index) => {
+      const row = virtualRows[index];
+      return row.type === "header" ? 56 : 300;
+    },
+    overscan: 5,
+  });
+
+  const openLightbox = useCallback(
+    (index: number) => {
+      if (!isSelectionMode) {
+        setLightboxIndex(index);
+      }
+    },
+    [isSelectionMode]
+  );
+
+  const closeLightbox = useCallback(() => {
+    setLightboxIndex(null);
+  }, []);
+
+  const goToNext = useCallback(() => {
+    if (lightboxIndex !== null) {
+      setLightboxIndex((lightboxIndex + 1) % photos.length);
+    }
+  }, [lightboxIndex, photos.length]);
+
+  const goToPrev = useCallback(() => {
+    if (lightboxIndex !== null) {
+      setLightboxIndex((lightboxIndex - 1 + photos.length) % photos.length);
+    }
+  }, [lightboxIndex, photos.length]);
+
+  const handlePhotoDeleted = useCallback(
+    (photoId: string) => {
+      if (lightboxIndex !== null) {
+        const deletedIndex = photos.findIndex((p) => p.id === photoId);
+        if (deletedIndex !== -1) {
+          if (photos.length === 1) {
+            setLightboxIndex(null);
+          } else if (deletedIndex <= lightboxIndex) {
+            setLightboxIndex(Math.max(0, lightboxIndex - 1));
+          }
+        }
+      }
+      onPhotoDeleted?.(photoId);
+    },
+    [lightboxIndex, photos, onPhotoDeleted]
+  );
+
+  const getAlbumIdForSelection = useCallback(() => {
+    if (albumId) return albumId;
+    const firstSelectedPhoto = photos.find((p) => selectedIds.has(p.id));
+    return firstSelectedPhoto?.album_id;
+  }, [albumId, photos, selectedIds]);
+
+  const handleBulkDownload = async () => {
+    const targetAlbumId = getAlbumIdForSelection();
+    if (!targetAlbumId) return;
+
+    const photoIds = Array.from(selectedIds);
+    const blob = await bulkDownloadPhotos(targetAlbumId, photoIds);
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "photos.zip";
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    clearSelection();
+  };
+
+  const handleBulkDelete = async () => {
+    const targetAlbumId = getAlbumIdForSelection();
+    if (!targetAlbumId) return;
+
+    const photoIds = Array.from(selectedIds);
+    await bulkDeletePhotos(targetAlbumId, photoIds);
+
+    for (const photoId of photoIds) {
+      onPhotoDeleted?.(photoId);
+    }
+
+    clearSelection();
+  };
+
+  return (
+    <>
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto p-6">
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+            width: "100%",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const row = virtualRows[virtualItem.index];
+            return (
+              <div
+                key={virtualItem.key}
+                data-index={virtualItem.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                {row.type === "header" ? (
+                  <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
+                    <h2 className="text-lg font-semibold">
+                      {row.displayDate}
+                    </h2>
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-sm text-muted-foreground">
+                      {row.photoCount} photo
+                      {row.photoCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    className="grid gap-4"
+                    style={{
+                      gridTemplateColumns: `repeat(${columnCount}, 1fr)`,
+                    }}
+                  >
+                    {row.photos.map((photo) => {
+                      const globalIndex = photoIndexMap.get(photo.id) ?? 0;
+                      return (
+                        <PhotoCard
+                          key={photo.id}
+                          photo={photo}
+                          index={globalIndex}
+                          onOpenLightbox={openLightbox}
+                          isSelected={isSelected(photo.id)}
+                          isSelectionMode={isSelectionMode}
+                          onToggleSelect={toggleSelection}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selection Toolbar */}
+      <SelectionToolbar
+        selectedCount={selectedIds.size}
+        onClearSelection={clearSelection}
+        onDownload={handleBulkDownload}
+        onDelete={handleBulkDelete}
+      />
+
+      {lightboxIndex !== null && photos[lightboxIndex] && (
+        <Lightbox
+          photo={photos[lightboxIndex]}
+          albumId={albumId || photos[lightboxIndex].album_id}
+          currentIndex={lightboxIndex}
+          totalCount={photos.length}
+          onClose={closeLightbox}
+          onNext={goToNext}
+          onPrev={goToPrev}
+          onDelete={onPhotoDeleted ? handlePhotoDeleted : undefined}
+        />
+      )}
+    </>
+  );
+}

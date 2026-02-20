@@ -52,7 +52,6 @@ function PhotoCardInner({
   return (
     <div
       className="masonry-item animate-fade-in"
-      style={{ animationDelay: `${Math.min(index * 30, 500)}ms` }}
     >
       <button
         onClick={handleClick}
