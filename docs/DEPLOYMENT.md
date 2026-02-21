@@ -163,12 +163,12 @@ The production Nginx config includes:
 
 ## Self-Hosted Deployment (VPS/Server)
 
-This section covers deploying Client Pix on your own server (VPS, dedicated server, home server, etc.) using just Docker and docker-compose.
+This section covers deploying Client Pix on your own server (VPS, dedicated server, home server, NAS, etc.).
 
 ### Prerequisites
 
-- Any machine that can run Docker
-- A domain name pointing to your server (if you want it publicly available)
+- Any machine that can run Docker (Linux, macOS, Windows, Synology, UGREEN NAS, etc.)
+- A domain name pointing to your server (optional — not needed for LAN access)
 - SSH access to your machine/server/home lab
 
 ### Step 1: Server Setup
@@ -190,35 +190,56 @@ exit
 ssh user@your-server-ip
 ```
 
-### Step 2: Clone the Repository
+### Step 2: Install Client Pix
+
+#### Option A: One-Command Install (Recommended)
+
+The install script downloads pre-built Docker images, prompts for configuration, and starts everything:
 
 ```bash
-# Clone Client Pix
-git clone https://github.com/your-username/client-pix.git
+curl -fsSL https://raw.githubusercontent.com/aneeshsoni/client-pix/main/install.sh | bash
+```
+
+The installer will:
+
+- Prompt for a domain (for automatic HTTPS via Caddy) or default to LAN-only access (HTTP via Nginx)
+- Auto-generate a secure database password
+- Create an `upgrade.sh` script for easy future updates
+- Start all services
+
+After install, your data lives in `~/client-pix` (configurable with `INSTALL_DIR`).
+
+**To upgrade later:**
+
+```bash
+cd ~/client-pix && ./upgrade.sh
+```
+
+#### Option B: Clone and Build from Source
+
+If you want to build from source or customize the code:
+
+```bash
+git clone https://github.com/aneeshsoni/client-pix.git
 cd client-pix
 ```
 
-### Step 3: Configure Environment Variables
-
-Create a `.env` file in the project root:
+Copy the example environment file and update `POSTGRES_PASSWORD` (the only required variable):
 
 ```bash
-# Create .env file
-cat > .env << 'EOF'
-# Database (CHANGE THIS PASSWORD!)
-POSTGRES_PASSWORD=your-secure-password-here
-POSTGRES_USER=clientpix
-POSTGRES_DB=clientpix
-
-# App Settings
-APP_NAME=Client Pix
-DEBUG=false
-WEB_MAX_DIMENSION=2400
-
-# JWT Secret (optional - auto-generated if not set)
-# JWT_SECRET=your-secret-here
-EOF
+cp .env.example .env
+# Edit .env and set a secure POSTGRES_PASSWORD
 ```
+
+See [.env.example](../.env.example) for all available options.
+
+Then start with the selfhost compose file (which reads from `.env`):
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+> **Note:** The `.env` file is only needed for production. For local development, `./start.sh` uses the dev compose file which has defaults built in — no `.env` required.
 
 ### Step 4: Configure Your Domain
 
@@ -472,15 +493,19 @@ sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
 ### Updating Your Deployment
 
+**If you used the install script:**
+
 ```bash
-# Pull latest changes
+cd ~/client-pix && ./upgrade.sh
+```
+
+This pulls the latest pre-built images and restarts services.
+
+**If you cloned the repo:**
+
+```bash
 git pull origin main
-
-# Rebuild and restart
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Or rebuild specific service
-docker compose -f docker-compose.prod.yml up -d --build backend
+docker compose -f docker-compose.selfhost.yml up -d --build
 ```
 
 ### Backup Strategy
@@ -687,9 +712,19 @@ UPDATE admins SET totp_enabled = false, totp_secret = NULL, backup_codes = NULL 
 
 ## Upgrading
 
-> **Using Coolify or a managed platform?** You don't need these scripts - Coolify handles upgrades automatically (pulls from GitHub, rebuilds containers, preserves volumes). The scripts below are for manual self-hosted deployments on a VPS or server.
+> **Using Coolify or a managed platform?** You don't need these scripts - Coolify handles upgrades automatically (pulls from GitHub, rebuilds containers, preserves volumes). The sections below are for self-hosted deployments.
 
-### Quick Upgrade (Recommended)
+### Install Script Users
+
+If you installed via `curl ... | bash`, an `upgrade.sh` was automatically created in your install directory:
+
+```bash
+cd ~/client-pix && ./upgrade.sh
+```
+
+This pulls the latest pre-built images from GHCR and restarts services. Your data (database + uploads) is preserved in Docker volumes.
+
+### Clone/Build Users
 
 Use the unified upgrade script for one-command upgrades with automatic backup and rollback:
 

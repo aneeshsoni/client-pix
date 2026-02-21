@@ -16,37 +16,39 @@ A self-hosted photography client gallery for professional photographers. Share p
 
 ## Quick Start
 
-This is the fastest way to get this project up and running locally, more deployment options are outlined in [DEPLOYMENT.md](docs/DEPLOYMENT.md) including deploying on a VPS, deploying via a PaaS like Coolify, or deploying on any machine t hat supports Docker.
+**Requirements:** Docker Desktop or Docker Engine
 
-### Requirements
+### Option 1: One-Command Install
 
-- **Docker:** Install Docker Desktop or Docker Engine
-- **Domain (Optional):** A domain name pointing to your server if you want it publicly accessible HTTPS
-
-### Local Development
-
-Run the project on your own machine in <5 minutes using Docker
-
-1. Start Docker on your machine
-
-2. Clone the repository and run the `./start.sh` script from the root of the project
+Install Client Pix on any machine with Docker — VPS, NAS, or local server:
 
 ```bash
-# Clone the repository
+curl -fsSL https://raw.githubusercontent.com/aneeshsoni/client-pix/main/install.sh | bash
+```
+
+The installer will prompt for a domain (for automatic HTTPS) or default to local/LAN access
+
+### Option 2: Clone and Build from Source
+
+Best for development or if you want to customize the source code.
+
+```bash
 git clone https://github.com/aneeshsoni/client-pix.git
 cd client-pix
-
-# Run the start script which will start all docker compose
 ./start.sh
 ```
 
-3. Access the app via http://localhost (more details on the different entrypoints below ⬇️)
+This runs `docker compose up --build` using the development compose file, building the frontend and backend images from source and starting all services (PostgreSQL, Nginx, etc.).
+
+### Accessing the App
 
 | URL                   | Description                    |
 | --------------------- | ------------------------------ |
 | http://localhost      | Main app (via Nginx)           |
 | http://localhost/docs | API documentation              |
 | http://localhost:8000 | Backend direct (for debugging) |
+
+For production self-hosting with SSL, see the [Deployment Guide](docs/DEPLOYMENT.md).
 
 ## Documentation
 
