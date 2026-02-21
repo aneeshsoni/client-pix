@@ -7,9 +7,36 @@ on:
     branches: [main]
 
 jobs:
+  # Detect which parts of the codebase changed
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/python/**'
+            frontend:
+              - 'apps/nextjs/**'
+            docker:
+              - 'apps/python/Dockerfile'
+              - 'apps/nextjs/Dockerfile'
+              - 'docker-compose*.yml'
+              - 'docker/nginx/**'
+              - 'Caddyfile'
+
   # Backend linting
   backend-lint:
     name: Backend Lint
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +64,8 @@ jobs:
   # Backend tests
   backend-test:
     name: Backend Tests
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -79,6 +108,8 @@ jobs:
   # Frontend linting
   frontend-lint:
     name: Frontend Lint
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,6 +132,8 @@ jobs:
   # Frontend tests
   frontend-test:
     name: Frontend Tests
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +156,8 @@ jobs:
   # Frontend build verification
   frontend-build:
     name: Frontend Build
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +180,8 @@ jobs:
   # Docker build verification
   docker-build:
     name: Docker Build
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
