@@ -71,8 +71,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAdmin(data);
             setToken(storedToken);
           } else {
-            // Token invalid, clear it
+            // Access token expired — try refreshing
+            const newToken = await refreshTokens();
+            if (newToken) {
+              const retryResponse = await fetch(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${newToken}` },
+              });
+              if (retryResponse.ok) {
+                const data = await retryResponse.json();
+                setAdmin(data);
+                setToken(newToken);
+                setIsLoading(false);
+                return;
+              }
+            }
+            // Refresh also failed — clear everything
             localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
             setToken(null);
           }
         } catch (error) {
