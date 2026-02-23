@@ -15,6 +15,8 @@ import {
   Clock,
   Play,
   Pause,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,7 +175,19 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     null,
   );
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
+
+  const handleSortByChange = (newSortBy: "captured" | "uploaded") => {
+    setSortBy(newSortBy);
+    setSortDir(undefined);
+  };
+
+  const toggleSortDir = () => {
+    setSortDir(effectiveDir === "asc" ? "desc" : "asc");
+  };
   const selectedPhoto =
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
@@ -237,10 +251,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       setError(null);
 
       try {
+        const params = new URLSearchParams({ sort_by: sortBy });
+        if (sortDir) params.set("sort_dir", sortDir);
         const response = await fetch(
-          `${API_BASE_URL}/api/share/${token}/access?sort_by=${encodeURIComponent(
-            sortBy,
-          )}`,
+          `${API_BASE_URL}/api/share/${token}/access?${params}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -289,12 +303,20 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         setIsVerifying(false);
       }
     },
-    [token, sortBy],
+    [token, sortBy, sortDir],
   );
 
   useEffect(() => {
     fetchShareInfo();
   }, [fetchShareInfo]);
+
+  // Re-fetch when sort parameters change while viewing album
+  useEffect(() => {
+    if (state === "album") {
+      accessAlbum(verifiedPassword || undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, sortDir]);
 
   // Keyboard navigation for lightbox
   useEffect(() => {
@@ -454,32 +476,45 @@ export default function SharePageClient({ token }: SharePageClientProps) {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {album.photos.length > 0 && (
-                <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                <>
+                  <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                    <button
+                      onClick={() => handleSortByChange("captured")}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        sortBy === "captured"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Sort by date taken"
+                    >
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Date Taken</span>
+                    </button>
+                    <button
+                      onClick={() => handleSortByChange("uploaded")}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        sortBy === "uploaded"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      title="Sort by upload date"
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Uploaded</span>
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setSortBy("captured")}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                      sortBy === "captured"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Sort by date taken (oldest first)"
+                    onClick={toggleSortDir}
+                    className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
                   >
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Date Taken</span>
+                    {effectiveDir === "asc" ? (
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    )}
                   </button>
-                  <button
-                    onClick={() => setSortBy("uploaded")}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                      sortBy === "uploaded"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Sort by upload date (newest first)"
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Uploaded</span>
-                  </button>
-                </div>
+                </>
               )}
               {album.photos.length > 0 && (
                 <a

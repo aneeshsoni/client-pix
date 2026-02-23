@@ -51,6 +51,27 @@ CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 router = APIRouter(prefix="/albums", tags=["albums"])
 
 
+def _apply_photo_sort(stmt, sort_by: str, sort_dir: str):
+    """Apply sort ordering to a photo query statement."""
+    if sort_dir == "default":
+        effective_dir = "asc" if sort_by == "captured" else "desc"
+    else:
+        effective_dir = sort_dir
+
+    if sort_by == "captured":
+        if effective_dir == "asc":
+            stmt = stmt.order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
+        else:
+            stmt = stmt.order_by(Photo.captured_at.desc().nullsfirst(), Photo.created_at.desc())
+    else:  # uploaded
+        if effective_dir == "asc":
+            stmt = stmt.order_by(Photo.created_at.asc())
+        else:
+            stmt = stmt.order_by(Photo.created_at.desc())
+
+    return stmt
+
+
 # --- Album CRUD ---
 
 
@@ -145,13 +166,15 @@ async def list_albums(
 async def get_album(
     album_id: uuid.UUID,
     sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
+    sort_dir: str = Query("default", pattern="^(asc|desc|default)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get album details with photos.
 
-    - sort_by=captured (default): Sort by EXIF date (oldest first), fallback to upload date
-    - sort_by=uploaded: Sort by upload date (newest first)
+    - sort_by=captured (default): Sort by EXIF date, fallback to upload date
+    - sort_by=uploaded: Sort by upload date
+    - sort_dir=asc|desc|default: Sort direction (default: captured=asc, uploaded=desc)
     """
     # Get album first
     album_stmt = select(Album).where(Album.id == album_id)
@@ -162,21 +185,12 @@ async def get_album(
         raise HTTPException(status_code=404, detail="Album not found")
 
     # Get photos with sorting
-    if sort_by == "captured":
-        # Sort by captured_at (oldest first), with NULL values last, then by created_at
-        photos_stmt = (
-            select(Photo)
-            .where(Photo.album_id == album_id)
-            .options(selectinload(Photo.file_hash))
-            .order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
-        )
-    else:  # uploaded
-        photos_stmt = (
-            select(Photo)
-            .where(Photo.album_id == album_id)
-            .options(selectinload(Photo.file_hash))
-            .order_by(Photo.created_at.desc())
-        )
+    photos_stmt = (
+        select(Photo)
+        .where(Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photos_stmt = _apply_photo_sort(photos_stmt, sort_by, sort_dir)
 
     photos_result = await db.execute(photos_stmt)
     photos_list = photos_result.scalars().all()
@@ -213,13 +227,15 @@ async def get_album(
 async def get_album_by_slug(
     slug: str,
     sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
+    sort_dir: str = Query("default", pattern="^(asc|desc|default)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get album by slug (for public access).
 
-    - sort_by=captured (default): Sort by EXIF date (oldest first), fallback to upload date
-    - sort_by=uploaded: Sort by upload date (newest first)
+    - sort_by=captured (default): Sort by EXIF date, fallback to upload date
+    - sort_by=uploaded: Sort by upload date
+    - sort_dir=asc|desc|default: Sort direction (default: captured=asc, uploaded=desc)
     """
     # Get album first
     album_stmt = select(Album).where(Album.slug == slug)
@@ -230,20 +246,12 @@ async def get_album_by_slug(
         raise HTTPException(status_code=404, detail="Album not found")
 
     # Get photos with sorting
-    if sort_by == "captured":
-        photos_stmt = (
-            select(Photo)
-            .where(Photo.album_id == album.id)
-            .options(selectinload(Photo.file_hash))
-            .order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
-        )
-    else:  # uploaded
-        photos_stmt = (
-            select(Photo)
-            .where(Photo.album_id == album.id)
-            .options(selectinload(Photo.file_hash))
-            .order_by(Photo.created_at.desc())
-        )
+    photos_stmt = (
+        select(Photo)
+        .where(Photo.album_id == album.id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photos_stmt = _apply_photo_sort(photos_stmt, sort_by, sort_dir)
 
     photos_result = await db.execute(photos_stmt)
     photos_list = photos_result.scalars().all()
@@ -1015,30 +1023,21 @@ async def regenerate_photo_thumbnails(
 @router.get("/photos/all", response_model=PhotoListResponse)
 async def get_all_photos(
     sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
+    sort_dir: str = Query("default", pattern="^(asc|desc|default)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all photos across all albums (excludes orphaned photos).
 
-    - sort_by=captured (default): Sort by EXIF date (oldest first), NULLs last, then upload date
-    - sort_by=uploaded: Sort by upload date (newest first)
+    - sort_by=captured (default): Sort by EXIF date, NULLs last, then upload date
+    - sort_by=uploaded: Sort by upload date
+    - sort_dir=asc|desc|default: Sort direction (default: captured=asc, uploaded=desc)
     """
-    if sort_by == "captured":
-        stmt = (
-            select(Photo)
-            .where(Photo.album_id.isnot(None))  # Filter out orphaned photos
-            .options(selectinload(Photo.file_hash))
-            .order_by(
-                Photo.captured_at.asc().nullslast(),
-                Photo.created_at.asc(),
-            )
-        )
-    else:
-        stmt = (
-            select(Photo)
-            .where(Photo.album_id.isnot(None))
-            .options(selectinload(Photo.file_hash))
-            .order_by(Photo.created_at.desc())
-        )
+    stmt = (
+        select(Photo)
+        .where(Photo.album_id.isnot(None))  # Filter out orphaned photos
+        .options(selectinload(Photo.file_hash))
+    )
+    stmt = _apply_photo_sort(stmt, sort_by, sort_dir)
 
     result = await db.execute(stmt)
     photos = result.scalars().all()

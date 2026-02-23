@@ -10,21 +10,33 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { getAllPhotos, type Photo } from "@/lib/api";
+import { getAllPhotos, type Photo, type SortDir } from "@/lib/api";
 import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
-import { Loader2, Calendar, Clock } from "lucide-react";
+import { Loader2, Calendar, Clock, ArrowUp, ArrowDown } from "lucide-react";
 
 export default function GalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
+  const [sortDir, setSortDir] = useState<SortDir | undefined>(undefined);
+
+  const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
+
+  const handleSortByChange = (newSortBy: "captured" | "uploaded") => {
+    setSortBy(newSortBy);
+    setSortDir(undefined);
+  };
+
+  const toggleSortDir = () => {
+    setSortDir(effectiveDir === "asc" ? "desc" : "asc");
+  };
 
   const fetchPhotos = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getAllPhotos(sortBy);
+      const data = await getAllPhotos(sortBy, sortDir);
       setPhotos(data);
     } catch (err) {
       console.error("Failed to fetch photos:", err);
@@ -32,7 +44,7 @@ export default function GalleryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [sortBy]);
+  }, [sortBy, sortDir]);
 
   useEffect(() => {
     fetchPhotos();
@@ -54,32 +66,45 @@ export default function GalleryPage() {
 
         <div className="ml-auto flex items-center gap-2">
           {photos.length > 0 && (
-            <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+            <>
+              <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                <button
+                  onClick={() => handleSortByChange("captured")}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    sortBy === "captured"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Sort by date taken"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Date Taken</span>
+                </button>
+                <button
+                  onClick={() => handleSortByChange("uploaded")}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    sortBy === "uploaded"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Sort by upload date"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Uploaded</span>
+                </button>
+              </div>
               <button
-                onClick={() => setSortBy("captured")}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  sortBy === "captured"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Sort by date taken (oldest first)"
+                onClick={toggleSortDir}
+                className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
               >
-                <Calendar className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Date Taken</span>
+                {effectiveDir === "asc" ? (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ArrowDown className="h-3.5 w-3.5" />
+                )}
               </button>
-              <button
-                onClick={() => setSortBy("uploaded")}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  sortBy === "uploaded"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Sort by upload date (newest first)"
-              >
-                <Clock className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Uploaded</span>
-              </button>
-            </div>
+            </>
           )}
         </div>
       </header>
