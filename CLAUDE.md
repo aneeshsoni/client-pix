@@ -44,6 +44,11 @@ uv run pytest tests/ -v
 uv run pytest tests/test_auth.py -v   # Run a single test file
 ```
 
+```bash
+cd apps/python
+source .venv/bin/activate # Activate the python virtual environment
+```
+
 ### Database Migrations
 
 ```bash
