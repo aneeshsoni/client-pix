@@ -531,7 +531,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         </header>
 
         {/* Photo Grid */}
-        <main className="p-6">
+        <main className="masonry-container p-6">
           {album.photos.length === 0 ? (
             <div className="text-center py-12">
               <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />

@@ -239,7 +239,7 @@ export function VirtualizedPhotoGrid({
 
   return (
     <>
-      <div ref={scrollContainerRef} className="flex-1 overflow-auto p-6">
+      <div ref={scrollContainerRef} className="masonry-container flex-1 overflow-auto p-6">
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,

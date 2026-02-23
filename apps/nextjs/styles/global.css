@@ -130,25 +130,32 @@
   }
 
   /* Grid layout - horizontal flow (row-major) */
+  /* Uses container queries so column count is based on the actual content
+     area width, not the viewport. This matters on dashboard pages where
+     the sidebar reduces available space. */
+  .masonry-container {
+    container-type: inline-size;
+  }
+
   .masonry {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
   }
 
-  @media (min-width: 640px) {
+  @container (min-width: 640px) {
     .masonry {
       grid-template-columns: repeat(3, 1fr);
     }
   }
 
-  @media (min-width: 1024px) {
+  @container (min-width: 1024px) {
     .masonry {
       grid-template-columns: repeat(4, 1fr);
     }
   }
 
-  @media (min-width: 1280px) {
+  @container (min-width: 1280px) {
     .masonry {
       grid-template-columns: repeat(5, 1fr);
     }
