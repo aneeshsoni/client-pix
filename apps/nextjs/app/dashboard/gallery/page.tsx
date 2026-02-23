@@ -136,7 +136,7 @@ export default function GalleryPage() {
           photos={photos}
           onPhotoDeleted={fetchPhotos}
           dateField={sortBy}
-          groupByDate={sortBy === "captured"}
+          groupByDate
         />
       )}
     </PhotoSelectionProvider>

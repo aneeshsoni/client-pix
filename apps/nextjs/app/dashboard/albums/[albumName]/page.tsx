@@ -354,7 +354,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           albumId={album.id}
           onPhotoDeleted={fetchAlbum}
           dateField={sortBy}
-          groupByDate={sortBy === "captured"}
+          groupByDate
         />
       )}
 
