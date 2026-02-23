@@ -165,7 +165,11 @@ async def access_shared_album(
 
     # Sort photos based on sort_by and sort_dir parameters
     photos_list = list(album.photos)
-    effective_dir = sort_dir if sort_dir != "default" else ("asc" if sort_by == "captured" else "desc")
+    effective_dir = (
+        sort_dir
+        if sort_dir != "default"
+        else ("asc" if sort_by == "captured" else "desc")
+    )
     is_descending = effective_dir == "desc"
 
     if sort_by == "captured":

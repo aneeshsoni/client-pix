@@ -60,9 +60,13 @@ def _apply_photo_sort(stmt, sort_by: str, sort_dir: str):
 
     if sort_by == "captured":
         if effective_dir == "asc":
-            stmt = stmt.order_by(Photo.captured_at.asc().nullslast(), Photo.created_at.asc())
+            stmt = stmt.order_by(
+                Photo.captured_at.asc().nullslast(), Photo.created_at.asc()
+            )
         else:
-            stmt = stmt.order_by(Photo.captured_at.desc().nullsfirst(), Photo.created_at.desc())
+            stmt = stmt.order_by(
+                Photo.captured_at.desc().nullsfirst(), Photo.created_at.desc()
+            )
     else:  # uploaded
         if effective_dir == "asc":
             stmt = stmt.order_by(Photo.created_at.asc())
