@@ -107,6 +107,7 @@ async def access_shared_album(
     token: str,
     data: ShareLinkVerifyRequest,
     sort_by: str = Query("captured", pattern="^(captured|uploaded)$"),
+    sort_dir: str = Query("default", pattern="^(asc|desc|default)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -114,8 +115,9 @@ async def access_shared_album(
     This endpoint is public and doesn't require authentication.
 
     The `token` parameter can be either the random token or a custom slug.
-    - sort_by=captured (default): Sort by EXIF date (oldest first), NULLs last, then upload date
-    - sort_by=uploaded: Sort by upload date (newest first)
+    - sort_by=captured (default): Sort by EXIF date, NULLs last, then upload date
+    - sort_by=uploaded: Sort by upload date
+    - sort_dir=asc|desc|default: Sort direction (default: captured=asc, uploaded=desc)
     """
     share_link = await get_share_link_by_token_or_slug(token, db)
 
@@ -161,19 +163,25 @@ async def access_shared_album(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    # Sort photos based on sort_by parameter
+    # Sort photos based on sort_by and sort_dir parameters
     photos_list = list(album.photos)
+    effective_dir = (
+        sort_dir
+        if sort_dir != "default"
+        else ("asc" if sort_by == "captured" else "desc")
+    )
+    is_descending = effective_dir == "desc"
+
     if sort_by == "captured":
-        # Sort by captured_at (oldest first), NULLs last, then by created_at
         photos_list.sort(
             key=lambda p: (
-                p.captured_at is None,
+                p.captured_at is not None if is_descending else p.captured_at is None,
                 p.captured_at or p.created_at,
-            )
+            ),
+            reverse=is_descending,
         )
     else:  # uploaded
-        # Sort by created_at (newest first)
-        photos_list.sort(key=lambda p: p.created_at, reverse=True)
+        photos_list.sort(key=lambda p: p.created_at, reverse=is_descending)
 
     # Build photo responses with paths from file_hash
     photos = []

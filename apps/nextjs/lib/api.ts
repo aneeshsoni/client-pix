@@ -8,6 +8,8 @@
 // Empty string = relative URLs (works with any domain via Nginx proxy)
 const API_BASE_URL = "";
 
+export type SortDir = "asc" | "desc";
+
 // --- Types ---
 
 export interface Album {
@@ -106,9 +108,12 @@ export async function listAlbums(): Promise<AlbumListResponse> {
 export async function getAlbum(
   albumId: string,
   sortBy: "captured" | "uploaded" = "captured",
+  sortDir?: SortDir,
 ): Promise<AlbumDetail> {
+  const params = new URLSearchParams({ sort_by: sortBy });
+  if (sortDir) params.set("sort_dir", sortDir);
   const response = await fetch(
-    `${API_BASE_URL}/api/albums/${albumId}?sort_by=${sortBy}`,
+    `${API_BASE_URL}/api/albums/${albumId}?${params}`,
   );
 
   if (!response.ok) {
@@ -121,12 +126,13 @@ export async function getAlbum(
 export async function getAlbumBySlug(
   slug: string,
   sortBy: "captured" | "uploaded" = "captured",
+  sortDir?: SortDir,
 ): Promise<AlbumDetail> {
   try {
+    const params = new URLSearchParams({ sort_by: sortBy });
+    if (sortDir) params.set("sort_dir", sortDir);
     const response = await fetch(
-      `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(
-        slug,
-      )}?sort_by=${sortBy}`,
+      `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(slug)}?${params}`,
     );
 
     if (!response.ok) {
@@ -477,12 +483,13 @@ export async function setCoverPhoto(
 
 export async function getAllPhotos(
   sortBy: "captured" | "uploaded" = "captured",
+  sortDir?: SortDir,
 ): Promise<Photo[]> {
   try {
+    const params = new URLSearchParams({ sort_by: sortBy });
+    if (sortDir) params.set("sort_dir", sortDir);
     const response = await fetch(
-      `${API_BASE_URL}/api/albums/photos/all?sort_by=${encodeURIComponent(
-        sortBy,
-      )}`,
+      `${API_BASE_URL}/api/albums/photos/all?${params}`,
       {
         cache: "no-store",
       },
