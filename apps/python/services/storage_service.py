@@ -19,7 +19,7 @@ from core.config import (
     WEB_MAX_DIMENSION,
     WEB_QUALITY,
 )
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.ExifTags import Base, IFD
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
@@ -311,6 +311,7 @@ class StorageService:
         """Get width and height of an image."""
         try:
             with Image.open(file_path) as img:
+                img = ImageOps.exif_transpose(img)
                 return img.size
         except Exception:
             return (0, 0)
@@ -359,6 +360,9 @@ class StorageService:
         """Generate thumbnail and web-optimized versions (synchronous)."""
         try:
             with Image.open(original_path) as img:
+                # Apply EXIF orientation (iOS cameras store rotation in EXIF metadata)
+                img = ImageOps.exif_transpose(img)
+
                 # Convert to RGB if necessary (for PNG with transparency, etc.)
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
