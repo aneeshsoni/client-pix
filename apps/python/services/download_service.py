@@ -51,7 +51,9 @@ class DownloadService:
     def _cache_path(self, cache_key: str) -> Path:
         return self._cache_dir / f"{cache_key}.zip"
 
-    def get_cached_zip(self, album_id: str, photo_ids: list[str] | None = None) -> Path | None:
+    def get_cached_zip(
+        self, album_id: str, photo_ids: list[str] | None = None
+    ) -> Path | None:
         cache_key = self._cache_key(album_id, photo_ids)
         path = self._cache_path(cache_key)
         if path.exists():
@@ -94,7 +96,9 @@ class DownloadService:
                 used_names[base_name] += 1
                 name_parts = base_name.rsplit(".", 1)
                 if len(name_parts) == 2:
-                    archive_name = f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+                    archive_name = (
+                        f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+                    )
                 else:
                     archive_name = f"{base_name}_{used_names[base_name]}"
             else:
@@ -208,7 +212,10 @@ class DownloadService:
             for path in self._cache_dir.iterdir():
                 if path.suffix in (".zip", ".tmp"):
                     try:
-                        if now - os.path.getmtime(path) > DOWNLOAD_CACHE_TTL_HOURS * 3600:
+                        if (
+                            now - os.path.getmtime(path)
+                            > DOWNLOAD_CACHE_TTL_HOURS * 3600
+                        ):
                             os.unlink(path)
                             cleaned += 1
                     except OSError:
