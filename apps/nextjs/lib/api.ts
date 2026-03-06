@@ -589,6 +589,109 @@ export function getImageUrl(path: string): string {
   )}`;
 }
 
+// --- Download Job Types ---
+
+export interface DownloadJobResponse {
+  job_id: string;
+  status: "queued" | "processing" | "ready" | "failed";
+  progress: number;
+  total_files: number;
+  processed_files: number;
+  zip_size: number;
+  download_url: string | null;
+  error: string | null;
+}
+
+// --- Download Job API ---
+
+export async function prepareDownload(
+  albumId: string,
+  photoIds?: string[],
+): Promise<DownloadJobResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/downloads/prepare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      album_id: albumId,
+      photo_ids: photoIds || null,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to prepare download: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getDownloadStatus(
+  jobId: string,
+): Promise<DownloadJobResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/downloads/status/${jobId}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get download status: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export function getDownloadFileUrl(jobId: string): string {
+  return `${API_BASE_URL}/api/downloads/${jobId}/file`;
+}
+
+export async function prepareShareDownload(
+  token: string,
+  password?: string,
+): Promise<DownloadJobResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/share/${token}/prepare-download`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password || null }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to prepare download: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getShareDownloadStatus(
+  token: string,
+  jobId: string,
+  password?: string,
+): Promise<DownloadJobResponse> {
+  const params = new URLSearchParams();
+  if (password) params.set("password", password);
+  const qs = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/api/share/${token}/download-status/${jobId}${qs ? `?${qs}` : ""}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get download status: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export function getShareDownloadFileUrl(
+  token: string,
+  jobId: string,
+  password?: string,
+): string {
+  const params = new URLSearchParams();
+  if (password) params.set("password", password);
+  const qs = params.toString();
+  return `${API_BASE_URL}/api/share/${token}/download-file/${jobId}${qs ? `?${qs}` : ""}`;
+}
+
 export function getDownloadUrl(albumId: string, photoId: string): string {
   // Use the download endpoint which sets proper Content-Disposition header
   return `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/download`;

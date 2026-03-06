@@ -51,41 +51,68 @@ All file downloads support HTTP Range headers, allowing:
 
 ---
 
-## Phase 2: Background Preparation (Future)
+## Phase 2: Background Preparation (Implemented)
 
-For albums with many photos (100+), the current synchronous ZIP creation may be slow. Phase 2 introduces background job processing.
+For albums with many photos (100+), synchronous ZIP creation is slow. Phase 2 adds background job processing with no new infrastructure dependencies.
 
-### Proposed Features
+### Features
 
 1. **Async ZIP Preparation**
-    - User clicks "Download All" → Request queued for processing
-    - Backend creates ZIP in background using job queue (Celery + Redis)
-    - User sees progress indicator: "Preparing your download..."
-2. **Download Ready Notifications**
-    - When ZIP is ready, user gets notified
-    - Optional email notification with download link
-    - Download link valid for 24 hours
-3. **Cached ZIPs**
-    - Generated ZIPs cached on disk for 24 hours
-    - Subsequent downloads of same album are instant
-    - Cache invalidated when album is modified
+    - User clicks "Download All" → ZIP built in background thread via `asyncio.run_in_executor`
+    - Frontend polls for progress every 1 second
+    - User sees progress indicator: "Preparing... 45%"
+    - When ready, browser download is triggered automatically
+2. **Cached ZIPs**
+    - Generated ZIPs cached on disk for 24 hours at `uploads/cache/zips/`
+    - Subsequent downloads of same album are instant (cache hit)
+    - Cache invalidated automatically when album photos are added/deleted
+3. **In-Memory Job Tracking**
+    - `DownloadService` singleton manages job state in a Python dict
+    - Jobs expire from memory after 1 hour (completed/failed)
+    - No external dependencies (no Redis, no Celery)
 
-### Implementation Requirements
+### Architecture
 
-- **Redis**: Job queue and caching
-- **Celery**: Background task worker
-- **Progress Tracking**: WebSocket or polling for status updates
+- **Backend**: `services/download_service.py` — `DownloadService` with thread pool executor
+- **API**: `api/downloads/downloads_api.py` — admin endpoints; share endpoints in `share_public_api.py`
+- **Frontend**: `hooks/use-download-job.ts` — React hook for prepare/poll/download flow
+- **Cache**: ZIP files stored at `uploads/cache/zips/{album_id}.zip` (full album) or `{album_id}_{hash}.zip` (selection)
 
-### API Changes
+### API Endpoints
 
+Admin (authenticated):
+```
+POST /api/downloads/prepare
+  Body: { album_id: "...", photo_ids?: ["..."] }
+  → Returns: { job_id, status, progress, download_url? }
+
+GET /api/downloads/status/{job_id}
+  → Returns: { job_id, status, progress, total_files, processed_files, zip_size, download_url?, error? }
+
+GET /api/downloads/{job_id}/file
+  → Returns: ZIP file (ResumableFileResponse with Range header support)
+```
+
+Public share links:
 ```
 POST /api/share/{token}/prepare-download
-  → Returns: { job_id: "...", status: "queued" }
+  Body: { password?: "..." }
+  → Returns: { job_id, status, progress, download_url? }
 
 GET /api/share/{token}/download-status/{job_id}
-  → Returns: { status: "processing|ready|failed", progress: 50, download_url?: "..." }
+  → Returns: same as admin status
 
+GET /api/share/{token}/download-file/{job_id}
+  → Returns: ZIP file
 ```
+
+### Cache Invalidation
+
+Cache is automatically invalidated when:
+- Photos are uploaded to the album
+- Photos are deleted from the album (single or bulk)
+- Album is deleted
+- Chunked upload is completed
 
 ---
 
@@ -187,8 +214,8 @@ cat partial.zip rest.zip > complete.zip
 
 | Phase | Priority | Effort | Impact |
 | --- | --- | --- | --- |
-| Phase 1 (Current) | ✅ Done | Low | High - enables mobile downloads |
-| Phase 2 | Medium | Medium | High - scales to large albums |
+| Phase 1 | ✅ Done | Low | High - enables mobile downloads |
+| Phase 2 | ✅ Done | Medium | High - scales to large albums |
 | Phase 3 | Low | High | Medium - for high-traffic production |
 
-Phase 2 should be implemented when users report slow downloads for large albums (100+ photos). Phase 3 is recommended for production deployments expecting significant traffic.
+Phase 3 is recommended for production deployments expecting significant traffic.

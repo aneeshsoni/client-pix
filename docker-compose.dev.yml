@@ -48,6 +48,9 @@ services:
       DEBUG: "true"
       DATABASE_URL: postgresql+asyncpg://clientpix:clientpix_dev@postgres:5432/clientpix
       UPLOAD_DIR: /app/uploads
+      WEB_MAX_DIMENSION: 2400  # Max dimension for web-optimized images
+      DOWNLOAD_CACHE_TTL_HOURS: 24  # How long cached ZIP downloads are kept (in hours)
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost"
       # JWT_SECRET auto-generated and saved to uploads/.jwt_secret
       # Note: Domain auto-detected from request headers - no BASE_URL needed
     volumes:

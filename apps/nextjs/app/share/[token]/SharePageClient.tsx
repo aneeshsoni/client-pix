@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSharedImageUrl } from "@/lib/api";
+import { useDownloadJob } from "@/hooks/use-download-job";
 import { toast } from "sonner";
 
 // Empty string = relative URLs (works with any domain)
@@ -177,6 +178,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
+  const downloadJob = useDownloadJob();
 
   const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
 
@@ -517,14 +519,31 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 </>
               )}
               {album.photos.length > 0 && (
-                <a
-                  href={getDownloadAllUrl()}
-                  onClick={() => toast.info("Download starting...")}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                <button
+                  onClick={() => {
+                    if (downloadJob.status === "idle" || downloadJob.status === "failed") {
+                      downloadJob.startShareDownload(token, verifiedPassword || undefined);
+                    }
+                  }}
+                  disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-70"
                 >
-                  <Download className="h-4 w-4" />
-                  <span className="hidden sm:inline">Download All</span>
-                </a>
+                  {downloadJob.status === "preparing" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="hidden sm:inline">
+                        {downloadJob.progress > 0
+                          ? `Preparing... ${downloadJob.progress}%`
+                          : "Preparing..."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      <span className="hidden sm:inline">Download All</span>
+                    </>
+                  )}
+                </button>
               )}
             </div>
           </div>

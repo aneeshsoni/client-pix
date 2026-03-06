@@ -7,7 +7,12 @@ import { Lightbox } from "./Lightbox";
 import { SelectionToolbar } from "./SelectionToolbar";
 import { usePhotoSelection } from "@/hooks/use-photo-selection";
 import { useColumnCount } from "@/hooks/use-column-count";
-import { bulkDeletePhotos, bulkDownloadPhotos } from "@/lib/api";
+import {
+  bulkDeletePhotos,
+  prepareDownload,
+  getDownloadStatus,
+  getDownloadFileUrl,
+} from "@/lib/api";
 import type { Photo } from "@/lib/api";
 
 interface VirtualizedPhotoGridProps {
@@ -209,17 +214,20 @@ export function VirtualizedPhotoGrid({
     if (!targetAlbumId) return;
 
     const photoIds = Array.from(selectedIds);
-    const blob = await bulkDownloadPhotos(targetAlbumId, photoIds);
+    let job = await prepareDownload(targetAlbumId, photoIds);
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "photos.zip";
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    // Poll until ready
+    while (job.status === "queued" || job.status === "processing") {
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await getDownloadStatus(job.job_id);
+    }
 
+    if (job.status === "failed") {
+      throw new Error(job.error || "Download preparation failed");
+    }
+
+    // Trigger browser download
+    window.location.href = getDownloadFileUrl(job.job_id);
     clearSelection();
   };
 

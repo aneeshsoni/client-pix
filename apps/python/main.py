@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
+from services.download_service import download_service
 from core.rate_limit import limiter
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,10 @@ async def lifespan(app: FastAPI):
     # Ensure upload directory exists
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     print(f"✓ Upload directory ready: {UPLOAD_DIR}")
+
+    # Ensure download cache directory exists
+    download_service.ensure_cache_dir()
+    print("✓ Download cache directory ready")
 
     # Clean up any orphaned temp files from previous runs
     cleanup_old_temp_files(UPLOAD_DIR)

@@ -33,6 +33,7 @@ from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.share_link_db_models import ShareLink
+from services.download_service import download_service
 from services.storage_service import storage_service
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -468,6 +469,9 @@ async def delete_album(
     # Commit DB changes first - if this fails, files remain intact
     await db.commit()
 
+    # Invalidate download cache for this album
+    download_service.invalidate_cache(str(album_id))
+
     # Delete files from disk AFTER successful commit
     for file_info in files_to_delete:
         try:
@@ -661,6 +665,9 @@ async def complete_chunked_upload(
 
     await db.commit()
 
+    # Invalidate download cache for this album
+    download_service.invalidate_cache(str(album_id))
+
     return PhotoUploadResponse(
         photos=[build_photo_response(photo)],
         uploaded_count=1,
@@ -769,6 +776,9 @@ async def upload_photos_to_album(
 
     await db.commit()
 
+    # Invalidate download cache for this album
+    download_service.invalidate_cache(str(album_id))
+
     return PhotoUploadResponse(
         photos=photos,
         uploaded_count=len(photos),
@@ -819,6 +829,9 @@ async def delete_photo(
 
     # Commit DB changes first - if this fails, files remain intact
     await db.commit()
+
+    # Invalidate download cache for this album
+    download_service.invalidate_cache(str(album_id))
 
     # Delete files from disk AFTER successful commit
     # If this fails, we have orphaned files (less severe, can be cleaned up)
@@ -884,6 +897,9 @@ async def bulk_delete_photos(
 
     # Commit DB changes first
     await db.commit()
+
+    # Invalidate download cache for this album
+    download_service.invalidate_cache(str(album_id))
 
     # Delete files from disk AFTER successful commit
     for file_info in files_to_delete:
