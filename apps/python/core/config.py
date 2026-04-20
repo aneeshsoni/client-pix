@@ -3,10 +3,6 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 # Application
 APP_NAME = os.getenv("APP_NAME", "Client Pix API")
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
@@ -29,6 +25,9 @@ THUMBNAIL_QUALITY = 90  # WebP quality (0-100)
 # Web-optimized version for lightbox viewing
 WEB_MAX_DIMENSION = int(os.getenv("WEB_MAX_DIMENSION", "2400"))
 WEB_QUALITY = 90  # Higher quality for full-screen viewing
+
+# Download cache TTL in hours (cached ZIPs are deleted after this)
+DOWNLOAD_CACHE_TTL_HOURS = int(os.getenv("DOWNLOAD_CACHE_TTL_HOURS", "24"))
 
 # CORS - comma-separated list of allowed origins
 ALLOWED_ORIGINS = os.getenv(

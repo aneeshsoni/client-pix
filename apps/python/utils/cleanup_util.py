@@ -7,6 +7,8 @@ import shutil
 import time
 from pathlib import Path
 
+from services.download_service import download_service
+
 # Background task handle for cleanup
 _cleanup_task: asyncio.Task | None = None
 
@@ -74,9 +76,13 @@ def cleanup_old_temp_files(upload_dir: Path) -> tuple[int, int]:
             except (OSError, FileNotFoundError):
                 pass
 
+    # Clean expired download cache ZIPs
+    download_cleaned = download_service.cleanup_expired()
+    cleaned_count += download_cleaned
+
     if cleaned_count > 0:
         print(
-            f"🧹 Cleaned {cleaned_count} temp files/dirs ({cleaned_size / 1024 / 1024:.1f} MB)"
+            f"Cleaned {cleaned_count} temp files/dirs ({cleaned_size / 1024 / 1024:.1f} MB)"
         )
 
     return cleaned_count, cleaned_size

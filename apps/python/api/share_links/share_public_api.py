@@ -6,6 +6,10 @@ from datetime import datetime, timezone
 from core.config import UPLOAD_DIR
 from core.database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from models.api.downloads_api_models import (
+    DownloadJobResponse,
+    PrepareShareDownloadRequest,
+)
 from models.api.share_links_api_models import (
     SharedAlbumPhotoResponse,
     SharedAlbumResponse,
@@ -17,6 +21,7 @@ from models.db.share_link_db_models import ShareLink
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from services.download_service import download_service
 from utils.download_util import ResumableFileResponse, create_photos_zip
 from utils.security_util import verify_password
 
@@ -324,3 +329,117 @@ async def download_all_shared_photos(
         raise HTTPException(status_code=404, detail="No photos in album")
 
     return create_photos_zip(photos, album.title, UPLOAD_DIR, request, background_tasks)
+
+
+def _share_job_to_response(
+    job, token: str, request: Request, password: str | None = None
+) -> DownloadJobResponse:
+    download_url = str(
+        request.url_for("download_share_file", token=token, job_id=job.job_id)
+    )
+    if password:
+        download_url += f"?password={password}"
+    return DownloadJobResponse(
+        job_id=job.job_id,
+        status=job.status,
+        progress=job.progress,
+        total_files=job.total_files,
+        processed_files=job.processed_files,
+        zip_size=job.zip_size,
+        download_url=download_url if job.status == "ready" else None,
+        error=job.error,
+    )
+
+
+def _get_validated_share_job(job_id: str, expected_album_id: str):
+    """Return a share download job only when it belongs to the validated album."""
+    job = download_service.get_job(job_id)
+    if not job or job.album_id != expected_album_id:
+        raise HTTPException(status_code=404, detail="Download job not found")
+    return job
+
+
+@router.post("/{token}/prepare-download", response_model=DownloadJobResponse)
+async def prepare_share_download(
+    token: str,
+    data: PrepareShareDownloadRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Prepare a download for a shared album (creates ZIP in background if not cached)."""
+    share_link = await _validate_share_link(token, data.password, db)
+
+    # Get album
+    album_stmt = select(Album).where(Album.id == share_link.album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    # Get photos
+    photos_stmt = (
+        select(Photo)
+        .where(Photo.album_id == share_link.album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photos_result = await db.execute(photos_stmt)
+    photos = photos_result.scalars().all()
+
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos in album")
+
+    job = download_service.prepare_download(
+        album_id=str(share_link.album_id),
+        album_title=album.title,
+        photos=photos,
+        upload_dir=UPLOAD_DIR,
+    )
+
+    return _share_job_to_response(job, token, request, data.password)
+
+
+@router.get("/{token}/download-status/{job_id}", response_model=DownloadJobResponse)
+async def get_share_download_status(
+    token: str,
+    job_id: str,
+    request: Request,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Poll for shared album download job status."""
+    share_link = await _validate_share_link(token, password, db)
+    job = _get_validated_share_job(job_id, str(share_link.album_id))
+
+    return _share_job_to_response(job, token, request, password)
+
+
+@router.get("/{token}/download-file/{job_id}")
+async def download_share_file(
+    token: str,
+    job_id: str,
+    request: Request,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download the prepared ZIP file for a shared album."""
+    share_link = await _validate_share_link(token, password, db)
+    job = _get_validated_share_job(job_id, str(share_link.album_id))
+
+    if job.status != "ready":
+        raise HTTPException(status_code=409, detail="Download not ready yet")
+
+    if not job.zip_path:
+        raise HTTPException(status_code=500, detail="ZIP file path missing")
+
+    safe_title = "".join(
+        c if c.isalnum() or c in " -_" else "_" for c in job.album_title
+    )
+    zip_filename = f"{safe_title}.zip"
+
+    return ResumableFileResponse(
+        path=job.zip_path,
+        filename=zip_filename,
+        media_type="application/zip",
+        request=request,
+    )
