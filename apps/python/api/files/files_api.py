@@ -3,7 +3,7 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,49 +11,13 @@ from sqlalchemy.orm import selectinload
 
 from core.config import UPLOAD_DIR
 from core.database import get_db
-from models.db.admin_db_models import Admin
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.share_link_db_models import ShareLink
+from utils.auth_util import get_admin_from_token_or_query
 from utils.security_util import verify_password
-from utils.jwt_util import get_admin_id_from_token
 
 router = APIRouter(prefix="/files", tags=["files"])
-
-
-async def get_admin_from_token_or_query(
-    db: AsyncSession,
-    authorization: str | None = Header(None),
-    token: str | None = Query(None),
-) -> Admin:
-    """
-    Get admin from either Authorization header or query parameter.
-    This allows Image components to pass token via URL.
-    """
-    jwt_token = None
-
-    # Try Authorization header first
-    if authorization and authorization.startswith("Bearer "):
-        jwt_token = authorization.replace("Bearer ", "")
-    # Fall back to query parameter
-    elif token:
-        jwt_token = token
-
-    if not jwt_token:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    admin_id = get_admin_id_from_token(jwt_token)
-    if not admin_id:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    stmt = select(Admin).where(Admin.id == admin_id)
-    result = await db.execute(stmt)
-    admin = result.scalar_one_or_none()
-
-    if not admin:
-        raise HTTPException(status_code=401, detail="Admin not found")
-
-    return admin
 
 
 def get_file_path(

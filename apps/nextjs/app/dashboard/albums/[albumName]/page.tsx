@@ -34,7 +34,6 @@ import {
   type AlbumDetail,
   type SortDir,
 } from "@/lib/api";
-import { toast } from "sonner";
 import { useDownloadJob } from "@/hooks/use-download-job";
 import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
 

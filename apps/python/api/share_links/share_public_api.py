@@ -351,6 +351,14 @@ def _share_job_to_response(
     )
 
 
+def _get_validated_share_job(job_id: str, expected_album_id: str):
+    """Return a share download job only when it belongs to the validated album."""
+    job = download_service.get_job(job_id)
+    if not job or job.album_id != expected_album_id:
+        raise HTTPException(status_code=404, detail="Download job not found")
+    return job
+
+
 @router.post("/{token}/prepare-download", response_model=DownloadJobResponse)
 async def prepare_share_download(
     token: str,
@@ -400,11 +408,8 @@ async def get_share_download_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Poll for shared album download job status."""
-    await _validate_share_link(token, password, db)
-
-    job = download_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Download job not found")
+    share_link = await _validate_share_link(token, password, db)
+    job = _get_validated_share_job(job_id, str(share_link.album_id))
 
     return _share_job_to_response(job, token, request, password)
 
@@ -418,11 +423,8 @@ async def download_share_file(
     db: AsyncSession = Depends(get_db),
 ):
     """Download the prepared ZIP file for a shared album."""
-    await _validate_share_link(token, password, db)
-
-    job = download_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Download job not found")
+    share_link = await _validate_share_link(token, password, db)
+    job = _get_validated_share_job(job_id, str(share_link.album_id))
 
     if job.status != "ready":
         raise HTTPException(status_code=409, detail="Download not ready yet")

@@ -203,13 +203,6 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       : url;
   };
 
-  const getDownloadAllUrl = () => {
-    const url = `${API_BASE_URL}/api/share/${token}/download-all`;
-    return verifiedPassword
-      ? `${url}?password=${encodeURIComponent(verifiedPassword)}`
-      : url;
-  };
-
   const fetchShareInfo = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/share/${token}/info`);

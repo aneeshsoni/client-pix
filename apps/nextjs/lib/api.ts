@@ -5,6 +5,8 @@
  * No need to configure NEXT_PUBLIC_API_URL - just works!
  */
 
+import { authFetch, getAuthToken } from "./auth";
+
 // Empty string = relative URLs (works with any domain via Nginx proxy)
 const API_BASE_URL = "";
 
@@ -608,7 +610,7 @@ export async function prepareDownload(
   albumId: string,
   photoIds?: string[],
 ): Promise<DownloadJobResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/downloads/prepare`, {
+  const response = await authFetch(`${API_BASE_URL}/api/downloads/prepare`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -627,7 +629,7 @@ export async function prepareDownload(
 export async function getDownloadStatus(
   jobId: string,
 ): Promise<DownloadJobResponse> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/downloads/status/${jobId}`,
   );
 
@@ -638,8 +640,13 @@ export async function getDownloadStatus(
   return response.json();
 }
 
-export function getDownloadFileUrl(jobId: string): string {
-  return `${API_BASE_URL}/api/downloads/${jobId}/file`;
+export function getDownloadFileUrl(jobId: string, token?: string | null): string {
+  const authToken = token ?? getAuthToken();
+  let url = `${API_BASE_URL}/api/downloads/${jobId}/file`;
+  if (authToken) {
+    url += `?token=${encodeURIComponent(authToken)}`;
+  }
+  return url;
 }
 
 export async function prepareShareDownload(
