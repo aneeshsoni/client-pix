@@ -12,6 +12,9 @@ build/
 develop-eggs/
 dist/
 downloads/
+!api/downloads/
+!api/downloads/__init__.py
+!api/downloads/downloads_api.py
 eggs/
 .eggs/
 lib/
