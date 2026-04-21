@@ -480,9 +480,7 @@ class StorageService:
         )
 
         if thumb_result.returncode != 0 or web_result.returncode != 0:
-            raise RuntimeError(
-                "ffmpeg could not generate HEIC/HEIF thumbnails"
-            )
+            raise RuntimeError("ffmpeg could not generate HEIC/HEIF thumbnails")
 
     async def _generate_thumbnails(
         self,
