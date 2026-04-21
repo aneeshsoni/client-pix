@@ -21,12 +21,16 @@ from core.config import (
 )
 from PIL import Image, ImageOps
 from PIL.ExifTags import Base, IFD
+from pillow_heif import register_heif_opener
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
 
 # Background tasks for video thumbnail generation
 _background_tasks: set[asyncio.Task] = set()
+
+# Enable HEIC/HEIF decoding in Pillow.
+register_heif_opener()
 
 
 @dataclass
@@ -395,9 +399,6 @@ class StorageService:
                 web_path.parent.mkdir(parents=True, exist_ok=True)
                 web.save(web_path, "WEBP", quality=WEB_QUALITY)
         except Exception:
-            if self.is_heif(extension):
-                self._generate_thumbnails_with_ffmpeg(original_path, file_id)
-                return
             print(f"Warning: Could not generate thumbnails for {original_path.name}")
 
     def _get_dimensions_with_ffprobe(self, file_path: Path) -> tuple[int, int]:
@@ -428,59 +429,6 @@ class StorageService:
             print(f"Warning: Could not probe image dimensions: {e}")
 
         return (0, 0)
-
-    def _generate_thumbnails_with_ffmpeg(
-        self,
-        original_path: Path,
-        file_id: str,
-    ) -> None:
-        """Generate thumbnail and web variants for HEIC/HEIF via ffmpeg."""
-        thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
-        web_path = self._get_storage_path(file_id, self.VARIANT_WEB, ".webp")
-        thumb_path.parent.mkdir(parents=True, exist_ok=True)
-        web_path.parent.mkdir(parents=True, exist_ok=True)
-
-        thumb_size = max(THUMBNAIL_SIZE)
-        thumb_result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-loglevel",
-                "error",
-                "-i",
-                str(original_path),
-                "-vf",
-                f"scale={thumb_size}:{thumb_size}:force_original_aspect_ratio=decrease:flags=lanczos",
-                "-frames:v",
-                "1",
-                str(thumb_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        web_result = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-loglevel",
-                "error",
-                "-i",
-                str(original_path),
-                "-vf",
-                f"scale={WEB_MAX_DIMENSION}:{WEB_MAX_DIMENSION}:force_original_aspect_ratio=decrease:flags=lanczos",
-                "-frames:v",
-                "1",
-                str(web_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if thumb_result.returncode != 0 or web_result.returncode != 0:
-            raise RuntimeError("ffmpeg could not generate HEIC/HEIF thumbnails")
 
     async def _generate_thumbnails(
         self,
