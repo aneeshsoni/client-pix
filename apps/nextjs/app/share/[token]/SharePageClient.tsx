@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import {
   Lock,
@@ -17,11 +17,12 @@ import {
   Pause,
   ArrowUp,
   ArrowDown,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
-import { getSharedImageUrl } from "@/lib/api";
+import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
 import { toast } from "sonner";
 
@@ -46,6 +47,7 @@ interface SharedAlbum {
   description: string | null;
   photo_count: number;
   photos: SharedPhoto[];
+  allows_uploads: boolean;
   is_password_protected: boolean;
   requires_password: boolean;
 }
@@ -178,6 +180,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const downloadJob = useDownloadJob();
 
   const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
@@ -368,6 +372,44 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     }
   };
 
+  const handleUploadFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      setIsUploading(true);
+      try {
+        const result = await uploadSharePhotos(
+          token,
+          Array.from(files),
+          verifiedPassword || undefined,
+        );
+
+        toast.success(
+          `Uploaded ${result.uploaded_count} file${result.uploaded_count !== 1 ? "s" : ""}`,
+        );
+
+        if (result.duplicate_count > 0) {
+          toast.info(
+            `${result.duplicate_count} duplicate file${result.duplicate_count !== 1 ? "s were" : " was"} skipped`,
+          );
+        }
+
+        await accessAlbum(verifiedPassword || undefined);
+      } catch (err) {
+        console.error("Error uploading shared photos:", err);
+        toast.error(
+          err instanceof Error ? err.message : "Failed to upload files",
+        );
+      } finally {
+        if (uploadInputRef.current) {
+          uploadInputRef.current.value = "";
+        }
+        setIsUploading(false);
+      }
+    },
+    [accessAlbum, token, verifiedPassword],
+  );
+
   // Loading state
   if (state === "loading") {
     return (
@@ -470,6 +512,36 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
+              {album.allows_uploads && (
+                <>
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={(e) => handleUploadFiles(e.target.files)}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => uploadInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="rounded-full"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="hidden sm:inline">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        <span className="hidden sm:inline">Upload</span>
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
               {album.photos.length > 0 && (
                 <>
                   <div className="flex items-center gap-1 rounded-full border bg-background p-1">

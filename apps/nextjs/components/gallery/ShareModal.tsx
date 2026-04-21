@@ -2,7 +2,16 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check, Lock, Globe, Trash2, Loader2, Clock } from "lucide-react";
+import {
+  Copy,
+  Check,
+  Lock,
+  Globe,
+  Trash2,
+  Loader2,
+  Clock,
+  Upload,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +105,7 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
   const [customSlug, setCustomSlug] = useState("");
   const [slugError, setSlugError] = useState<string | null>(null);
   const [expirationDuration, setExpirationDuration] = useState("never");
+  const [allowsUploads, setAllowsUploads] = useState(false);
 
   const fetchShareLinks = useCallback(async () => {
     if (!open || !albumId) return;
@@ -127,12 +137,14 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
         isPasswordProtected ? password : undefined,
         customSlug.trim() || undefined,
         expiresAt,
+        allowsUploads,
       );
       setShareLinks((prev) => [newLink, ...prev]);
       setPassword("");
       setIsPasswordProtected(false);
       setCustomSlug("");
       setExpirationDuration("never");
+      setAllowsUploads(false);
     } catch (error) {
       console.error("Failed to create share link:", error);
       if (error instanceof Error && error.message.includes("slug")) {
@@ -141,7 +153,14 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
     } finally {
       setIsCreating(false);
     }
-  }, [albumId, password, isPasswordProtected, customSlug, expirationDuration]);
+  }, [
+    albumId,
+    password,
+    isPasswordProtected,
+    customSlug,
+    expirationDuration,
+    allowsUploads,
+  ]);
 
   const handleCopyLink = useCallback(async (link: ShareLink) => {
     try {
@@ -180,6 +199,24 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
         );
       } catch (error) {
         console.error("Failed to update share link:", error);
+      }
+    },
+    [albumId],
+  );
+
+  const handleToggleUploads = useCallback(
+    async (link: ShareLink) => {
+      if (!albumId) return;
+
+      try {
+        const updated = await updateShareLink(albumId, link.id, {
+          allows_uploads: !link.allows_uploads,
+        });
+        setShareLinks((prev) =>
+          prev.map((existing) => (existing.id === link.id ? updated : existing)),
+        );
+      } catch (error) {
+        console.error("Failed to update upload access:", error);
       }
     },
     [albumId],
@@ -242,6 +279,27 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                   id="password-protect"
                   checked={isPasswordProtected}
                   onCheckedChange={setIsPasswordProtected}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label
+                    htmlFor="allow-uploads"
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Allow Uploads
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Anyone using this share link can upload directly into the
+                    album.
+                  </p>
+                </div>
+                <Switch
+                  id="allow-uploads"
+                  checked={allowsUploads}
+                  onCheckedChange={setAllowsUploads}
                 />
               </div>
 
@@ -362,6 +420,12 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                             Created{" "}
                             {new Date(link.created_at).toLocaleDateString()}
                           </span>
+                          {link.allows_uploads && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-600">Uploads enabled</span>
+                            </>
+                          )}
                           {link.is_revoked ? (
                             <>
                               <span>•</span>
@@ -390,6 +454,24 @@ export function ShareModal({ albumId, open, onOpenChange }: ShareModalProps) {
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleUploads(link)}
+                          className="h-8 w-8 p-0"
+                          title={
+                            link.allows_uploads
+                              ? "Disable uploads"
+                              : "Enable uploads"
+                          }
+                        >
+                          <Upload
+                            className={`h-4 w-4 ${
+                              link.allows_uploads ? "text-emerald-600" : ""
+                            }`}
+                          />
+                        </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"

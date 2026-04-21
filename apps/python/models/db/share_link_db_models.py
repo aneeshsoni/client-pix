@@ -43,6 +43,9 @@ class ShareLink(Base):
     is_password_protected: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    allows_uploads: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

@@ -10,6 +10,7 @@ class ShareLinkCreate(BaseModel):
     """Request to create a share link."""
 
     password: str | None = Field(None, min_length=8, max_length=100)
+    allows_uploads: bool = False
     expires_at: datetime | None = None
     custom_slug: str | None = Field(
         None,
@@ -29,6 +30,7 @@ class ShareLinkResponse(BaseModel):
     custom_slug: str | None
     share_url: str
     is_password_protected: bool
+    allows_uploads: bool
     expires_at: datetime | None
     is_revoked: bool
     created_at: datetime
@@ -48,6 +50,7 @@ class ShareLinkUpdate(BaseModel):
     """Request to update a share link."""
 
     password: str | None = Field(None, min_length=8, max_length=100)
+    allows_uploads: bool | None = None
     expires_at: datetime | None = None
     is_revoked: bool | None = None
     custom_slug: str | None = Field(
@@ -90,6 +93,7 @@ class SharedAlbumResponse(BaseModel):
     photo_count: int
     photos: list[SharedAlbumPhotoResponse]
     is_password_protected: bool
+    allows_uploads: bool = False
     requires_password: bool  # True if password required but not yet provided
 
     model_config = {"from_attributes": True}
