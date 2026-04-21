@@ -718,6 +718,7 @@ export interface ShareLink {
   custom_slug: string | null;
   share_url: string;
   is_password_protected: boolean;
+  allows_uploads: boolean;
   expires_at: string | null;
   is_revoked: boolean;
   created_at: string;
@@ -736,6 +737,7 @@ export async function createShareLink(
   password?: string,
   customSlug?: string,
   expiresAt?: string,
+  allowsUploads: boolean = false,
 ): Promise<ShareLink> {
   const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
     method: "POST",
@@ -746,6 +748,7 @@ export async function createShareLink(
       password: password || null,
       custom_slug: customSlug || null,
       expires_at: expiresAt || null,
+      allows_uploads: allowsUploads,
     }),
   });
 
@@ -775,6 +778,7 @@ export async function updateShareLink(
     password?: string | null;
     expires_at?: string | null;
     is_revoked?: boolean;
+    allows_uploads?: boolean;
   },
 ): Promise<ShareLink> {
   const response = await fetch(
@@ -810,6 +814,32 @@ export async function deleteShareLink(
   if (!response.ok) {
     throw new Error(`Failed to delete share link: ${response.statusText}`);
   }
+}
+
+export async function uploadSharePhotos(
+  token: string,
+  files: File[],
+  password?: string,
+): Promise<PhotoUploadResponse> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  if (password) {
+    formData.append("password", password);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/share/${token}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response
+      .json()
+      .catch(() => ({ detail: "Failed to upload shared photos" }));
+    throw new Error(errorData.detail || "Failed to upload shared photos");
+  }
+
+  return response.json();
 }
 
 // --- Storage API ---

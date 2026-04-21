@@ -5,7 +5,18 @@ from datetime import datetime, timezone
 
 from core.config import UPLOAD_DIR
 from core.database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
+from models.api.albums_api_models import PhotoUploadResponse
 from models.api.downloads_api_models import (
     DownloadJobResponse,
     PrepareShareDownloadRequest,
@@ -16,13 +27,16 @@ from models.api.share_links_api_models import (
     ShareLinkVerifyRequest,
 )
 from models.db.album_db_models import Album
+from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.share_link_db_models import ShareLink
-from sqlalchemy import select
+from services.storage_service import storage_service
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from services.download_service import download_service
 from utils.download_util import ResumableFileResponse, create_photos_zip
+from utils.response_util import build_photo_response
 from utils.security_util import verify_password
 
 router = APIRouter(prefix="/share", tags=["share-public"])
@@ -99,6 +113,7 @@ async def get_share_info(
 
     return {
         "is_password_protected": share_link.is_password_protected,
+        "allows_uploads": share_link.allows_uploads,
         "album_id": str(share_link.album_id),
         "album_title": album.title,
         "album_description": album.description,
@@ -148,6 +163,7 @@ async def access_shared_album(
                 photo_count=0,
                 photos=[],
                 is_password_protected=True,
+                allows_uploads=share_link.allows_uploads,
                 requires_password=True,
             )
 
@@ -217,6 +233,7 @@ async def access_shared_album(
         photo_count=len(photos),
         photos=photos,
         is_password_protected=share_link.is_password_protected,
+        allows_uploads=share_link.allows_uploads,
         requires_password=False,
     )
 
@@ -250,6 +267,15 @@ async def _validate_share_link(
             raise HTTPException(status_code=401, detail="Invalid password")
 
     return share_link
+
+
+def _validate_share_upload_allowed(share_link: ShareLink) -> None:
+    """Ensure a share link is allowed to upload into its album."""
+    if not share_link.allows_uploads:
+        raise HTTPException(
+            status_code=403,
+            detail="Uploads are not allowed for this share link",
+        )
 
 
 @router.get("/{token}/download/{photo_id}")
@@ -329,6 +355,108 @@ async def download_all_shared_photos(
         raise HTTPException(status_code=404, detail="No photos in album")
 
     return create_photos_zip(photos, album.title, UPLOAD_DIR, request, background_tasks)
+
+
+@router.post("/{token}/upload", response_model=PhotoUploadResponse)
+async def upload_shared_photos(
+    token: str,
+    files: list[UploadFile] = File(...),
+    password: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload photos into the shared album when the link allows uploads."""
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+
+    album_stmt = select(Album).where(Album.id == share_link.album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    needs_cover = album.cover_photo_id is None
+
+    sort_stmt = select(func.max(Photo.sort_order)).where(
+        Photo.album_id == share_link.album_id
+    )
+    sort_result = await db.execute(sort_stmt)
+    max_sort = sort_result.scalar() or 0
+
+    photos = []
+    duplicate_count = 0
+    first_photo_id = None
+    first_image_id = None
+
+    for i, file in enumerate(files):
+        stored = await storage_service.store_file_streaming(
+            file=file.file,
+            original_filename=file.filename or "unnamed",
+        )
+
+        hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
+        hash_result = await db.execute(hash_stmt)
+        file_hash = hash_result.scalar_one_or_none()
+
+        if file_hash:
+            existing_photo_stmt = select(Photo).where(
+                Photo.album_id == share_link.album_id,
+                Photo.file_hash_id == file_hash.id,
+            )
+            existing_photo_result = await db.execute(existing_photo_stmt)
+            existing_photo = existing_photo_result.scalar_one_or_none()
+
+            if existing_photo:
+                duplicate_count += 1
+                continue
+
+            file_hash.reference_count += 1
+        else:
+            file_hash = FileHash(
+                sha256_hash=stored.file_id,
+                storage_path=stored.storage_path,
+                file_extension=stored.file_extension,
+                mime_type=stored.mime_type,
+                file_size=stored.file_size,
+                width=stored.width or 0,
+                height=stored.height or 0,
+                reference_count=1,
+            )
+            db.add(file_hash)
+            await db.flush()
+
+        photo = Photo(
+            album_id=share_link.album_id,
+            file_hash_id=file_hash.id,
+            original_filename=file.filename or "unnamed",
+            is_video=stored.is_video,
+            sort_order=max_sort + i + 1,
+            captured_at=stored.captured_at,
+        )
+        db.add(photo)
+        await db.flush()
+        await db.refresh(photo, ["file_hash"])
+
+        if first_photo_id is None:
+            first_photo_id = photo.id
+        if first_image_id is None and not stored.is_video:
+            first_image_id = photo.id
+
+        photos.append(build_photo_response(photo))
+
+    if needs_cover:
+        cover_id = first_image_id or first_photo_id
+        if cover_id:
+            album.cover_photo_id = cover_id
+
+    await db.commit()
+    download_service.invalidate_cache(str(share_link.album_id))
+
+    return PhotoUploadResponse(
+        photos=photos,
+        uploaded_count=len(photos),
+        duplicate_count=duplicate_count,
+    )
 
 
 def _share_job_to_response(

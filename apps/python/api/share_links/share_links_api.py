@@ -66,6 +66,7 @@ async def create_share_link(
         custom_slug=custom_slug,
         password_hash=password_hash,
         is_password_protected=is_password_protected,
+        allows_uploads=data.allows_uploads,
         expires_at=data.expires_at,
     )
     db.add(share_link)
@@ -79,6 +80,7 @@ async def create_share_link(
         custom_slug=share_link.custom_slug,
         share_url=build_share_url(share_link.token, request, share_link.custom_slug),
         is_password_protected=share_link.is_password_protected,
+        allows_uploads=share_link.allows_uploads,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,
         created_at=share_link.created_at,
@@ -119,6 +121,7 @@ async def list_share_links(
                 custom_slug=link.custom_slug,
                 share_url=build_share_url(link.token, request, link.custom_slug),
                 is_password_protected=link.is_password_protected,
+                allows_uploads=link.allows_uploads,
                 expires_at=link.expires_at,
                 is_revoked=link.is_revoked,
                 created_at=link.created_at,
@@ -173,6 +176,9 @@ async def update_share_link(
     if data.is_revoked is not None:
         share_link.is_revoked = data.is_revoked
 
+    if data.allows_uploads is not None:
+        share_link.allows_uploads = data.allows_uploads
+
     # Update custom slug if provided
     if data.custom_slug is not None:
         new_slug = data.custom_slug.lower() if data.custom_slug else None
@@ -201,6 +207,7 @@ async def update_share_link(
         custom_slug=share_link.custom_slug,
         share_url=build_share_url(share_link.token, request, share_link.custom_slug),
         is_password_protected=share_link.is_password_protected,
+        allows_uploads=share_link.allows_uploads,
         expires_at=share_link.expires_at,
         is_revoked=share_link.is_revoked,
         created_at=share_link.created_at,
