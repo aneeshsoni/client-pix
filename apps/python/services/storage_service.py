@@ -51,6 +51,7 @@ class StorageService:
     VARIANT_ORIGINAL = "originals"
     VARIANT_THUMBNAIL = "thumbnails"
     VARIANT_WEB = "web"
+    HEIF_EXTENSIONS = {".heic", ".heif"}
 
     # Image MIME types
     IMAGE_MIME_TYPES = {
@@ -110,6 +111,10 @@ class StorageService:
     def is_image(self, extension: str) -> bool:
         """Check if extension is an image format."""
         return extension.lower() in self.IMAGE_MIME_TYPES
+
+    def is_heif(self, extension: str) -> bool:
+        """Check if extension is a HEIF-family format."""
+        return extension.lower() in self.HEIF_EXTENSIONS
 
     def _get_storage_path(self, file_id: str, variant: str, extension: str) -> Path:
         """
@@ -314,7 +319,7 @@ class StorageService:
                 img = ImageOps.exif_transpose(img)
                 return img.size
         except Exception:
-            return (0, 0)
+            return self._get_dimensions_with_ffprobe(file_path)
 
     def get_exif_date(self, file_path: Path) -> datetime | None:
         """Extract the captured date from EXIF data.
@@ -390,8 +395,94 @@ class StorageService:
                 web_path.parent.mkdir(parents=True, exist_ok=True)
                 web.save(web_path, "WEBP", quality=WEB_QUALITY)
         except Exception:
-            # Non-standard image format, skip thumbnails
-            pass
+            if self.is_heif(extension):
+                self._generate_thumbnails_with_ffmpeg(original_path, file_id)
+                return
+            print(f"Warning: Could not generate thumbnails for {original_path.name}")
+
+    def _get_dimensions_with_ffprobe(self, file_path: Path) -> tuple[int, int]:
+        """Get dimensions for formats Pillow cannot decode reliably."""
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "quiet",
+                    "-print_format",
+                    "json",
+                    "-show_streams",
+                    "-select_streams",
+                    "v:0",
+                    str(file_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                probe_data = json.loads(result.stdout)
+                if probe_data.get("streams"):
+                    stream = probe_data["streams"][0]
+                    return stream.get("width", 0), stream.get("height", 0)
+        except Exception as e:
+            print(f"Warning: Could not probe image dimensions: {e}")
+
+        return (0, 0)
+
+    def _generate_thumbnails_with_ffmpeg(
+        self,
+        original_path: Path,
+        file_id: str,
+    ) -> None:
+        """Generate thumbnail and web variants for HEIC/HEIF via ffmpeg."""
+        thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
+        web_path = self._get_storage_path(file_id, self.VARIANT_WEB, ".webp")
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+        web_path.parent.mkdir(parents=True, exist_ok=True)
+
+        thumb_size = max(THUMBNAIL_SIZE)
+        thumb_result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(original_path),
+                "-vf",
+                f"scale={thumb_size}:{thumb_size}:force_original_aspect_ratio=decrease:flags=lanczos",
+                "-frames:v",
+                "1",
+                str(thumb_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        web_result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-i",
+                str(original_path),
+                "-vf",
+                f"scale={WEB_MAX_DIMENSION}:{WEB_MAX_DIMENSION}:force_original_aspect_ratio=decrease:flags=lanczos",
+                "-frames:v",
+                "1",
+                str(web_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if thumb_result.returncode != 0 or web_result.returncode != 0:
+            raise RuntimeError(
+                "ffmpeg could not generate HEIC/HEIF thumbnails"
+            )
 
     async def _generate_thumbnails(
         self,

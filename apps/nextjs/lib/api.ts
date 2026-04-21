@@ -216,7 +216,16 @@ function uploadFileWithProgress(
           reject(new Error("Invalid JSON response"));
         }
       } else {
-        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        try {
+          const errorData = JSON.parse(xhr.responseText);
+          reject(
+            new Error(
+              errorData.detail || `Upload failed: ${xhr.status} ${xhr.statusText}`,
+            ),
+          );
+        } catch {
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
       }
     });
 
@@ -820,6 +829,7 @@ export async function uploadSharePhotos(
   token: string,
   files: File[],
   password?: string,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<PhotoUploadResponse> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
@@ -827,19 +837,12 @@ export async function uploadSharePhotos(
     formData.append("password", password);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/share/${token}/upload`, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorData = await response
-      .json()
-      .catch(() => ({ detail: "Failed to upload shared photos" }));
-    throw new Error(errorData.detail || "Failed to upload shared photos");
-  }
-
-  return response.json();
+  return uploadFileWithProgress(
+    `${API_BASE_URL}/api/share/${token}/upload`,
+    formData,
+    onProgress,
+    15 * 60 * 1000,
+  );
 }
 
 // --- Storage API ---

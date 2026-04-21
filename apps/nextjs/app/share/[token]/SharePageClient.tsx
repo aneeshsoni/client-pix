@@ -181,6 +181,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileCount, setUploadFileCount] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const downloadJob = useDownloadJob();
 
@@ -376,12 +378,20 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
 
+      const selectedFiles = Array.from(files);
       setIsUploading(true);
+      setUploadProgress(0);
+      setUploadFileCount(selectedFiles.length);
       try {
         const result = await uploadSharePhotos(
           token,
-          Array.from(files),
+          selectedFiles,
           verifiedPassword || undefined,
+          (loaded, total) => {
+            if (total > 0) {
+              setUploadProgress(Math.round((loaded / total) * 100));
+            }
+          },
         );
 
         toast.success(
@@ -405,6 +415,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           uploadInputRef.current.value = "";
         }
         setIsUploading(false);
+        setUploadProgress(0);
+        setUploadFileCount(0);
       }
     },
     [accessAlbum, token, verifiedPassword],
@@ -510,6 +522,12 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               <p className="text-sm text-muted-foreground mt-2">
                 {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
               </p>
+              {isUploading && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Uploading {uploadFileCount} file
+                  {uploadFileCount !== 1 ? "s" : ""}... {uploadProgress}%
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {album.allows_uploads && (
@@ -531,12 +549,12 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     {isUploading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span className="hidden sm:inline">Uploading...</span>
+                        <span>Uploading {uploadProgress}%</span>
                       </>
                     ) : (
                       <>
                         <Upload className="h-4 w-4 mr-2" />
-                        <span className="hidden sm:inline">Upload</span>
+                        <span>Upload</span>
                       </>
                     )}
                   </Button>
