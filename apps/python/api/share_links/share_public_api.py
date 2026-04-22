@@ -286,9 +286,7 @@ def _validate_share_upload_allowed(share_link: ShareLink) -> None:
         )
 
 
-async def _get_shared_album_or_404(
-    share_link: ShareLink, db: AsyncSession
-) -> Album:
+async def _get_shared_album_or_404(share_link: ShareLink, db: AsyncSession) -> Album:
     album_stmt = select(Album).where(Album.id == share_link.album_id)
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
@@ -463,7 +461,12 @@ async def upload_shared_photos(
             file=file.file,
             original_filename=file.filename or "unnamed",
         )
-        photo_response, uploaded_count, item_duplicates, photo_id = await _persist_shared_photo(
+        (
+            photo_response,
+            uploaded_count,
+            item_duplicates,
+            photo_id,
+        ) = await _persist_shared_photo(
             share_link=share_link,
             album=album,
             stored=stored,
@@ -609,7 +612,12 @@ async def complete_shared_chunked_upload(
     sort_result = await db.execute(sort_stmt)
     max_sort = sort_result.scalar() or 0
 
-    photo_response, uploaded_count, duplicate_count, photo_id = await _persist_shared_photo(
+    (
+        photo_response,
+        uploaded_count,
+        duplicate_count,
+        photo_id,
+    ) = await _persist_shared_photo(
         share_link=share_link,
         album=album,
         stored=stored,
