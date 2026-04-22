@@ -602,9 +602,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
-          <div className="container mx-auto px-4 py-4 flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-semibold truncate">{album.title}</h1>
+          <div className="container mx-auto px-4 py-4">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold leading-tight sm:text-2xl break-words">
+                {album.title}
+              </h1>
               {album.description && (
                 <p className="text-muted-foreground mt-1 line-clamp-2">
                   {album.description}
@@ -614,7 +616,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
               </p>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+
+            <div className="mt-4 flex items-center gap-3 overflow-x-auto pb-1 sm:mt-3 sm:flex-wrap sm:overflow-visible">
               {album.allows_uploads && (
                 <>
                   <input
@@ -629,7 +632,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     variant="outline"
                     onClick={() => uploadInputRef.current?.click()}
                     disabled={isUploading}
-                    className="rounded-full"
+                    className="rounded-full shrink-0"
                   >
                     {isUploading ? (
                       <>
@@ -650,7 +653,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   <div className="flex items-center gap-1 rounded-full border bg-background p-1">
                     <button
                       onClick={() => handleSortByChange("captured")}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                         sortBy === "captured"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -662,7 +665,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     </button>
                     <button
                       onClick={() => handleSortByChange("uploaded")}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                         sortBy === "uploaded"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -675,7 +678,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   </div>
                   <button
                     onClick={toggleSortDir}
-                    className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                     title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
                   >
                     {effectiveDir === "asc" ? (
@@ -694,7 +697,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     }
                   }}
                   disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-70"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-70"
                 >
                   {downloadJob.status === "preparing" ? (
                     <>
