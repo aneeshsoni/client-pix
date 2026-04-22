@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Image from "next/image";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Lock,
   ImageIcon,
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
+import { useColumnCount } from "@/hooks/use-column-count";
 import { toast } from "sonner";
 
 // Empty string = relative URLs (works with any domain)
@@ -64,6 +66,10 @@ interface PhotoGroup {
   photos: SharedPhoto[];
 }
 
+type VirtualRow =
+  | { type: "header"; date: string; displayDate: string; photoCount: number }
+  | { type: "photoRow"; photos: SharedPhoto[] };
+
 function groupPhotosByDate(photos: SharedPhoto[], dateField: "captured" | "uploaded" = "captured"): PhotoGroup[] {
   const groups: Map<string, SharedPhoto[]> = new Map();
 
@@ -96,6 +102,31 @@ function groupPhotosByDate(photos: SharedPhoto[], dateField: "captured" | "uploa
 
     return { date: dateKey, displayDate, photos };
   });
+}
+
+function flattenToVirtualRows(
+  groups: PhotoGroup[],
+  columnCount: number,
+): VirtualRow[] {
+  const rows: VirtualRow[] = [];
+
+  for (const group of groups) {
+    rows.push({
+      type: "header",
+      date: group.date,
+      displayDate: group.displayDate,
+      photoCount: group.photos.length,
+    });
+
+    for (let i = 0; i < group.photos.length; i += columnCount) {
+      rows.push({
+        type: "photoRow",
+        photos: group.photos.slice(i, i + columnCount),
+      });
+    }
+  }
+
+  return rows;
 }
 
 // Photo card component matching the admin view style
@@ -181,9 +212,16 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadFileCount, setUploadFileCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
+  const [uploadDuplicates, setUploadDuplicates] = useState(0);
+  const [uploadBytes, setUploadBytes] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const columnCount = useColumnCount(scrollContainerRef);
   const downloadJob = useDownloadJob();
 
   const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
@@ -200,6 +238,44 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
       : null;
+
+  const photoGroups = useMemo(
+    () => (album ? groupPhotosByDate(album.photos, sortBy) : []),
+    [album, sortBy],
+  );
+
+  const virtualRows = useMemo(
+    () => flattenToVirtualRows(photoGroups, columnCount),
+    [photoGroups, columnCount],
+  );
+
+  const photoIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    album?.photos.forEach((photo, index) => {
+      map.set(photo.id, index);
+    });
+    return map;
+  }, [album]);
+
+  const virtualizer = useVirtualizer({
+    count: virtualRows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: (index) => {
+      const row = virtualRows[index];
+      return row?.type === "header" ? 56 : 300;
+    },
+    overscan: 5,
+    gap: 16,
+  });
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 
   // Build download URL with optional password
   const getDownloadUrl = (photoId: string) => {
@@ -380,20 +456,33 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
       const selectedFiles = Array.from(files);
       setIsUploading(true);
-      setUploadProgress(0);
-      setUploadFileCount(selectedFiles.length);
+      setUploadProgress(
+        `Preparing ${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""}...`,
+      );
+      setUploadProgressPercent(0);
+      setUploadDuplicates(0);
+      setUploadBytes(null);
       try {
         const result = await uploadSharePhotos(
           token,
           selectedFiles,
           verifiedPassword || undefined,
+          (uploaded, total) => {
+            setUploadProgress(`Uploaded ${uploaded}/${total} files`);
+          },
           (loaded, total) => {
             if (total > 0) {
-              setUploadProgress(Math.round((loaded / total) * 100));
+              setUploadProgressPercent(Math.round((loaded / total) * 100));
+              setUploadBytes({ loaded, total });
             }
+          },
+          (duplicateCount) => {
+            setUploadDuplicates(duplicateCount);
           },
         );
 
+        setUploadProgress("Upload complete! Refreshing...");
+        setUploadProgressPercent(100);
         toast.success(
           `Uploaded ${result.uploaded_count} file${result.uploaded_count !== 1 ? "s" : ""}`,
         );
@@ -415,8 +504,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           uploadInputRef.current.value = "";
         }
         setIsUploading(false);
-        setUploadProgress(0);
-        setUploadFileCount(0);
+        setUploadProgress("");
+        setUploadProgressPercent(0);
+        setUploadDuplicates(0);
+        setUploadBytes(null);
       }
     },
     [accessAlbum, token, verifiedPassword],
@@ -511,9 +602,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
-          <div className="container mx-auto px-4 py-4 flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-semibold truncate">{album.title}</h1>
+          <div className="container mx-auto px-4 py-4">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold leading-tight sm:text-2xl break-words">
+                {album.title}
+              </h1>
               {album.description && (
                 <p className="text-muted-foreground mt-1 line-clamp-2">
                   {album.description}
@@ -522,14 +615,9 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               <p className="text-sm text-muted-foreground mt-2">
                 {album.photo_count} photo{album.photo_count !== 1 ? "s" : ""}
               </p>
-              {isUploading && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Uploading {uploadFileCount} file
-                  {uploadFileCount !== 1 ? "s" : ""}... {uploadProgress}%
-                </p>
-              )}
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+
+            <div className="mt-4 flex items-center gap-3 overflow-x-auto pb-1 sm:mt-3 sm:flex-wrap sm:overflow-visible">
               {album.allows_uploads && (
                 <>
                   <input
@@ -544,12 +632,12 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     variant="outline"
                     onClick={() => uploadInputRef.current?.click()}
                     disabled={isUploading}
-                    className="rounded-full"
+                    className="rounded-full shrink-0"
                   >
                     {isUploading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <span>Uploading {uploadProgress}%</span>
+                        <span>Uploading...</span>
                       </>
                     ) : (
                       <>
@@ -565,7 +653,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   <div className="flex items-center gap-1 rounded-full border bg-background p-1">
                     <button
                       onClick={() => handleSortByChange("captured")}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                         sortBy === "captured"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -577,7 +665,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     </button>
                     <button
                       onClick={() => handleSortByChange("uploaded")}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                         sortBy === "uploaded"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -590,7 +678,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   </div>
                   <button
                     onClick={toggleSortDir}
-                    className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                     title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
                   >
                     {effectiveDir === "asc" ? (
@@ -609,7 +697,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     }
                   }}
                   disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
-                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-70"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-70"
                 >
                   {downloadJob.status === "preparing" ? (
                     <>
@@ -632,49 +720,104 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           </div>
         </header>
 
+        {uploadProgress && (
+          <div className="mx-6 mt-4 rounded-lg border bg-primary/10 px-4 py-3">
+            <div className="mb-2 flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  {uploadProgress}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {uploadBytes
+                    ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(uploadBytes.total)}`
+                    : "Please wait while files are being uploaded..."}
+                  {uploadDuplicates > 0 && (
+                    <span className="ml-2">
+                      ({uploadDuplicates} duplicate
+                      {uploadDuplicates !== 1 ? "s" : ""} skipped)
+                    </span>
+                  )}
+                </p>
+              </div>
+              {uploadProgressPercent > 0 && (
+                <span className="text-sm font-semibold text-primary">
+                  {uploadProgressPercent}%
+                </span>
+              )}
+            </div>
+            {uploadProgressPercent > 0 && (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgressPercent}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Photo Grid */}
-        <main className="masonry-container p-6">
+        <main ref={scrollContainerRef} className="masonry-container flex-1 overflow-auto p-6">
           {album.photos.length === 0 ? (
             <div className="text-center py-12">
               <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No photos in this album</p>
             </div>
           ) : (
-            <div className="space-y-8">
-              {groupPhotosByDate(album.photos, sortBy).map((group) => (
-                <div key={group.date}>
-                  {/* Date Header */}
-                  <div className="mb-4 flex items-center gap-3">
-                    <h2 className="text-lg font-semibold">
-                      {group.displayDate}
-                    </h2>
-                    <div className="flex-1 h-px bg-border" />
-                    <span className="text-sm text-muted-foreground">
-                      {group.photos.length} photo
-                      {group.photos.length !== 1 ? "s" : ""}
-                    </span>
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const row = virtualRows[virtualItem.index];
+                return (
+                  <div
+                    key={virtualItem.key}
+                    data-index={virtualItem.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    {row.type === "header" ? (
+                      <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
+                        <h2 className="text-lg font-semibold">
+                          {row.displayDate}
+                        </h2>
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-sm text-muted-foreground">
+                          {row.photoCount} photo
+                          {row.photoCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="masonry">
+                        {row.photos.map((photo) => {
+                          const globalIndex = photoIndexMap.get(photo.id) ?? 0;
+                          return (
+                            <SharedPhotoCard
+                              key={photo.id}
+                              photo={photo}
+                              index={globalIndex}
+                              onClick={() => setSelectedPhotoIndex(globalIndex)}
+                              shareToken={token}
+                              password={verifiedPassword}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Photo Grid */}
-                  <div className="masonry">
-                    {group.photos.map((photo) => {
-                      const globalIndex = album.photos.findIndex(
-                        (p) => p.id === photo.id,
-                      );
-                      return (
-                        <SharedPhotoCard
-                          key={photo.id}
-                          photo={photo}
-                          index={globalIndex}
-                          onClick={() => setSelectedPhotoIndex(globalIndex)}
-                          shareToken={token}
-                          password={verifiedPassword}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </main>

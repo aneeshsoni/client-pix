@@ -319,6 +319,79 @@ async function uploadLargeFileChunked(
   return completeResponse.json();
 }
 
+async function uploadLargeFileChunkedToShareLink(
+  token: string,
+  file: File,
+  password?: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<PhotoUploadResponse> {
+  const params = new URLSearchParams({
+    filename: file.name,
+    file_size: String(file.size),
+  });
+  if (password) params.set("password", password);
+
+  const initResponse = await fetch(
+    `${API_BASE_URL}/api/share/${token}/upload/init?${params}`,
+    { method: "POST" },
+  );
+
+  if (!initResponse.ok) {
+    throw new Error(`Failed to initialize upload: ${initResponse.statusText}`);
+  }
+
+  const { upload_id } = await initResponse.json();
+
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  let uploadedBytes = 0;
+
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    const start = chunkIndex * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+
+    const chunkParams = new URLSearchParams({
+      chunk_index: String(chunkIndex),
+    });
+    if (password) chunkParams.set("password", password);
+
+    const chunkResponse = await fetch(
+      `${API_BASE_URL}/api/share/${token}/upload/${upload_id}/chunk?${chunkParams}`,
+      {
+        method: "POST",
+        body: chunk,
+        headers: {
+          "Content-Type": "application/octet-stream",
+        },
+      },
+    );
+
+    if (!chunkResponse.ok) {
+      throw new Error(
+        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`,
+      );
+    }
+
+    uploadedBytes += chunk.size;
+    onProgress?.(uploadedBytes, file.size);
+  }
+
+  const completeParams = new URLSearchParams();
+  if (password) completeParams.set("password", password);
+  const completeQs = completeParams.toString();
+  const completeResponse = await fetch(
+    `${API_BASE_URL}/api/share/${token}/upload/${upload_id}/complete${completeQs ? `?${completeQs}` : ""}`,
+    { method: "POST" },
+  );
+
+  if (!completeResponse.ok) {
+    const errorText = await completeResponse.text();
+    throw new Error(`Failed to complete upload: ${errorText}`);
+  }
+
+  return completeResponse.json();
+}
+
 /**
  * Upload photos to an album in batches for reliability.
  *
@@ -829,20 +902,74 @@ export async function uploadSharePhotos(
   token: string,
   files: File[],
   password?: string,
-  onProgress?: (loaded: number, total: number) => void,
+  onProgress?: (uploaded: number, total: number) => void,
+  onUploadProgress?: (loaded: number, total: number) => void,
+  onDuplicate?: (duplicateCount: number) => void,
 ): Promise<PhotoUploadResponse> {
-  const formData = new FormData();
-  files.forEach((file) => formData.append("files", file));
-  if (password) {
-    formData.append("password", password);
+  const allPhotos: Photo[] = [];
+  let totalUploaded = 0;
+  let totalDuplicates = 0;
+  let successfullyProcessed = 0;
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  let uploadedSize = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    try {
+      let result: PhotoUploadResponse;
+
+      if (file.size > CHUNKED_UPLOAD_THRESHOLD) {
+        result = await uploadLargeFileChunkedToShareLink(
+          token,
+          file,
+          password,
+          (loaded) => {
+            onUploadProgress?.(uploadedSize + loaded, totalSize);
+          },
+        );
+      } else {
+        const formData = new FormData();
+        formData.append("files", file);
+        if (password) {
+          formData.append("password", password);
+        }
+
+        result = await uploadFileWithProgress(
+          `${API_BASE_URL}/api/share/${token}/upload`,
+          formData,
+          (loaded) => {
+            onUploadProgress?.(uploadedSize + loaded, totalSize);
+          },
+          15 * 60 * 1000,
+        );
+      }
+
+      allPhotos.push(...result.photos);
+      totalUploaded += result.uploaded_count;
+      totalDuplicates += result.duplicate_count;
+      if (result.duplicate_count > 0) {
+        onDuplicate?.(totalDuplicates);
+      }
+      successfullyProcessed += 1;
+      uploadedSize += file.size;
+    } catch (error) {
+      console.error(`Shared upload file ${i + 1}/${files.length} error:`, error);
+      uploadedSize += file.size;
+    }
+
+    onProgress?.(i + 1, files.length);
   }
 
-  return uploadFileWithProgress(
-    `${API_BASE_URL}/api/share/${token}/upload`,
-    formData,
-    onProgress,
-    15 * 60 * 1000,
-  );
+  if (successfullyProcessed === 0 && files.length > 0) {
+    throw new Error("Failed to upload any files. Please try again.");
+  }
+
+  return {
+    photos: allPhotos,
+    uploaded_count: totalUploaded,
+    duplicate_count: totalDuplicates,
+  };
 }
 
 // --- Storage API ---
