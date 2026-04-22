@@ -1,8 +1,12 @@
 """Public share link access endpoints (no authentication required)."""
 
+import json
+import shutil
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
+import aiofiles
 from core.config import UPLOAD_DIR
 from core.database import get_db
 from fastapi import (
@@ -40,6 +44,10 @@ from utils.response_util import build_photo_response
 from utils.security_util import verify_password
 
 router = APIRouter(prefix="/share", tags=["share-public"])
+
+# Directory for chunked uploads in progress
+CHUNKS_DIR = UPLOAD_DIR / "chunks"
+CHUNKS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 async def get_share_link_by_token_or_slug(
@@ -278,6 +286,74 @@ def _validate_share_upload_allowed(share_link: ShareLink) -> None:
         )
 
 
+async def _get_shared_album_or_404(
+    share_link: ShareLink, db: AsyncSession
+) -> Album:
+    album_stmt = select(Album).where(Album.id == share_link.album_id)
+    album_result = await db.execute(album_stmt)
+    album = album_result.scalar_one_or_none()
+
+    if not album:
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    return album
+
+
+async def _persist_shared_photo(
+    share_link: ShareLink,
+    album: Album,
+    stored,
+    filename: str,
+    sort_order: int,
+    db: AsyncSession,
+):
+    hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
+    hash_result = await db.execute(hash_stmt)
+    file_hash = hash_result.scalar_one_or_none()
+
+    duplicate_count = 0
+    if file_hash:
+        existing_photo_stmt = select(Photo).where(
+            Photo.album_id == share_link.album_id,
+            Photo.file_hash_id == file_hash.id,
+        )
+        existing_photo_result = await db.execute(existing_photo_stmt)
+        existing_photo = existing_photo_result.scalar_one_or_none()
+
+        if existing_photo:
+            await db.refresh(existing_photo, ["file_hash"])
+            return build_photo_response(existing_photo), 0, 1, existing_photo.id
+
+        file_hash.reference_count += 1
+        duplicate_count = 1
+    else:
+        file_hash = FileHash(
+            sha256_hash=stored.file_id,
+            storage_path=stored.storage_path,
+            file_extension=stored.file_extension,
+            mime_type=stored.mime_type,
+            file_size=stored.file_size,
+            width=stored.width or 0,
+            height=stored.height or 0,
+            reference_count=1,
+        )
+        db.add(file_hash)
+        await db.flush()
+
+    photo = Photo(
+        album_id=share_link.album_id,
+        file_hash_id=file_hash.id,
+        original_filename=filename,
+        is_video=stored.is_video,
+        sort_order=sort_order,
+        captured_at=stored.captured_at,
+    )
+    db.add(photo)
+    await db.flush()
+    await db.refresh(photo, ["file_hash"])
+    return build_photo_response(photo), 1, duplicate_count, photo.id
+
+
 @router.get("/{token}/download/{photo_id}")
 async def download_shared_photo(
     token: str,
@@ -367,13 +443,7 @@ async def upload_shared_photos(
     """Upload photos into the shared album when the link allows uploads."""
     share_link = await _validate_share_link(token, password, db)
     _validate_share_upload_allowed(share_link)
-
-    album_stmt = select(Album).where(Album.id == share_link.album_id)
-    album_result = await db.execute(album_stmt)
-    album = album_result.scalar_one_or_none()
-
-    if not album:
-        raise HTTPException(status_code=404, detail="Album not found")
+    album = await _get_shared_album_or_404(share_link, db)
 
     needs_cover = album.cover_photo_id is None
 
@@ -393,56 +463,24 @@ async def upload_shared_photos(
             file=file.file,
             original_filename=file.filename or "unnamed",
         )
-
-        hash_stmt = select(FileHash).where(FileHash.sha256_hash == stored.file_id)
-        hash_result = await db.execute(hash_stmt)
-        file_hash = hash_result.scalar_one_or_none()
-
-        if file_hash:
-            existing_photo_stmt = select(Photo).where(
-                Photo.album_id == share_link.album_id,
-                Photo.file_hash_id == file_hash.id,
-            )
-            existing_photo_result = await db.execute(existing_photo_stmt)
-            existing_photo = existing_photo_result.scalar_one_or_none()
-
-            if existing_photo:
-                duplicate_count += 1
-                continue
-
-            file_hash.reference_count += 1
-        else:
-            file_hash = FileHash(
-                sha256_hash=stored.file_id,
-                storage_path=stored.storage_path,
-                file_extension=stored.file_extension,
-                mime_type=stored.mime_type,
-                file_size=stored.file_size,
-                width=stored.width or 0,
-                height=stored.height or 0,
-                reference_count=1,
-            )
-            db.add(file_hash)
-            await db.flush()
-
-        photo = Photo(
-            album_id=share_link.album_id,
-            file_hash_id=file_hash.id,
-            original_filename=file.filename or "unnamed",
-            is_video=stored.is_video,
+        photo_response, uploaded_count, item_duplicates, photo_id = await _persist_shared_photo(
+            share_link=share_link,
+            album=album,
+            stored=stored,
+            filename=file.filename or "unnamed",
             sort_order=max_sort + i + 1,
-            captured_at=stored.captured_at,
+            db=db,
         )
-        db.add(photo)
-        await db.flush()
-        await db.refresh(photo, ["file_hash"])
+        duplicate_count += item_duplicates
+        if uploaded_count == 0:
+            continue
 
         if first_photo_id is None:
-            first_photo_id = photo.id
+            first_photo_id = photo_id
         if first_image_id is None and not stored.is_video:
-            first_image_id = photo.id
+            first_image_id = photo_id
 
-        photos.append(build_photo_response(photo))
+        photos.append(photo_response)
 
     if needs_cover:
         cover_id = first_image_id or first_photo_id
@@ -455,6 +493,140 @@ async def upload_shared_photos(
     return PhotoUploadResponse(
         photos=photos,
         uploaded_count=len(photos),
+        duplicate_count=duplicate_count,
+    )
+
+
+@router.post("/{token}/upload/init")
+async def init_shared_chunked_upload(
+    token: str,
+    filename: str = Query(...),
+    file_size: int = Query(..., gt=0),
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Initialize a chunked upload session for a shared link."""
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+    await _get_shared_album_or_404(share_link, db)
+
+    upload_id = uuid.uuid4().hex
+    upload_dir = CHUNKS_DIR / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata = {
+        "share_link_id": str(share_link.id),
+        "album_id": str(share_link.album_id),
+        "filename": filename,
+        "file_size": file_size,
+        "chunks_received": [],
+    }
+    (upload_dir / "metadata.json").write_text(json.dumps(metadata))
+
+    return {"upload_id": upload_id, "chunk_size": 1024 * 1024}
+
+
+@router.post("/{token}/upload/{upload_id}/chunk")
+async def upload_shared_chunk(
+    token: str,
+    upload_id: str,
+    chunk_index: int = Query(...),
+    password: str | None = Query(None),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload one chunk for a shared chunked upload session."""
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+
+    upload_dir = CHUNKS_DIR / upload_id
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    metadata_path = upload_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    if metadata["share_link_id"] != str(share_link.id):
+        raise HTTPException(status_code=400, detail="Share link mismatch")
+
+    chunk_data = await request.body()
+    chunk_path = upload_dir / f"chunk_{chunk_index:06d}"
+    async with aiofiles.open(chunk_path, "wb") as f:
+        await f.write(chunk_data)
+
+    if chunk_index not in metadata["chunks_received"]:
+        metadata["chunks_received"].append(chunk_index)
+        metadata_path.write_text(json.dumps(metadata))
+
+    return {"chunk_index": chunk_index, "size": len(chunk_data)}
+
+
+@router.post("/{token}/upload/{upload_id}/complete", response_model=PhotoUploadResponse)
+async def complete_shared_chunked_upload(
+    token: str,
+    upload_id: str,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Complete a chunked upload session for a shared link."""
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+
+    upload_dir = CHUNKS_DIR / upload_id
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    metadata_path = upload_dir / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    if metadata["share_link_id"] != str(share_link.id):
+        raise HTTPException(status_code=400, detail="Share link mismatch")
+    if metadata["album_id"] != str(share_link.album_id):
+        raise HTTPException(status_code=400, detail="Album ID mismatch")
+
+    album = await _get_shared_album_or_404(share_link, db)
+    filename = metadata["filename"]
+    extension = Path(filename).suffix.lower() or ".bin"
+    temp_file = upload_dir / f"assembled{extension}"
+
+    chunk_files = sorted(upload_dir.glob("chunk_*"))
+    async with aiofiles.open(temp_file, "wb") as out_f:
+        for chunk_path in chunk_files:
+            async with aiofiles.open(chunk_path, "rb") as chunk_f:
+                data = await chunk_f.read()
+                await out_f.write(data)
+
+    async with aiofiles.open(temp_file, "rb") as f:
+        stored = await storage_service.store_file_streaming(
+            file=f,
+            original_filename=filename,
+        )
+
+    shutil.rmtree(upload_dir)
+
+    needs_cover = album.cover_photo_id is None
+    sort_stmt = select(func.max(Photo.sort_order)).where(
+        Photo.album_id == share_link.album_id
+    )
+    sort_result = await db.execute(sort_stmt)
+    max_sort = sort_result.scalar() or 0
+
+    photo_response, uploaded_count, duplicate_count, photo_id = await _persist_shared_photo(
+        share_link=share_link,
+        album=album,
+        stored=stored,
+        filename=filename,
+        sort_order=max_sort + 1,
+        db=db,
+    )
+
+    if needs_cover and uploaded_count > 0 and not stored.is_video:
+        album.cover_photo_id = photo_id
+
+    await db.commit()
+    download_service.invalidate_cache(str(share_link.album_id))
+
+    return PhotoUploadResponse(
+        photos=[photo_response] if uploaded_count > 0 else [],
+        uploaded_count=uploaded_count,
         duplicate_count=duplicate_count,
     )
 
