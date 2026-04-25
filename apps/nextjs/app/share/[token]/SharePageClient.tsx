@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Lock,
   ImageIcon,
@@ -23,9 +22,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
+import { VirtualizedPhotoGrid } from "@/components/gallery";
 import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
-import { useColumnCount } from "@/hooks/use-column-count";
 import { toast } from "sonner";
 
 // Empty string = relative URLs (works with any domain)
@@ -59,75 +58,6 @@ interface SharePageClientProps {
 }
 
 type PageState = "loading" | "password" | "album" | "error" | "expired";
-
-interface PhotoGroup {
-  date: string;
-  displayDate: string;
-  photos: SharedPhoto[];
-}
-
-type VirtualRow =
-  | { type: "header"; date: string; displayDate: string; photoCount: number }
-  | { type: "photoRow"; photos: SharedPhoto[] };
-
-function groupPhotosByDate(photos: SharedPhoto[], dateField: "captured" | "uploaded" = "captured"): PhotoGroup[] {
-  const groups: Map<string, SharedPhoto[]> = new Map();
-
-  photos.forEach((photo) => {
-    const date = dateField === "uploaded" ? (photo.created_at || "") : (photo.captured_at || photo.created_at || "");
-    const d = new Date(date);
-    // Use local date components to avoid timezone shifts
-    const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}-${String(d.getDate()).padStart(2, "0")}`;
-
-    if (!groups.has(dateKey)) {
-      groups.set(dateKey, []);
-    }
-    groups.get(dateKey)!.push(photo);
-  });
-
-  // Convert to array and format display dates
-  return Array.from(groups.entries()).map(([dateKey, photos]) => {
-    // Parse as local date (add time to avoid timezone issues)
-    const [year, month, day] = dateKey.split("-").map(Number);
-    const date = new Date(year, month - 1, day);
-    const displayDate = date.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
-    return { date: dateKey, displayDate, photos };
-  });
-}
-
-function flattenToVirtualRows(
-  groups: PhotoGroup[],
-  columnCount: number,
-): VirtualRow[] {
-  const rows: VirtualRow[] = [];
-
-  for (const group of groups) {
-    rows.push({
-      type: "header",
-      date: group.date,
-      displayDate: group.displayDate,
-      photoCount: group.photos.length,
-    });
-
-    for (let i = 0; i < group.photos.length; i += columnCount) {
-      rows.push({
-        type: "photoRow",
-        photos: group.photos.slice(i, i + columnCount),
-      });
-    }
-  }
-
-  return rows;
-}
 
 // Photo card component matching the admin view style
 function SharedPhotoCard({
@@ -220,8 +150,6 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     total: number;
   } | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const columnCount = useColumnCount(scrollContainerRef);
   const downloadJob = useDownloadJob();
 
   const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
@@ -238,35 +166,6 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
       : null;
-
-  const photoGroups = useMemo(
-    () => (album ? groupPhotosByDate(album.photos, sortBy) : []),
-    [album, sortBy],
-  );
-
-  const virtualRows = useMemo(
-    () => flattenToVirtualRows(photoGroups, columnCount),
-    [photoGroups, columnCount],
-  );
-
-  const photoIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    album?.photos.forEach((photo, index) => {
-      map.set(photo.id, index);
-    });
-    return map;
-  }, [album]);
-
-  const virtualizer = useVirtualizer({
-    count: virtualRows.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: (index) => {
-      const row = virtualRows[index];
-      return row?.type === "header" ? 56 : 300;
-    },
-    overscan: 5,
-    gap: 16,
-  });
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -758,67 +657,34 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         )}
 
         {/* Photo Grid */}
-        <main ref={scrollContainerRef} className="masonry-container flex-1 overflow-auto p-6">
+        <main className="flex-1">
           {album.photos.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="p-6 text-center py-12">
               <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No photos in this album</p>
             </div>
           ) : (
-            <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
-                position: "relative",
-                width: "100%",
-              }}
-            >
-              {virtualizer.getVirtualItems().map((virtualItem) => {
-                const row = virtualRows[virtualItem.index];
-                return (
-                  <div
-                    key={virtualItem.key}
-                    data-index={virtualItem.index}
-                    ref={virtualizer.measureElement}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualItem.start}px)`,
-                    }}
-                  >
-                    {row.type === "header" ? (
-                      <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
-                        <h2 className="text-lg font-semibold">
-                          {row.displayDate}
-                        </h2>
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-sm text-muted-foreground">
-                          {row.photoCount} photo
-                          {row.photoCount !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="masonry">
-                        {row.photos.map((photo) => {
-                          const globalIndex = photoIndexMap.get(photo.id) ?? 0;
-                          return (
-                            <SharedPhotoCard
-                              key={photo.id}
-                              photo={photo}
-                              index={globalIndex}
-                              onClick={() => setSelectedPhotoIndex(globalIndex)}
-                              shareToken={token}
-                              password={verifiedPassword}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <VirtualizedPhotoGrid
+              photos={album.photos}
+              dateField={sortBy}
+              groupByDate
+              selectionEnabled={false}
+              onPhotoOpen={setSelectedPhotoIndex}
+              renderPhotoCard={({
+                photo,
+                index,
+                onOpenLightbox,
+              }) => (
+                <SharedPhotoCard
+                  key={photo.id}
+                  photo={photo as SharedPhoto}
+                  index={index}
+                  onClick={() => onOpenLightbox(index)}
+                  shareToken={token}
+                  password={verifiedPassword}
+                />
+              )}
+            />
           )}
         </main>
 
