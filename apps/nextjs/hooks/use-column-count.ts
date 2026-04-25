@@ -15,12 +15,20 @@ export function useColumnCount(
     const el = containerRef.current;
     if (!el) return;
 
-    const observer = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width;
+    const updateColumnCount = (width: number) => {
+      const w = width;
       if (w >= 1280) setColumnCount(5);
       else if (w >= 1024) setColumnCount(4);
       else if (w >= 640) setColumnCount(3);
       else setColumnCount(2);
+    };
+
+    // Set the right column count immediately on mount instead of waiting for
+    // ResizeObserver to deliver its first callback.
+    updateColumnCount(el.getBoundingClientRect().width);
+
+    const observer = new ResizeObserver(([entry]) => {
+      updateColumnCount(entry.contentRect.width);
     });
 
     observer.observe(el);
