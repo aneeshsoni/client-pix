@@ -20,7 +20,7 @@ export interface VirtualizedGridPhoto {
   original_filename: string;
   width: number;
   height: number;
-  created_at: string;
+  created_at: string | null;
   captured_at: string | null;
   is_video: boolean;
 }
@@ -52,7 +52,7 @@ interface PhotoGroup {
 
 type VirtualRow =
   | { type: "header"; date: string; displayDate: string; photoCount: number }
-  | { type: "photoRow"; photos: Photo[] };
+  | { type: "photoRow"; photos: VirtualizedGridPhoto[] };
 
 function groupPhotosByDate(
   photos: VirtualizedGridPhoto[],
@@ -63,8 +63,8 @@ function groupPhotosByDate(
   photos.forEach((photo) => {
     const date =
       dateField === "uploaded"
-        ? photo.created_at
-        : photo.captured_at || photo.created_at;
+        ? photo.created_at || ""
+        : photo.captured_at || photo.created_at || "";
     const d = new Date(date);
     const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
       2,
