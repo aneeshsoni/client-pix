@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PhotoCard } from "./PhotoCard";
 import { Lightbox } from "./Lightbox";
@@ -15,18 +15,39 @@ import {
 } from "@/lib/api";
 import type { Photo } from "@/lib/api";
 
+export interface VirtualizedGridPhoto {
+  id: string;
+  original_filename: string;
+  width: number;
+  height: number;
+  created_at: string;
+  captured_at: string | null;
+  is_video: boolean;
+}
+
 interface VirtualizedPhotoGridProps {
-  photos: Photo[];
+  photos: VirtualizedGridPhoto[];
   albumId?: string;
   onPhotoDeleted?: (photoId: string) => void;
   dateField?: "captured" | "uploaded";
   groupByDate?: boolean;
+  selectionEnabled?: boolean;
+  getPhotoAlbumId?: (photo: VirtualizedGridPhoto) => string | undefined;
+  onPhotoOpen?: (index: number) => void;
+  renderPhotoCard?: (args: {
+    photo: VirtualizedGridPhoto;
+    index: number;
+    onOpenLightbox: (index: number) => void;
+    isSelected: boolean;
+    isSelectionMode: boolean;
+    onToggleSelect: (photoId: string) => void;
+  }) => ReactNode;
 }
 
 interface PhotoGroup {
   date: string;
   displayDate: string;
-  photos: Photo[];
+  photos: VirtualizedGridPhoto[];
 }
 
 type VirtualRow =
@@ -34,10 +55,10 @@ type VirtualRow =
   | { type: "photoRow"; photos: Photo[] };
 
 function groupPhotosByDate(
-  photos: Photo[],
+  photos: VirtualizedGridPhoto[],
   dateField: "captured" | "uploaded"
 ): PhotoGroup[] {
-  const groups: Map<string, Photo[]> = new Map();
+  const groups: Map<string, VirtualizedGridPhoto[]> = new Map();
 
   photos.forEach((photo) => {
     const date =
@@ -96,7 +117,7 @@ function flattenToVirtualRows(
 }
 
 function flattenToVirtualRowsFlat(
-  photos: Photo[],
+  photos: VirtualizedGridPhoto[],
   columnCount: number
 ): VirtualRow[] {
   const rows: VirtualRow[] = [];
@@ -117,6 +138,10 @@ export function VirtualizedPhotoGrid({
   onPhotoDeleted,
   dateField = "captured",
   groupByDate = true,
+  selectionEnabled = true,
+  getPhotoAlbumId,
+  onPhotoOpen,
+  renderPhotoCard,
 }: VirtualizedPhotoGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const columnCount = useColumnCount(scrollContainerRef);
@@ -163,11 +188,13 @@ export function VirtualizedPhotoGrid({
 
   const openLightbox = useCallback(
     (index: number) => {
-      if (!isSelectionMode) {
+      if (onPhotoOpen) {
+        onPhotoOpen(index);
+      } else if (!isSelectionMode) {
         setLightboxIndex(index);
       }
     },
-    [isSelectionMode]
+    [isSelectionMode, onPhotoOpen]
   );
 
   const closeLightbox = useCallback(() => {
@@ -206,8 +233,8 @@ export function VirtualizedPhotoGrid({
   const getAlbumIdForSelection = useCallback(() => {
     if (albumId) return albumId;
     const firstSelectedPhoto = photos.find((p) => selectedIds.has(p.id));
-    return firstSelectedPhoto?.album_id;
-  }, [albumId, photos, selectedIds]);
+    return firstSelectedPhoto ? getPhotoAlbumId?.(firstSelectedPhoto) : undefined;
+  }, [albumId, photos, selectedIds, getPhotoAlbumId]);
 
   const handleBulkDownload = async () => {
     const targetAlbumId = getAlbumIdForSelection();
@@ -286,15 +313,26 @@ export function VirtualizedPhotoGrid({
                     {row.photos.map((photo) => {
                       const globalIndex = photoIndexMap.get(photo.id) ?? 0;
                       return (
-                        <PhotoCard
-                          key={photo.id}
-                          photo={photo}
-                          index={globalIndex}
-                          onOpenLightbox={openLightbox}
-                          isSelected={isSelected(photo.id)}
-                          isSelectionMode={isSelectionMode}
-                          onToggleSelect={toggleSelection}
-                        />
+                        renderPhotoCard ? (
+                          renderPhotoCard({
+                            photo,
+                            index: globalIndex,
+                            onOpenLightbox: openLightbox,
+                            isSelected: isSelected(photo.id),
+                            isSelectionMode,
+                            onToggleSelect: toggleSelection,
+                          })
+                        ) : (
+                          <PhotoCard
+                            key={photo.id}
+                            photo={photo as Photo}
+                            index={globalIndex}
+                            onOpenLightbox={openLightbox}
+                            isSelected={isSelected(photo.id)}
+                            isSelectionMode={isSelectionMode}
+                            onToggleSelect={toggleSelection}
+                          />
+                        )
                       );
                     })}
                   </div>
@@ -306,17 +344,19 @@ export function VirtualizedPhotoGrid({
       </div>
 
       {/* Selection Toolbar */}
-      <SelectionToolbar
-        selectedCount={selectedIds.size}
-        onClearSelection={clearSelection}
-        onDownload={handleBulkDownload}
-        onDelete={handleBulkDelete}
-      />
+      {selectionEnabled && (
+        <SelectionToolbar
+          selectedCount={selectedIds.size}
+          onClearSelection={clearSelection}
+          onDownload={handleBulkDownload}
+          onDelete={handleBulkDelete}
+        />
+      )}
 
-      {lightboxIndex !== null && photos[lightboxIndex] && (
+      {!onPhotoOpen && lightboxIndex !== null && photos[lightboxIndex] && (
         <Lightbox
-          photo={photos[lightboxIndex]}
-          albumId={albumId || photos[lightboxIndex].album_id}
+          photo={photos[lightboxIndex] as Photo}
+          albumId={albumId || getPhotoAlbumId?.(photos[lightboxIndex]) || ""}
           currentIndex={lightboxIndex}
           totalCount={photos.length}
           onClose={closeLightbox}
