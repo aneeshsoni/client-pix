@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { VirtualizedPhotoGrid } from "@/components/gallery";
+import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
 import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
 import { toast } from "sonner";
@@ -498,6 +499,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   // Album view state
   if (state === "album" && album) {
     return (
+      <PhotoSelectionProvider>
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
@@ -846,6 +848,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           )}
         </AnimatePresence>
       </div>
+      </PhotoSelectionProvider>
     );
   }
 
