@@ -236,11 +236,16 @@ class DownloadService:
             self._jobs[job.job_id] = job
             return job
 
-        signature_hash = hashlib.md5("|".join(cache_signature_parts).encode()).hexdigest()
+        signature_hash = hashlib.md5(
+            "|".join(cache_signature_parts).encode()
+        ).hexdigest()
         cache_key = f"all_albums_{signature_hash[:16]}"
         cached = self._cache_path(cache_key)
         if cached.exists():
-            if time.time() - os.path.getmtime(cached) <= DOWNLOAD_CACHE_TTL_HOURS * 3600:
+            if (
+                time.time() - os.path.getmtime(cached)
+                <= DOWNLOAD_CACHE_TTL_HOURS * 3600
+            ):
                 job = DownloadJob(
                     job_id=uuid.uuid4().hex,
                     album_id="all-albums",
