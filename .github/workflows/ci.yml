@@ -14,7 +14,8 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
-      docker: ${{ steps.filter.outputs.docker }}
+      docker_backend: ${{ steps.filter.outputs.docker_backend }}
+      docker_frontend: ${{ steps.filter.outputs.docker_frontend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -25,8 +26,13 @@ jobs:
               - 'apps/python/**'
             frontend:
               - 'apps/nextjs/**'
-            docker:
+            docker_backend:
+              - 'apps/python/**'
               - 'apps/python/Dockerfile'
+              - 'docker-compose*.yml'
+              - 'docker/nginx/**'
+              - 'Caddyfile'
+            docker_frontend:
               - 'apps/nextjs/Dockerfile'
               - 'docker-compose*.yml'
               - 'docker/nginx/**'
@@ -177,11 +183,11 @@ jobs:
         working-directory: apps/nextjs
         run: npm run build
 
-  # Docker build verification
-  docker-build:
-    name: Docker Build
+  # Backend Docker build verification
+  docker-build-backend:
+    name: Docker Build Backend
     needs: changes
-    if: needs.changes.outputs.docker == 'true'
+    if: needs.changes.outputs.docker_backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -197,6 +203,18 @@ jobs:
           tags: clientpix-backend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Frontend Docker build verification
+  docker-build-frontend:
+    name: Docker Build Frontend
+    needs: changes
+    if: needs.changes.outputs.docker_frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build frontend image
         uses: docker/build-push-action@v6
