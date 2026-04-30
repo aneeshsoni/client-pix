@@ -1,0 +1,38 @@
+#!/bin/sh
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+run_backend=false
+run_frontend=false
+
+echo "$STAGED_FILES" | grep -q '^apps/python/' && run_backend=true || true
+echo "$STAGED_FILES" | grep -q '^apps/nextjs/' && run_frontend=true || true
+
+if [ "$run_backend" = false ] && [ "$run_frontend" = false ]; then
+    exit 0
+fi
+
+echo "Running pre-commit checks..."
+
+if [ "$run_backend" = true ]; then
+    echo "Backend: ruff check"
+    (
+        cd apps/python
+        uv run ruff check .
+        uv run ruff format --check .
+    )
+fi
+
+if [ "$run_frontend" = true ]; then
+    echo "Frontend: lint"
+    (
+        cd apps/nextjs
+        npm run lint
+    )
+fi
+
+echo "Pre-commit checks passed."

@@ -78,6 +78,36 @@ async def prepare_download(
     return _job_to_response(job, download_url)
 
 
+@router.post("/prepare-all-albums", response_model=DownloadJobResponse)
+async def prepare_all_albums_download(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
+    """Prepare a consolidated ZIP with one folder per album."""
+    albums_stmt = (
+        select(Album)
+        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+        .order_by(Album.created_at.desc())
+    )
+    albums_result = await db.execute(albums_stmt)
+    albums = albums_result.scalars().unique().all()
+
+    if not albums:
+        raise HTTPException(status_code=404, detail="No albums found")
+
+    job = download_service.prepare_multi_album_download(
+        albums=albums,
+        upload_dir=UPLOAD_DIR,
+    )
+
+    if job.status == "failed":
+        raise HTTPException(status_code=404, detail=job.error or "No files found")
+
+    download_url = str(request.url_for("download_file", job_id=job.job_id))
+    return _job_to_response(job, download_url)
+
+
 @router.get("/status/{job_id}", response_model=DownloadJobResponse)
 async def get_download_status(
     job_id: str,

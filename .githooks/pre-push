@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+
+# Git passes ref update data to pre-push on stdin. Detach child commands from that
+# stream so test/build tools cannot keep the hook hanging by inheriting the pipe.
+exec </dev/null
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "Running pre-push checks..."
+
+echo "Backend: ruff"
+(
+    cd apps/python
+    if [ -x ".venv/bin/python" ]; then
+        .venv/bin/python -m ruff check .
+        .venv/bin/python -m ruff format --check .
+    else
+        uv run ruff check .
+        uv run ruff format --check .
+    fi
+)
+
+echo "Frontend: lint"
+(
+    cd apps/nextjs
+    npm run lint
+)
+
+echo "Pre-push checks passed."

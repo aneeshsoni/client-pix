@@ -7,6 +7,7 @@ import {
   getDownloadStatus,
   getShareDownloadFileUrl,
   getShareDownloadStatus,
+  prepareAllAlbumsDownload,
   prepareDownload,
   prepareShareDownload,
 } from "@/lib/api";
@@ -20,6 +21,7 @@ export type DownloadStatus =
 
 interface UseDownloadJobReturn {
   startDownload: (albumId: string, photoIds?: string[]) => Promise<void>;
+  startAllAlbumsDownload: () => Promise<void>;
   startShareDownload: (token: string, password?: string) => Promise<void>;
   progress: number;
   status: DownloadStatus;
@@ -163,6 +165,38 @@ export function useDownloadJob(): UseDownloadJobReturn {
     [cleanup, triggerBrowserDownload, pollForCompletion],
   );
 
+  const startAllAlbumsDownload = useCallback(async () => {
+    cleanup();
+    cancelledRef.current = false;
+    setStatus("preparing");
+    setProgress(0);
+    setError(null);
+
+    try {
+      const job = await prepareAllAlbumsDownload();
+
+      if (job.status === "ready") {
+        triggerBrowserDownload(getDownloadFileUrl(job.job_id));
+        return;
+      }
+
+      if (job.status === "failed") {
+        setStatus("failed");
+        setError(job.error || "Download preparation failed");
+        return;
+      }
+
+      setProgress(job.progress);
+      pollForCompletion(
+        () => getDownloadStatus(job.job_id),
+        () => getDownloadFileUrl(job.job_id),
+      );
+    } catch (e) {
+      setStatus("failed");
+      setError(e instanceof Error ? e.message : "Failed to start download");
+    }
+  }, [cleanup, triggerBrowserDownload, pollForCompletion]);
+
   const cancel = useCallback(() => {
     cancelledRef.current = true;
     cleanup();
@@ -173,6 +207,7 @@ export function useDownloadJob(): UseDownloadJobReturn {
 
   return {
     startDownload,
+    startAllAlbumsDownload,
     startShareDownload,
     progress,
     status,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { Download, Loader2 } from "lucide-react";
 import { AlbumGrid } from "@/components/gallery";
 import { GalleryHeader } from "@/components/gallery/GalleryHeader";
 import {
@@ -11,12 +12,14 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useDownloadJob } from "@/hooks/use-download-job";
 import { listAlbums, type Album } from "@/lib/api";
 
 export default function AlbumsPage() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const downloadJob = useDownloadJob();
 
   const fetchAlbums = useCallback(async () => {
     try {
@@ -50,10 +53,46 @@ export default function AlbumsPage() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <GalleryHeader
-          albumCount={albums.length}
-          onAlbumCreated={fetchAlbums}
-        />
+        <div className="ml-auto flex items-center gap-3">
+          {albums.length > 0 && (
+            <button
+              onClick={() => {
+                if (
+                  downloadJob.status === "idle" ||
+                  downloadJob.status === "failed"
+                ) {
+                  downloadJob.startAllAlbumsDownload();
+                }
+              }}
+              disabled={
+                downloadJob.status === "preparing" ||
+                downloadJob.status === "downloading"
+              }
+              className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-70"
+            >
+              {downloadJob.status === "preparing" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="hidden sm:inline">
+                    {downloadJob.progress > 0
+                      ? `Preparing... ${downloadJob.progress}%`
+                      : "Preparing..."}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Download All Albums</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <GalleryHeader
+            albumCount={albums.length}
+            onAlbumCreated={fetchAlbums}
+          />
+        </div>
       </header>
 
       {/* Content */}
@@ -90,4 +129,3 @@ export default function AlbumsPage() {
     </>
   );
 }
-
