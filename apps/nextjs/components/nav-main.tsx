@@ -41,8 +41,8 @@ export function NavMain({
       <SidebarGroupLabel>Navigation</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          // If item has sub-items, render as collapsible
-          if (item.items && item.items.length > 0) {
+          // Keep configured submenu rows expandable even before async children load.
+          if (item.items) {
             return (
               <Collapsible
                 key={item.title}
@@ -50,8 +50,13 @@ export function NavMain({
                 className="group/collapsible"
               >
                 <SidebarMenuItem className="group/item">
-                  <div className="flex items-center gap-1">
-                    <SidebarMenuButton asChild tooltip={item.title} className="flex-1" isActive={item.isActive}>
+                  <div className="flex items-center gap-1 group-data-[collapsible=icon]:justify-center">
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.title}
+                      className="flex-1 group-data-[collapsible=icon]:flex-none"
+                      isActive={item.isActive}
+                    >
                       <Link href={item.url} className="group/link">
                         {item.icon && <item.icon />}
                         <span>{item.title}</span>
@@ -60,7 +65,7 @@ export function NavMain({
                     <CollapsibleTrigger asChild>
                       <button
                         type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground outline-none transition-transform focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground outline-none transition-transform focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
                       >
                         <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                       </button>

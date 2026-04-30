@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Settings2, Images, Folder } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { NavMain } from "@/components/nav-main";
@@ -24,23 +24,37 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [_isLoadingAlbums, setIsLoadingAlbums] = useState(true);
 
-  // Fetch albums for sidebar
-  useEffect(() => {
-    const fetchAlbums = async () => {
-      try {
-        const response = await listAlbums();
-        setAlbums(response.albums);
-      } catch (error) {
-        console.error("Failed to fetch albums for sidebar:", error);
-      } finally {
-        setIsLoadingAlbums(false);
-      }
-    };
-
-    if (isAuthenticated) {
-      fetchAlbums();
+  const fetchAlbums = useCallback(async () => {
+    try {
+      setIsLoadingAlbums(true);
+      const response = await listAlbums();
+      setAlbums(response.albums);
+      return true;
+    } catch (error) {
+      console.error("Failed to fetch albums for sidebar:", error);
+      return false;
+    } finally {
+      setIsLoadingAlbums(false);
     }
-  }, [isAuthenticated]);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void fetchAlbums();
+    }
+  }, [fetchAlbums, isAuthenticated, pathname]);
+
+  useEffect(() => {
+    if (!isAuthenticated || albums.length > 0) {
+      return;
+    }
+
+    const retryId = window.setTimeout(async () => {
+      await fetchAlbums();
+    }, 2000);
+
+    return () => window.clearTimeout(retryId);
+  }, [albums.length, fetchAlbums, isAuthenticated]);
 
   // Build navigation items with dynamic albums
   const navItems = React.useMemo(() => {
