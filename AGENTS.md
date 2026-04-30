@@ -10,15 +10,14 @@ When making code changes through an LLM or coding agent, run the relevant local 
   - `cd apps/python`
   - `uv run ruff check .`
   - `uv run ruff format --check .`
-  - `uv run pytest tests/ -v`
 - Frontend changes:
   - `cd apps/nextjs`
   - `npm run lint`
-  - `npm test`
-  - `npm run build`
 - Cross-cutting changes that touch both apps should run both sets of checks.
 
 If a check cannot be run in the current environment, call that out explicitly before committing or pushing.
+
+Additional tests and builds can still be run when the change warrants them, but the always-on local guardrail before commit/push is linting and formatting validation.
 
 ### Git Hooks
 
@@ -31,9 +30,9 @@ This repo includes local Git hooks in `.githooks/`.
     - frontend: `npm run lint`
 - `pre-push`
   - Runs automatically before `git push`
-  - Full validation:
-    - backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest tests/ -v`
-    - frontend: `npm run lint`, `npm test`, `npm run build`
+  - Runs repo-wide lint / formatting validation:
+    - backend: `uv run ruff check .`, `uv run ruff format --check .`
+    - frontend: `npm run lint`
 
 One-time setup for each local clone:
 

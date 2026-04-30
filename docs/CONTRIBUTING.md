@@ -164,6 +164,19 @@ Additionally, local runtimes provide:
 - Easier debugging with breakpoints
 - Consistent dependency management across the team
 
+### Local Validation Hooks
+
+After `./scripts/setup-dev.sh`, this repo automatically runs:
+
+- `pre-commit`
+  - backend: `uv run ruff check .`, `uv run ruff format --check .`
+  - frontend: `npm run lint`
+- `pre-push`
+  - backend: `uv run ruff check .`, `uv run ruff format --check .`
+  - frontend: `npm run lint`
+
+These hooks are the always-on local guardrail before commit/push. Run additional tests or builds manually when your change needs them.
+
 ### Local Development Workflow
 
 **Running Tests:**

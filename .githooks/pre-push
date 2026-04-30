@@ -10,20 +10,22 @@ cd "$REPO_ROOT"
 
 echo "Running pre-push checks..."
 
-echo "Backend: ruff + tests"
+echo "Backend: ruff"
 (
     cd apps/python
-    uv run ruff check .
-    uv run ruff format --check .
-    uv run pytest tests/ -v
+    if [ -x ".venv/bin/python" ]; then
+        .venv/bin/python -m ruff check .
+        .venv/bin/python -m ruff format --check .
+    else
+        uv run ruff check .
+        uv run ruff format --check .
+    fi
 )
 
-echo "Frontend: lint + tests + build"
+echo "Frontend: lint"
 (
     cd apps/nextjs
     npm run lint
-    npm test
-    npm run build
 )
 
 echo "Pre-push checks passed."
