@@ -28,6 +28,7 @@ class DownloadJob:
     album_title: str = ""
     # Internal: file data for building the ZIP
     _files_to_zip: list[tuple[str, str]] = field(default_factory=list)
+    _directories_to_zip: list[str] = field(default_factory=list)
 
 
 class DownloadService:
@@ -50,6 +51,28 @@ class DownloadService:
 
     def _cache_path(self, cache_key: str) -> Path:
         return self._cache_dir / f"{cache_key}.zip"
+
+    def _sanitize_path_part(self, value: str, fallback: str) -> str:
+        sanitized = "".join(c if c.isalnum() or c in " -_()" else "_" for c in value)
+        sanitized = sanitized.strip().strip(".")
+        return sanitized or fallback
+
+    def _dedupe_name(
+        self,
+        used_names: dict[str, int],
+        base_name: str,
+        *,
+        treat_as_filename: bool = True,
+    ) -> str:
+        if base_name in used_names:
+            used_names[base_name] += 1
+            name_parts = base_name.rsplit(".", 1)
+            if treat_as_filename and len(name_parts) == 2:
+                return f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
+            return f"{base_name}_{used_names[base_name]}"
+
+        used_names[base_name] = 0
+        return base_name
 
     def get_cached_zip(
         self, album_id: str, photo_ids: list[str] | None = None
@@ -91,20 +114,7 @@ class DownloadService:
             if not file_path.exists():
                 continue
 
-            base_name = photo.original_filename
-            if base_name in used_names:
-                used_names[base_name] += 1
-                name_parts = base_name.rsplit(".", 1)
-                if len(name_parts) == 2:
-                    archive_name = (
-                        f"{name_parts[0]}_{used_names[base_name]}.{name_parts[1]}"
-                    )
-                else:
-                    archive_name = f"{base_name}_{used_names[base_name]}"
-            else:
-                used_names[base_name] = 0
-                archive_name = base_name
-
+            archive_name = self._dedupe_name(used_names, photo.original_filename)
             files_to_zip.append((str(file_path), archive_name))
 
         if not files_to_zip:
@@ -152,6 +162,118 @@ class DownloadService:
         self._executor.submit(self._build_zip, job.job_id)
         return job
 
+    def prepare_multi_album_download(
+        self,
+        albums: Sequence,
+        upload_dir: Path,
+    ) -> DownloadJob:
+        """Start a background download job for all albums in one consolidated ZIP."""
+        self.ensure_cache_dir()
+
+        files_to_zip: list[tuple[str, str]] = []
+        directories_to_zip: list[str] = []
+        used_folder_names: dict[str, int] = {}
+        cache_signature_parts: list[str] = []
+
+        for album in albums:
+            folder_name = self._sanitize_path_part(album.title, "Album")
+            folder_name = self._dedupe_name(
+                used_folder_names,
+                folder_name,
+                treat_as_filename=False,
+            )
+            directories_to_zip.append(folder_name)
+            cache_signature_parts.append(
+                f"album:{album.id}:{album.updated_at.isoformat()}:{folder_name}"
+            )
+
+            used_file_names: dict[str, int] = {}
+            album_photos = sorted(
+                album.photos,
+                key=lambda photo: (
+                    photo.captured_at or photo.created_at,
+                    photo.created_at,
+                    str(photo.id),
+                ),
+            )
+
+            for photo in album_photos:
+                file_hash = photo.file_hash
+                if not file_hash:
+                    continue
+
+                file_path = upload_dir / file_hash.storage_path
+                if not file_path.exists():
+                    continue
+
+                archive_name = self._dedupe_name(
+                    used_file_names, photo.original_filename
+                )
+                files_to_zip.append((str(file_path), f"{folder_name}/{archive_name}"))
+                cache_signature_parts.append(
+                    f"photo:{photo.id}:{photo.updated_at.isoformat()}:{archive_name}"
+                )
+
+        if not directories_to_zip:
+            job = DownloadJob(
+                job_id=uuid.uuid4().hex,
+                album_id="all-albums",
+                status="failed",
+                error="No albums available for download",
+                album_title="All Albums",
+            )
+            self._jobs[job.job_id] = job
+            return job
+
+        if not files_to_zip:
+            job = DownloadJob(
+                job_id=uuid.uuid4().hex,
+                album_id="all-albums",
+                status="failed",
+                error="No files available for download",
+                album_title="All Albums",
+            )
+            self._jobs[job.job_id] = job
+            return job
+
+        signature_hash = hashlib.md5("|".join(cache_signature_parts).encode()).hexdigest()
+        cache_key = f"all_albums_{signature_hash[:16]}"
+        cached = self._cache_path(cache_key)
+        if cached.exists():
+            if time.time() - os.path.getmtime(cached) <= DOWNLOAD_CACHE_TTL_HOURS * 3600:
+                job = DownloadJob(
+                    job_id=uuid.uuid4().hex,
+                    album_id="all-albums",
+                    status="ready",
+                    progress=100,
+                    total_files=len(files_to_zip),
+                    processed_files=len(files_to_zip),
+                    zip_path=str(cached),
+                    zip_size=os.path.getsize(cached),
+                    album_title="All Albums",
+                )
+                self._jobs[job.job_id] = job
+                return job
+            try:
+                os.unlink(cached)
+            except OSError:
+                pass
+
+        job = DownloadJob(
+            job_id=uuid.uuid4().hex,
+            album_id="all-albums",
+            status="queued",
+            total_files=len(files_to_zip),
+            album_title="All Albums",
+            _files_to_zip=files_to_zip,
+            _directories_to_zip=directories_to_zip,
+        )
+        job.zip_path = str(self._cache_path(cache_key))
+        self._jobs[job.job_id] = job
+
+        self._executor.submit(self._build_zip, job.job_id)
+        return job
+
     def _build_zip(self, job_id: str) -> None:
         """Build ZIP file in a background thread."""
         job = self._jobs.get(job_id)
@@ -164,6 +286,8 @@ class DownloadService:
 
         try:
             with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_STORED) as zf:
+                for directory_name in job._directories_to_zip:
+                    zf.writestr(f"{directory_name}/", "")
                 for i, (file_path, archive_name) in enumerate(job._files_to_zip):
                     zf.write(file_path, archive_name)
                     job.processed_files = i + 1
@@ -186,6 +310,7 @@ class DownloadService:
         finally:
             # Clear internal file list to free memory
             job._files_to_zip = []
+            job._directories_to_zip = []
 
     def get_job(self, job_id: str) -> DownloadJob | None:
         return self._jobs.get(job_id)

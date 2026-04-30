@@ -17,7 +17,7 @@ export function GalleryHeader({
 
   return (
     <>
-      <div className="ml-auto flex items-center gap-4">
+      <div className="flex items-center gap-4">
         <span className="text-sm text-muted-foreground">
           {albumCount} album{albumCount !== 1 ? "s" : ""}
         </span>

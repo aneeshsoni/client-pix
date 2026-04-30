@@ -3,36 +3,31 @@ set -e
 
 cd /app
 
-ALEMBIC_BIN=""
+run_alembic() {
+    if [ -x "/app/.venv/bin/alembic" ] && /app/.venv/bin/alembic --help >/dev/null 2>&1; then
+        /app/.venv/bin/alembic upgrade head
+        return 0
+    fi
 
-if [ -x "/app/.venv/bin/alembic" ]; then
-    ALEMBIC_BIN="/app/.venv/bin/alembic"
-elif command -v alembic >/dev/null 2>&1; then
-    ALEMBIC_BIN="$(command -v alembic)"
-fi
+    if command -v alembic >/dev/null 2>&1 && alembic --help >/dev/null 2>&1; then
+        alembic upgrade head
+        return 0
+    fi
 
-if [ -z "$ALEMBIC_BIN" ]; then
+    return 1
+}
+
+echo "Running database migrations..."
+if ! run_alembic; then
     if command -v uv >/dev/null 2>&1; then
         echo "Bootstrapping Python dependencies..."
         uv sync --frozen
-        if [ -x "/app/.venv/bin/alembic" ]; then
-            ALEMBIC_BIN="/app/.venv/bin/alembic"
-        elif command -v alembic >/dev/null 2>&1; then
-            ALEMBIC_BIN="$(command -v alembic)"
-        fi
+        run_alembic
     else
         echo "Error: alembic is not available and uv is not installed."
         exit 1
     fi
 fi
-
-if [ -z "$ALEMBIC_BIN" ]; then
-    echo "Error: alembic is still unavailable after dependency bootstrap."
-    exit 1
-fi
-
-echo "Running database migrations..."
-"$ALEMBIC_BIN" upgrade head
 
 echo "Starting application..."
 exec "$@"

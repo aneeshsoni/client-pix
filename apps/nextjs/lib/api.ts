@@ -708,6 +708,21 @@ export async function prepareDownload(
   return response.json();
 }
 
+export async function prepareAllAlbumsDownload(): Promise<DownloadJobResponse> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/downloads/prepare-all-albums`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to prepare download: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 export async function getDownloadStatus(
   jobId: string,
 ): Promise<DownloadJobResponse> {
