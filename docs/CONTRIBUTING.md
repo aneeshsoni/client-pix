@@ -11,14 +11,8 @@ Thank you for your interest in contributing to Client Pix!
 # 1. Fork and clone
 git clone https://github.com/aneeshsoni/client-pix.git
 cd client-pix
-
-# 2. Install the correct runtime versions and install dependencies
-cd apps/nextjs && nvm install # Reads from apps/nextjs/.nvmrc
-npm install # Reads from package.json
-cd ..
-cd python && pyenv install # Reads from apps/python/.python-version
-uv sync # Reads from pyproject.toml
-cd ../..
+# 2. Install the correct runtime versions (see below), then run:
+./scripts/setup-dev.sh
 
 # 3. Start dev environment
 ./start.sh
@@ -103,18 +97,16 @@ Alternatively, you can install these versions manually, but using version manage
    cd ../..
    ```
 
-3. **Install local dependencies**
+3. **Run the developer bootstrap script**
 
    ```bash
-   # Install frontend dependencies
-   cd apps/nextjs
-   npm install
-
-   # Install backend dependencies
-   cd ../python
-   uv sync
-   cd ../..
+   ./scripts/setup-dev.sh
    ```
+
+   This is a developer-only, non-destructive setup step. It:
+   - enables repo-local Git hooks
+   - installs frontend dependencies with `npm install`
+   - installs backend dependencies with `uv sync --dev`
 
 4. **Start the development environment**
 
@@ -140,6 +132,15 @@ Alternatively, you can install these versions manually, but using version manage
    ./start.sh logs     # View logs
    ./start.sh fresh    # Full rebuild (deletes all data!)
    ```
+
+### What `./scripts/setup-dev.sh` Does
+
+The setup script prepares a local developer clone by:
+
+1. Verifying required local tools are installed
+2. Enabling `.githooks` as the repo's Git hooks path
+3. Installing frontend dependencies
+4. Installing backend dependencies
 
 ### What `./start.sh` Does
 

@@ -2,6 +2,48 @@
 
 This file provides guidance to coding agents working with this repository.
 
+## Validation Policy
+
+When making code changes through an LLM or coding agent, run the relevant local checks before committing and pushing.
+
+- Backend changes:
+  - `cd apps/python`
+  - `uv run ruff check .`
+  - `uv run ruff format --check .`
+  - `uv run pytest tests/ -v`
+- Frontend changes:
+  - `cd apps/nextjs`
+  - `npm run lint`
+  - `npm test`
+  - `npm run build`
+- Cross-cutting changes that touch both apps should run both sets of checks.
+
+If a check cannot be run in the current environment, call that out explicitly before committing or pushing.
+
+### Git Hooks
+
+This repo includes local Git hooks in `.githooks/`.
+
+- `pre-commit`
+  - Runs automatically before `git commit`
+  - Fast checks only:
+    - backend: `uv run ruff check .` and `uv run ruff format --check .`
+    - frontend: `npm run lint`
+- `pre-push`
+  - Runs automatically before `git push`
+  - Full validation:
+    - backend: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest tests/ -v`
+    - frontend: `npm run lint`, `npm test`, `npm run build`
+
+One-time setup for each local clone:
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit .githooks/pre-push
+```
+
+After that, the hooks run automatically. They do not need to be triggered manually.
+
 ## Commands
 
 ### Development

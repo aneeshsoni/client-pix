@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "Running pre-push checks..."
+
+echo "Backend: ruff + tests"
+(
+    cd apps/python
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run pytest tests/ -v
+)
+
+echo "Frontend: lint + tests + build"
+(
+    cd apps/nextjs
+    npm run lint
+    npm test
+    npm run build
+)
+
+echo "Pre-push checks passed."

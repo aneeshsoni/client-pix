@@ -35,10 +35,13 @@ Best for development or if you want to customize the source code.
 ```bash
 git clone https://github.com/aneeshsoni/client-pix.git
 cd client-pix
+./scripts/setup-dev.sh
 ./start.sh
 ```
 
 This runs `docker compose up --build` using the development compose file, building the frontend and backend images from source and starting all services (PostgreSQL, Nginx, etc.).
+
+`./scripts/setup-dev.sh` is a developer-only bootstrap script. It installs local dependencies, enables the repo's Git hooks, and prepares a clone for day-to-day development.
 
 ### Accessing the App
 
