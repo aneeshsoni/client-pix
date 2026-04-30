@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Git passes ref update data to pre-push on stdin. Detach child commands from that
+# stream so test/build tools cannot keep the hook hanging by inheriting the pipe.
+exec </dev/null
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
