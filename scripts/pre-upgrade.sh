@@ -40,6 +40,18 @@ else
     echo "           If this is a fresh install, this is expected."
 fi
 
+# Backup uploads volume
+echo ""
+echo "Creating uploads backup..."
+if docker compose -f "$COMPOSE_FILE" run --rm --no-deps -T --entrypoint tar backend -czf - -C /app/uploads . > "$BACKUP_DIR/uploads.tar.gz" 2>/dev/null; then
+    UPLOADS_SIZE=$(du -h "$BACKUP_DIR/uploads.tar.gz" | cut -f1)
+    echo "[   OK    ] Uploads backup created ($UPLOADS_SIZE)"
+else
+    rm -f "$BACKUP_DIR/uploads.tar.gz"
+    echo "[ WARNING ] Uploads backup failed (backend image or uploads volume may not be available)"
+    echo "           If this is a fresh install, this is expected."
+fi
+
 # Record current git commit
 echo ""
 echo "Recording current version..."
@@ -79,4 +91,7 @@ echo "  3. ./scripts/health-check.sh $COMPOSE_FILE"
 echo ""
 echo "To rollback if needed:"
 echo "  ./scripts/rollback.sh $COMPOSE_FILE $BACKUP_DIR/database.sql"
+if [[ -f "$BACKUP_DIR/uploads.tar.gz" ]]; then
+    echo "  Uploads will be restored automatically from $BACKUP_DIR/uploads.tar.gz"
+fi
 echo ""
