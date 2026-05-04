@@ -27,6 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/aneeshsoni/client-pix/main/install.
 ```
 
 The installer will prompt for a domain (for automatic HTTPS) or default to local/LAN access
+and can optionally store uploads in a host/NAS folder instead of Docker's default uploads volume.
 
 ### Option 2: Clone and Build from Source
 

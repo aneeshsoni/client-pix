@@ -8,6 +8,8 @@
 # Options (environment variables):
 #   INSTALL_DIR   Where to install (default: ~/client-pix)
 #   DOMAIN        Your domain for HTTPS (leave empty for LAN-only access)
+#   CLIENT_PIX_UPLOADS_PATH
+#                 Optional host/NAS folder for uploaded files
 # =============================================================================
 set -euo pipefail
 
@@ -83,6 +85,30 @@ if [ -z "${DOMAIN:-}" ]; then
 fi
 DOMAIN="${DOMAIN:-localhost}"
 
+# Upload storage
+if [ -z "${CLIENT_PIX_UPLOADS_PATH+x}" ]; then
+  echo ""
+  echo "  Optional: store uploads in a normal host/NAS folder"
+  echo "  Leave blank to use Docker's managed uploads volume"
+  echo "  Example: /volume1/photos/client-pix/uploads"
+  echo ""
+  if [ -r /dev/tty ]; then
+    read -rp "  Upload storage path: " CLIENT_PIX_UPLOADS_PATH < /dev/tty
+  else
+    CLIENT_PIX_UPLOADS_PATH=""
+  fi
+fi
+
+if [ -n "${CLIENT_PIX_UPLOADS_PATH:-}" ]; then
+  case "$CLIENT_PIX_UPLOADS_PATH" in
+    /*) ;;
+    *) error "Upload storage path must be an absolute path, or leave it blank." ;;
+  esac
+  case "$CLIENT_PIX_UPLOADS_PATH" in
+    *[[:space:]]*) error "Upload storage path cannot contain whitespace." ;;
+  esac
+fi
+
 # Generate a secure postgres password
 POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
 
@@ -91,6 +117,11 @@ if [ "$DOMAIN" = "localhost" ]; then
   info "Mode: Local/LAN (HTTP only)"
 else
   info "Mode: Domain with HTTPS ($DOMAIN)"
+fi
+if [ -n "${CLIENT_PIX_UPLOADS_PATH:-}" ]; then
+  info "Upload storage: $CLIENT_PIX_UPLOADS_PATH"
+else
+  info "Upload storage: Docker volume"
 fi
 
 # -----------------------------------------------------------------------------
@@ -101,6 +132,11 @@ info "Installing to $INSTALL_DIR ..."
 
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
+
+if [ -n "${CLIENT_PIX_UPLOADS_PATH:-}" ]; then
+  mkdir -p "$CLIENT_PIX_UPLOADS_PATH"
+  ok "Created upload storage directory: $CLIENT_PIX_UPLOADS_PATH"
+fi
 
 if [ "$DOMAIN" = "localhost" ]; then
   # LAN mode: Nginx, no SSL
@@ -122,6 +158,11 @@ cat > .env <<EOF
 DOMAIN=$DOMAIN
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 EOF
+if [ -n "${CLIENT_PIX_UPLOADS_PATH:-}" ]; then
+  cat >> .env <<EOF
+CLIENT_PIX_UPLOADS_PATH=$CLIENT_PIX_UPLOADS_PATH
+EOF
+fi
 ok "Generated .env file"
 
 # Download upgrade script
@@ -145,7 +186,7 @@ info "Pulling Docker images and starting services..."
 echo "  (this may take a few minutes on first install)"
 echo ""
 
-docker compose up -d
+./upgrade.sh
 
 # -----------------------------------------------------------------------------
 # Done
@@ -172,6 +213,9 @@ fi
 
 echo ""
 echo "  Install directory: $INSTALL_DIR"
+if [ -n "${CLIENT_PIX_UPLOADS_PATH:-}" ]; then
+  echo "  Upload storage:    $CLIENT_PIX_UPLOADS_PATH"
+fi
 echo "  Upgrade later:     cd $INSTALL_DIR && ./upgrade.sh"
 echo "  View logs:         cd $INSTALL_DIR && docker compose logs -f"
 echo "  Stop:              cd $INSTALL_DIR && docker compose down"
