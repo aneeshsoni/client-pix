@@ -38,12 +38,18 @@ if [[ ! -f "$BACKUP_SQL" ]]; then
     exit 1
 fi
 
+# Get the backup directory to find version info and optional uploads backup
+BACKUP_DIR=$(dirname "$BACKUP_SQL")
+UPLOADS_BACKUP="$BACKUP_DIR/uploads.tar.gz"
+
 echo "Compose file: $COMPOSE_FILE"
 echo "Backup file: $BACKUP_SQL"
+if [[ -f "$UPLOADS_BACKUP" ]]; then
+    echo "Uploads file: $UPLOADS_BACKUP"
+else
+    echo "Uploads file: not found (database-only rollback)"
+fi
 echo ""
-
-# Get the backup directory to find version info
-BACKUP_DIR=$(dirname "$BACKUP_SQL")
 
 # Check for version info
 if [[ -f "$BACKUP_DIR/version.txt" ]]; then
@@ -116,6 +122,15 @@ echo "Restoring database from backup..."
 docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U clientpix -d clientpix -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" 2>/dev/null || true
 docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U clientpix -d clientpix < "$BACKUP_SQL"
 echo "[   OK    ] Database restored"
+
+# Restore uploads if the backup includes them
+if [[ -f "$UPLOADS_BACKUP" ]]; then
+    echo ""
+    echo "Restoring uploads from backup..."
+    docker compose -f "$COMPOSE_FILE" run --rm --no-deps -T --entrypoint sh backend -c \
+        'mkdir -p /app/uploads && find /app/uploads -mindepth 1 -maxdepth 1 -exec rm -rf {} + && tar -xzf - -C /app/uploads' < "$UPLOADS_BACKUP"
+    echo "[   OK    ] Uploads restored"
+fi
 
 # Rebuild and restart all containers
 echo ""

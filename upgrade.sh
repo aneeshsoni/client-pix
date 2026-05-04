@@ -153,6 +153,14 @@ else
 
     # Version info
     if [[ -n "$BACKUP_DIR" ]]; then
+        if docker compose -f "$COMPOSE_FILE" run --rm --no-deps -T --entrypoint tar backend -czf - -C /app/uploads . > "$BACKUP_DIR/uploads.tar.gz" 2>/dev/null; then
+            UPLOADS_SIZE=$(du -h "$BACKUP_DIR/uploads.tar.gz" | cut -f1)
+            echo -e "   ${GREEN}✓${NC} Uploads backup created ($UPLOADS_SIZE)"
+        else
+            rm -f "$BACKUP_DIR/uploads.tar.gz"
+            echo -e "   ${YELLOW}⚠${NC} Uploads backup failed (continuing with database backup only)"
+        fi
+
         echo "Branch: $(git branch --show-current 2>/dev/null || echo 'unknown')" > "$BACKUP_DIR/version.txt"
         echo "Commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')" >> "$BACKUP_DIR/version.txt"
         docker compose -f "$COMPOSE_FILE" images > "$BACKUP_DIR/images.txt" 2>/dev/null || true
