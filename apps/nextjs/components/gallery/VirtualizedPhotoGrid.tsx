@@ -31,6 +31,11 @@ interface VirtualizedPhotoGridProps {
   onPhotoDeleted?: (photoId: string) => void;
   dateField?: "captured" | "uploaded";
   groupByDate?: boolean;
+  groups?: Array<{
+    id: string;
+    title: string;
+    photos: VirtualizedGridPhoto[];
+  }>;
   selectionEnabled?: boolean;
   getPhotoAlbumId?: (photo: VirtualizedGridPhoto) => string | undefined;
   onPhotoOpen?: (index: number) => void;
@@ -45,13 +50,13 @@ interface VirtualizedPhotoGridProps {
 }
 
 interface PhotoGroup {
-  date: string;
-  displayDate: string;
+  id: string;
+  title: string;
   photos: VirtualizedGridPhoto[];
 }
 
 type VirtualRow =
-  | { type: "header"; date: string; displayDate: string; photoCount: number }
+  | { type: "header"; id: string; title: string; photoCount: number }
   | { type: "photoRow"; photos: VirtualizedGridPhoto[] };
 
 function groupPhotosByDate(
@@ -87,7 +92,7 @@ function groupPhotosByDate(
       day: "numeric",
     });
 
-    return { date: dateKey, displayDate, photos: groupPhotos };
+    return { id: dateKey, title: displayDate, photos: groupPhotos };
   });
 }
 
@@ -100,8 +105,8 @@ function flattenToVirtualRows(
   for (const group of groups) {
     rows.push({
       type: "header",
-      date: group.date,
-      displayDate: group.displayDate,
+      id: group.id,
+      title: group.title,
       photoCount: group.photos.length,
     });
 
@@ -138,6 +143,7 @@ export function VirtualizedPhotoGrid({
   onPhotoDeleted,
   dateField = "captured",
   groupByDate = true,
+  groups,
   selectionEnabled = true,
   getPhotoAlbumId,
   onPhotoOpen,
@@ -154,17 +160,24 @@ export function VirtualizedPhotoGrid({
     isSelected,
   } = usePhotoSelection();
 
-  const photoGroups = useMemo(
-    () => groupPhotosByDate(photos, dateField),
-    [photos, dateField]
-  );
+  const photoGroups = useMemo(() => {
+    if (groups) {
+      return groups.map((group) => ({
+        id: group.id,
+        title: group.title,
+        photos: group.photos,
+      }));
+    }
+
+    return groupPhotosByDate(photos, dateField);
+  }, [groups, photos, dateField]);
 
   const virtualRows = useMemo(
     () =>
-      groupByDate
+      groups || groupByDate
         ? flattenToVirtualRows(photoGroups, columnCount)
         : flattenToVirtualRowsFlat(photos, columnCount),
-    [groupByDate, photoGroups, photos, columnCount]
+    [groups, groupByDate, photoGroups, photos, columnCount]
   );
 
   const photoIndexMap = useMemo(() => {
@@ -300,7 +313,7 @@ export function VirtualizedPhotoGrid({
                 {row.type === "header" ? (
                   <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
                     <h2 className="text-lg font-semibold">
-                      {row.displayDate}
+                      {row.title}
                     </h2>
                     <div className="flex-1 h-px bg-border" />
                     <span className="text-sm text-muted-foreground">

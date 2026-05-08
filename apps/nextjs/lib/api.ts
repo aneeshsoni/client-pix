@@ -45,10 +45,12 @@ export interface Photo {
   created_at: string;
   captured_at: string | null;
   is_video: boolean;
+  tags: PhotoTag[];
 }
 
 export interface AlbumDetail extends Album {
   photos: Photo[];
+  tags: PhotoTag[];
 }
 
 export interface AlbumListResponse {
@@ -60,6 +62,24 @@ export interface PhotoUploadResponse {
   photos: Photo[];
   uploaded_count: number;
   duplicate_count: number;
+}
+
+export interface PhotoTag {
+  id: string;
+  album_id: string;
+  name: string | null;
+  emoji: string | null;
+  color: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PhotoTagPayload {
+  name?: string | null;
+  emoji?: string | null;
+  color?: string | null;
+  sort_order?: number;
 }
 
 // --- API Functions ---
@@ -186,6 +206,97 @@ export async function deleteAlbum(
   if (!response.ok) {
     throw new Error(`Failed to delete album: ${response.statusText}`);
   }
+}
+
+export async function listAlbumTags(albumId: string): Promise<PhotoTag[]> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/tags`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch tags: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function createAlbumTag(
+  albumId: string,
+  data: PhotoTagPayload,
+): Promise<PhotoTag> {
+  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/tags`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create tag: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function updateAlbumTag(
+  albumId: string,
+  tagId: string,
+  data: PhotoTagPayload,
+): Promise<PhotoTag> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/tags/${tagId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update tag: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function deleteAlbumTag(
+  albumId: string,
+  tagId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/tags/${tagId}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete tag: ${response.statusText}`);
+  }
+}
+
+export async function updatePhotoTags(
+  albumId: string,
+  photoId: string,
+  tagIds: string[],
+): Promise<Photo> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/tags`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tag_ids: tagIds }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to update photo tags: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
 /**

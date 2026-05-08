@@ -27,11 +27,17 @@ from models.api.albums_api_models import (
     AlbumResponse,
     AlbumUpdate,
     PhotoListResponse,
+    PhotoResponse,
+    PhotoTagAssignmentUpdate,
+    PhotoTagCreate,
+    PhotoTagResponse,
+    PhotoTagUpdate,
     PhotoUploadResponse,
 )
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
+from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.download_service import download_service
 from services.storage_service import storage_service
@@ -41,6 +47,7 @@ from sqlalchemy.orm import selectinload
 from utils.response_util import (
     build_album_response,
     build_photo_response,
+    build_photo_tag_response,
     get_thumbnail_path_for_hash,
 )
 from utils.slug_util import generate_slug
@@ -75,6 +82,95 @@ def _apply_photo_sort(stmt, sort_by: str, sort_dir: str):
             stmt = stmt.order_by(Photo.created_at.desc())
 
     return stmt
+
+
+async def _get_album_tags(
+    album_id: uuid.UUID,
+    db: AsyncSession,
+) -> list[PhotoTag]:
+    """Fetch tags for an album in display order."""
+    tags_result = await db.execute(
+        select(PhotoTag)
+        .where(PhotoTag.album_id == album_id)
+        .order_by(PhotoTag.sort_order.asc(), PhotoTag.created_at.asc())
+    )
+    return list(tags_result.scalars().all())
+
+
+async def _get_album_detail_response(
+    album: Album,
+    photos_list: list[Photo],
+    db: AsyncSession,
+) -> AlbumDetailResponse:
+    """Build album detail response with album tags and tagged photos."""
+    photos = [build_photo_response(photo) for photo in photos_list]
+    tags = [
+        build_photo_tag_response(tag) for tag in await _get_album_tags(album.id, db)
+    ]
+
+    cover_hash = None
+    if album.cover_photo_id:
+        for photo in photos_list:
+            if photo.id == album.cover_photo_id:
+                cover_hash = photo.file_hash.sha256_hash
+                break
+
+    return AlbumDetailResponse(
+        id=album.id,
+        title=album.title,
+        description=album.description,
+        slug=album.slug,
+        cover_photo_id=album.cover_photo_id,
+        cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
+        if cover_hash
+        else None,
+        cover_photo_position_x=album.cover_photo_position_x,
+        cover_photo_position_y=album.cover_photo_position_y,
+        photo_count=len(photos),
+        created_at=album.created_at,
+        updated_at=album.updated_at,
+        photos=photos,
+        tags=tags,
+    )
+
+
+def _normalize_tag_field(value: str | None) -> str | None:
+    """Normalize optional user-entered tag fields."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _ensure_tag_has_visible_marker(
+    name: str | None,
+    emoji: str | None,
+    color: str | None,
+) -> None:
+    """Require a tag to have a name, emoji, or color."""
+    if not name and not emoji and not color:
+        raise HTTPException(
+            status_code=400,
+            detail="A tag needs a name, emoji, or color",
+        )
+
+
+async def _ensure_unique_tag_name(
+    album_id: uuid.UUID,
+    name: str | None,
+    db: AsyncSession,
+    exclude_tag_id: uuid.UUID | None = None,
+) -> None:
+    """Ensure a non-empty tag name is unique within the album."""
+    if not name:
+        return
+
+    stmt = select(PhotoTag).where(PhotoTag.album_id == album_id, PhotoTag.name == name)
+    if exclude_tag_id:
+        stmt = stmt.where(PhotoTag.id != exclude_tag_id)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Tag name already exists")
 
 
 # --- Album CRUD ---
@@ -193,39 +289,14 @@ async def get_album(
     photos_stmt = (
         select(Photo)
         .where(Photo.album_id == album_id)
-        .options(selectinload(Photo.file_hash))
+        .options(selectinload(Photo.file_hash), selectinload(Photo.tags))
     )
     photos_stmt = _apply_photo_sort(photos_stmt, sort_by, sort_dir)
 
     photos_result = await db.execute(photos_stmt)
     photos_list = photos_result.scalars().all()
 
-    photos = [build_photo_response(photo) for photo in photos_list]
-
-    # Get cover photo hash
-    cover_hash = None
-    if album.cover_photo_id:
-        for photo in photos_list:
-            if photo.id == album.cover_photo_id:
-                cover_hash = photo.file_hash.sha256_hash
-                break
-
-    return AlbumDetailResponse(
-        id=album.id,
-        title=album.title,
-        description=album.description,
-        slug=album.slug,
-        cover_photo_id=album.cover_photo_id,
-        cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
-        if cover_hash
-        else None,
-        cover_photo_position_x=album.cover_photo_position_x,
-        cover_photo_position_y=album.cover_photo_position_y,
-        photo_count=len(photos),
-        created_at=album.created_at,
-        updated_at=album.updated_at,
-        photos=photos,
-    )
+    return await _get_album_detail_response(album, photos_list, db)
 
 
 @router.get("/slug/{slug}", response_model=AlbumDetailResponse)
@@ -254,39 +325,14 @@ async def get_album_by_slug(
     photos_stmt = (
         select(Photo)
         .where(Photo.album_id == album.id)
-        .options(selectinload(Photo.file_hash))
+        .options(selectinload(Photo.file_hash), selectinload(Photo.tags))
     )
     photos_stmt = _apply_photo_sort(photos_stmt, sort_by, sort_dir)
 
     photos_result = await db.execute(photos_stmt)
     photos_list = photos_result.scalars().all()
 
-    photos = [build_photo_response(photo) for photo in photos_list]
-
-    # Get cover photo hash
-    cover_hash = None
-    if album.cover_photo_id:
-        for photo in photos_list:
-            if photo.id == album.cover_photo_id:
-                cover_hash = photo.file_hash.sha256_hash
-                break
-
-    return AlbumDetailResponse(
-        id=album.id,
-        title=album.title,
-        description=album.description,
-        slug=album.slug,
-        cover_photo_id=album.cover_photo_id,
-        cover_photo_thumbnail=get_thumbnail_path_for_hash(cover_hash)
-        if cover_hash
-        else None,
-        cover_photo_position_x=album.cover_photo_position_x,
-        cover_photo_position_y=album.cover_photo_position_y,
-        photo_count=len(photos),
-        created_at=album.created_at,
-        updated_at=album.updated_at,
-        photos=photos,
-    )
+    return await _get_album_detail_response(album, photos_list, db)
 
 
 @router.patch("/{album_id}", response_model=AlbumResponse)
@@ -483,6 +529,150 @@ async def delete_album(
         except Exception as e:
             # Log but don't fail - DB is already consistent
             print(f"Warning: Failed to delete file {file_info['file_id']}: {e}")
+
+
+# --- Album Photo Tags ---
+
+
+@router.get("/{album_id}/tags", response_model=list[PhotoTagResponse])
+async def list_album_tags(
+    album_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """List tags for an album."""
+    album_result = await db.execute(select(Album.id).where(Album.id == album_id))
+    if not album_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    return [
+        build_photo_tag_response(tag) for tag in await _get_album_tags(album_id, db)
+    ]
+
+
+@router.post("/{album_id}/tags", response_model=PhotoTagResponse, status_code=201)
+async def create_album_tag(
+    album_id: uuid.UUID,
+    data: PhotoTagCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a tag for an album."""
+    album_result = await db.execute(select(Album.id).where(Album.id == album_id))
+    if not album_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Album not found")
+
+    await _ensure_unique_tag_name(album_id, data.name, db)
+
+    tag = PhotoTag(
+        album_id=album_id,
+        name=data.name,
+        emoji=data.emoji,
+        color=data.color,
+        sort_order=data.sort_order,
+    )
+    db.add(tag)
+    await db.commit()
+    await db.refresh(tag)
+
+    return build_photo_tag_response(tag)
+
+
+@router.patch("/{album_id}/tags/{tag_id}", response_model=PhotoTagResponse)
+async def update_album_tag(
+    album_id: uuid.UUID,
+    tag_id: uuid.UUID,
+    data: PhotoTagUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a tag for an album."""
+    result = await db.execute(
+        select(PhotoTag).where(PhotoTag.id == tag_id, PhotoTag.album_id == album_id)
+    )
+    tag = result.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+
+    if "name" in data.model_fields_set:
+        tag.name = _normalize_tag_field(data.name)
+    if "emoji" in data.model_fields_set:
+        tag.emoji = _normalize_tag_field(data.emoji)
+    if "color" in data.model_fields_set:
+        tag.color = _normalize_tag_field(data.color)
+    if data.sort_order is not None:
+        tag.sort_order = data.sort_order
+
+    _ensure_tag_has_visible_marker(tag.name, tag.emoji, tag.color)
+    await _ensure_unique_tag_name(album_id, tag.name, db, exclude_tag_id=tag.id)
+
+    await db.commit()
+    await db.refresh(tag)
+
+    return build_photo_tag_response(tag)
+
+
+@router.delete("/{album_id}/tags/{tag_id}", status_code=204)
+async def delete_album_tag(
+    album_id: uuid.UUID,
+    tag_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a tag from an album."""
+    result = await db.execute(
+        select(PhotoTag).where(PhotoTag.id == tag_id, PhotoTag.album_id == album_id)
+    )
+    tag = result.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+
+    await db.delete(tag)
+    await db.commit()
+
+
+@router.put(
+    "/{album_id}/photos/{photo_id}/tags",
+    response_model=PhotoResponse,
+)
+async def update_photo_tags(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    data: PhotoTagAssignmentUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace a photo's tag assignments within an album."""
+    photo_result = await db.execute(
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash), selectinload(Photo.tags))
+    )
+    photo = photo_result.scalar_one_or_none()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    tag_ids = list(dict.fromkeys(data.tag_ids))
+    if tag_ids:
+        tags_result = await db.execute(
+            select(PhotoTag)
+            .where(PhotoTag.album_id == album_id, PhotoTag.id.in_(tag_ids))
+            .order_by(PhotoTag.sort_order.asc(), PhotoTag.created_at.asc())
+        )
+        tags = list(tags_result.scalars().all())
+        if len(tags) != len(tag_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="One or more tags do not belong to this album",
+            )
+    else:
+        tags = []
+
+    photo.tags = tags
+    await db.commit()
+
+    refreshed_result = await db.execute(
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash), selectinload(Photo.tags))
+    )
+    refreshed_photo = refreshed_result.scalar_one()
+    return build_photo_response(refreshed_photo)
 
 
 # --- Chunked Upload for Large Files ---

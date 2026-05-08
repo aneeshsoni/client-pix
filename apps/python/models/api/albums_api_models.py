@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Request Models ---
@@ -26,7 +26,56 @@ class AlbumUpdate(BaseModel):
     cover_photo_position_y: float | None = Field(None, ge=0, le=100)
 
 
+class PhotoTagCreate(BaseModel):
+    """Request to create an album photo tag."""
+
+    name: str | None = Field(None, max_length=100)
+    emoji: str | None = Field(None, max_length=16)
+    color: str | None = Field(None, max_length=32)
+    sort_order: int = 0
+
+    @model_validator(mode="after")
+    def validate_tag_content(self) -> "PhotoTagCreate":
+        """Require at least one visible tag marker."""
+        self.name = self.name.strip() if self.name else None
+        self.emoji = self.emoji.strip() if self.emoji else None
+        self.color = self.color.strip() if self.color else None
+        if not self.name and not self.emoji and not self.color:
+            raise ValueError("A tag needs a name, emoji, or color")
+        return self
+
+
+class PhotoTagUpdate(BaseModel):
+    """Request to update an album photo tag."""
+
+    name: str | None = Field(None, max_length=100)
+    emoji: str | None = Field(None, max_length=16)
+    color: str | None = Field(None, max_length=32)
+    sort_order: int | None = None
+
+
+class PhotoTagAssignmentUpdate(BaseModel):
+    """Request to replace a photo's tag assignments."""
+
+    tag_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
 # --- Response Models ---
+
+
+class PhotoTagResponse(BaseModel):
+    """Photo tag details in API response."""
+
+    id: uuid.UUID
+    album_id: uuid.UUID
+    name: str | None
+    emoji: str | None
+    color: str | None
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class PhotoResponse(BaseModel):
@@ -48,6 +97,7 @@ class PhotoResponse(BaseModel):
     file_size: int
     mime_type: str
     created_at: datetime
+    tags: list[PhotoTagResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -75,6 +125,7 @@ class AlbumDetailResponse(AlbumResponse):
     """Album with photos included."""
 
     photos: list[PhotoResponse]
+    tags: list[PhotoTagResponse] = Field(default_factory=list)
 
 
 class AlbumListResponse(BaseModel):
