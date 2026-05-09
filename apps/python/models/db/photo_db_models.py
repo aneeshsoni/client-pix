@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.db.base import Base
+from models.db.photo_tag_db_models import photo_tag_assignments
 
 
 class Photo(Base):
@@ -83,6 +84,11 @@ class Photo(Base):
     )
     file_hash: Mapped["FileHash"] = relationship(  # noqa: F821
         "FileHash",
+    )
+    tags: Mapped[list["PhotoTag"]] = relationship(  # noqa: F821
+        "PhotoTag",
+        secondary=photo_tag_assignments,
+        back_populates="photos",
     )
 
     def __repr__(self) -> str:

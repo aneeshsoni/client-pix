@@ -31,27 +31,40 @@ interface VirtualizedPhotoGridProps {
   onPhotoDeleted?: (photoId: string) => void;
   dateField?: "captured" | "uploaded";
   groupByDate?: boolean;
+  groups?: Array<{
+    id: string;
+    title: string;
+    photos: VirtualizedGridPhoto[];
+  }>;
   selectionEnabled?: boolean;
   getPhotoAlbumId?: (photo: VirtualizedGridPhoto) => string | undefined;
   onPhotoOpen?: (index: number) => void;
+  renderSelectionActions?: (args: {
+    selectedPhotoIds: string[];
+    clearSelection: () => void;
+  }) => ReactNode;
+  selectionToolbarLeft?: string;
   renderPhotoCard?: (args: {
     photo: VirtualizedGridPhoto;
     index: number;
     onOpenLightbox: (index: number) => void;
     isSelected: boolean;
     isSelectionMode: boolean;
-    onToggleSelect: (photoId: string) => void;
+    onToggleSelect: (
+      photoId: string,
+      options?: { rangeSelect?: boolean },
+    ) => void;
   }) => ReactNode;
 }
 
 interface PhotoGroup {
-  date: string;
-  displayDate: string;
+  id: string;
+  title: string;
   photos: VirtualizedGridPhoto[];
 }
 
 type VirtualRow =
-  | { type: "header"; date: string; displayDate: string; photoCount: number }
+  | { type: "header"; id: string; title: string; photoCount: number }
   | { type: "photoRow"; photos: VirtualizedGridPhoto[] };
 
 function groupPhotosByDate(
@@ -87,7 +100,7 @@ function groupPhotosByDate(
       day: "numeric",
     });
 
-    return { date: dateKey, displayDate, photos: groupPhotos };
+    return { id: dateKey, title: displayDate, photos: groupPhotos };
   });
 }
 
@@ -100,8 +113,8 @@ function flattenToVirtualRows(
   for (const group of groups) {
     rows.push({
       type: "header",
-      date: group.date,
-      displayDate: group.displayDate,
+      id: group.id,
+      title: group.title,
       photoCount: group.photos.length,
     });
 
@@ -138,9 +151,12 @@ export function VirtualizedPhotoGrid({
   onPhotoDeleted,
   dateField = "captured",
   groupByDate = true,
+  groups,
   selectionEnabled = true,
   getPhotoAlbumId,
   onPhotoOpen,
+  renderSelectionActions,
+  selectionToolbarLeft,
   renderPhotoCard,
 }: VirtualizedPhotoGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -154,17 +170,24 @@ export function VirtualizedPhotoGrid({
     isSelected,
   } = usePhotoSelection();
 
-  const photoGroups = useMemo(
-    () => groupPhotosByDate(photos, dateField),
-    [photos, dateField]
-  );
+  const photoGroups = useMemo(() => {
+    if (groups) {
+      return groups.map((group) => ({
+        id: group.id,
+        title: group.title,
+        photos: group.photos,
+      }));
+    }
+
+    return groupPhotosByDate(photos, dateField);
+  }, [groups, photos, dateField]);
 
   const virtualRows = useMemo(
     () =>
-      groupByDate
+      groups || groupByDate
         ? flattenToVirtualRows(photoGroups, columnCount)
         : flattenToVirtualRowsFlat(photos, columnCount),
-    [groupByDate, photoGroups, photos, columnCount]
+    [groups, groupByDate, photoGroups, photos, columnCount]
   );
 
   const photoIndexMap = useMemo(() => {
@@ -174,6 +197,29 @@ export function VirtualizedPhotoGrid({
     }
     return map;
   }, [photos]);
+
+  const orderedPhotoIds = useMemo(
+    () =>
+      groups || groupByDate
+        ? photoGroups.flatMap((group) => group.photos.map((photo) => photo.id))
+        : photos.map((photo) => photo.id),
+    [groups, groupByDate, photoGroups, photos]
+  );
+
+  const selectedPhotoIds = useMemo(
+    () => Array.from(selectedIds),
+    [selectedIds]
+  );
+
+  const handleToggleSelection = useCallback(
+    (photoId: string, options?: { rangeSelect?: boolean }) => {
+      toggleSelection(photoId, {
+        ...options,
+        orderedPhotoIds,
+      });
+    },
+    [orderedPhotoIds, toggleSelection]
+  );
 
   const virtualizer = useVirtualizer({
     count: virtualRows.length,
@@ -273,8 +319,11 @@ export function VirtualizedPhotoGrid({
   };
 
   return (
-    <>
-      <div ref={scrollContainerRef} className="masonry-container flex-1 overflow-auto p-6">
+    <div className="relative flex min-h-0 flex-1">
+      <div
+        ref={scrollContainerRef}
+        className="masonry-container flex-1 overflow-auto p-6"
+      >
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,
@@ -300,7 +349,7 @@ export function VirtualizedPhotoGrid({
                 {row.type === "header" ? (
                   <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
                     <h2 className="text-lg font-semibold">
-                      {row.displayDate}
+                      {row.title}
                     </h2>
                     <div className="flex-1 h-px bg-border" />
                     <span className="text-sm text-muted-foreground">
@@ -320,7 +369,7 @@ export function VirtualizedPhotoGrid({
                             onOpenLightbox: openLightbox,
                             isSelected: isSelected(photo.id),
                             isSelectionMode,
-                            onToggleSelect: toggleSelection,
+                            onToggleSelect: handleToggleSelection,
                           })
                         ) : (
                           <PhotoCard
@@ -330,7 +379,7 @@ export function VirtualizedPhotoGrid({
                             onOpenLightbox={openLightbox}
                             isSelected={isSelected(photo.id)}
                             isSelectionMode={isSelectionMode}
-                            onToggleSelect={toggleSelection}
+                            onToggleSelect={handleToggleSelection}
                           />
                         )
                       );
@@ -350,7 +399,10 @@ export function VirtualizedPhotoGrid({
           onClearSelection={clearSelection}
           onDownload={handleBulkDownload}
           onDelete={handleBulkDelete}
-        />
+          left={selectionToolbarLeft}
+        >
+          {renderSelectionActions?.({ selectedPhotoIds, clearSelection })}
+        </SelectionToolbar>
       )}
 
       {!onPhotoOpen && lightboxIndex !== null && photos[lightboxIndex] && (
@@ -365,6 +417,6 @@ export function VirtualizedPhotoGrid({
           onDelete={onPhotoDeleted ? handlePhotoDeleted : undefined}
         />
       )}
-    </>
+    </div>
   );
 }

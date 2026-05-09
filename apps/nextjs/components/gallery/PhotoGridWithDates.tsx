@@ -76,6 +76,20 @@ export function PhotoGridWithDates({
   } = usePhotoSelection();
 
   const photoGroups = useMemo(() => groupPhotosByDate(photos, dateField), [photos, dateField]);
+  const orderedPhotoIds = useMemo(
+    () => photoGroups.flatMap((group) => group.photos.map((photo) => photo.id)),
+    [photoGroups]
+  );
+
+  const handleToggleSelection = useCallback(
+    (photoId: string, options?: { rangeSelect?: boolean }) => {
+      toggleSelection(photoId, {
+        ...options,
+        orderedPhotoIds,
+      });
+    },
+    [orderedPhotoIds, toggleSelection]
+  );
 
   const photoIndexMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -200,7 +214,7 @@ export function PhotoGridWithDates({
                     onOpenLightbox={openLightbox}
                     isSelected={isSelected(photo.id)}
                     isSelectionMode={isSelectionMode}
-                    onToggleSelect={toggleSelection}
+                    onToggleSelect={handleToggleSelection}
                   />
                 );
               })}

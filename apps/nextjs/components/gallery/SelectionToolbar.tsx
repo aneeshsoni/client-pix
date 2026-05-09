@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ interface SelectionToolbarProps {
   onClearSelection: () => void;
   onDownload: () => Promise<void>;
   onDelete: () => Promise<void>;
+  children?: ReactNode;
+  left?: string;
 }
 
 export function SelectionToolbar({
@@ -28,6 +31,8 @@ export function SelectionToolbar({
   onClearSelection,
   onDownload,
   onDelete,
+  children,
+  left = "50%",
 }: SelectionToolbarProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -60,66 +65,74 @@ export function SelectionToolbar({
     <>
       <AnimatePresence>
         {selectedCount > 0 && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+          <div
+            className="fixed bottom-6 z-50 -translate-x-1/2"
+            style={{ left }}
           >
-            <div className="flex items-center gap-2 rounded-full bg-background border shadow-lg px-4 py-2">
-              {/* Selection count */}
-              <span className="text-sm font-medium px-2">
-                {selectedCount} selected
-              </span>
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            >
+              <div className="flex items-center gap-2 rounded-full bg-background border shadow-lg px-4 py-2">
+                {/* Selection count */}
+                <span className="text-sm font-medium px-2">
+                  {selectedCount} selected
+                </span>
 
-              <div className="w-px h-6 bg-border" />
+                <div className="w-px h-6 bg-border" />
 
-              {/* Download button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="gap-2"
-              >
-                {isDownloading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                Download
-              </Button>
+                {children}
 
-              {/* Delete button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={isDeleting}
-                className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                {isDeleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                Delete
-              </Button>
+                {children && <div className="w-px h-6 bg-border" />}
 
-              <div className="w-px h-6 bg-border" />
+                {/* Download button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="gap-2"
+                >
+                  {isDownloading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Download
+                </Button>
 
-              {/* Clear selection */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClearSelection}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </motion.div>
+                {/* Delete button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  disabled={isDeleting}
+                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Delete
+                </Button>
+
+                <div className="w-px h-6 bg-border" />
+
+                {/* Clear selection */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClearSelection}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

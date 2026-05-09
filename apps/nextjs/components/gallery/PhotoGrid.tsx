@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { PhotoCard } from "./PhotoCard";
 import { Lightbox } from "./Lightbox";
 import { SelectionToolbar } from "./SelectionToolbar";
@@ -28,6 +28,20 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
     clearSelection,
     isSelected,
   } = usePhotoSelection();
+  const orderedPhotoIds = useMemo(
+    () => photos.map((photo) => photo.id),
+    [photos]
+  );
+
+  const handleToggleSelection = useCallback(
+    (photoId: string, options?: { rangeSelect?: boolean }) => {
+      toggleSelection(photoId, {
+        ...options,
+        orderedPhotoIds,
+      });
+    },
+    [orderedPhotoIds, toggleSelection]
+  );
 
   const openLightbox = useCallback(
     (index: number) => {
@@ -132,7 +146,7 @@ export function PhotoGrid({ photos, albumId, onPhotoDeleted }: PhotoGridProps) {
             onOpenLightbox={openLightbox}
             isSelected={isSelected(photo.id)}
             isSelectionMode={isSelectionMode}
-            onToggleSelect={toggleSelection}
+            onToggleSelect={handleToggleSelection}
           />
         ))}
       </div>

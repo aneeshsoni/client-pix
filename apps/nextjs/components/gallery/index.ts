@@ -1,6 +1,7 @@
 export { AlbumCard } from "./AlbumCard";
 export { AlbumGrid } from "./AlbumGrid";
 export { AlbumSettingsModal } from "./AlbumSettingsModal";
+export { AlbumTagManagerModal } from "./AlbumTagManagerModal";
 export { GalleryHeader } from "./GalleryHeader";
 export { Lightbox } from "./Lightbox";
 export { MetadataDrawer } from "./MetadataDrawer";

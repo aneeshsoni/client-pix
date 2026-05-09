@@ -1,8 +1,10 @@
 """Response building utilities."""
 
-from models.api.albums_api_models import AlbumResponse, PhotoResponse
+from models.api.albums_api_models import AlbumResponse, PhotoResponse, PhotoTagResponse
 from models.db.album_db_models import Album
 from models.db.photo_db_models import Photo
+from models.db.photo_tag_db_models import PhotoTag
+from sqlalchemy import inspect
 
 
 def get_thumbnail_path_for_hash(sha256_hash: str) -> str:
@@ -47,6 +49,20 @@ def build_album_response(
     )
 
 
+def build_photo_tag_response(tag: PhotoTag) -> PhotoTagResponse:
+    """Build a PhotoTagResponse from a PhotoTag model."""
+    return PhotoTagResponse(
+        id=tag.id,
+        album_id=tag.album_id,
+        name=tag.name,
+        emoji=tag.emoji,
+        color=tag.color,
+        sort_order=tag.sort_order,
+        created_at=tag.created_at,
+        updated_at=tag.updated_at,
+    )
+
+
 def build_photo_response(photo: Photo) -> PhotoResponse:
     """
     Build a PhotoResponse from a Photo model with file_hash data.
@@ -58,6 +74,9 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
     shard1 = file_hash.sha256_hash[:2]
     shard2 = file_hash.sha256_hash[2:4]
     filename_base = file_hash.sha256_hash
+    tags = []
+    if "tags" not in inspect(photo).unloaded:
+        tags = [build_photo_tag_response(tag) for tag in photo.tags]
 
     return PhotoResponse(
         id=photo.id,
@@ -75,4 +94,5 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         file_size=file_hash.file_size,
         mime_type=file_hash.mime_type,
         created_at=photo.created_at,
+        tags=tags,
     )
