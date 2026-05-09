@@ -432,14 +432,17 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             </>
           )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            <label
+              className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors xl:px-4"
+              title="Add media"
+            >
               {isUploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              <span className="hidden whitespace-nowrap sm:inline">
+              <span className="hidden whitespace-nowrap xl:inline">
                 {isUploading ? "Uploading..." : "Add Media"}
               </span>
               <input
@@ -461,12 +464,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   }
                 }}
                 disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-70"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-70 xl:px-4"
+                title="Download all"
               >
                 {downloadJob.status === "preparing" ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden whitespace-nowrap sm:inline">
+                    <span className="hidden whitespace-nowrap xl:inline">
                       {downloadJob.progress > 0
                         ? `Preparing... ${downloadJob.progress}%`
                         : "Preparing..."}
@@ -475,7 +479,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    <span className="hidden whitespace-nowrap sm:inline">Download All</span>
+                    <span className="hidden whitespace-nowrap xl:inline">Download All</span>
                   </>
                 )}
               </button>
@@ -483,10 +487,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
             <button
               onClick={() => setShareModalOpen(true)}
-              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors xl:px-4"
+              title="Share"
             >
               <Share2 className="h-4 w-4" />
-              <span className="hidden whitespace-nowrap sm:inline">Share</span>
+              <span className="hidden whitespace-nowrap xl:inline">Share</span>
             </button>
 
             <button
