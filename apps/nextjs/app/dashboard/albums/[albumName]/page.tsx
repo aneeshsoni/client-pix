@@ -30,7 +30,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import {
   getAlbumBySlug,
   uploadPhotosToAlbum,
@@ -41,7 +42,10 @@ import {
   type SortDir,
 } from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
-import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
+import {
+  PhotoSelectionProvider,
+  usePhotoSelection,
+} from "@/hooks/use-photo-selection";
 
 interface AlbumPageProps {
   params: Promise<{ albumName: string }>;
@@ -51,9 +55,51 @@ function getTagTitle(tag: PhotoTag) {
   return [tag.emoji, tag.name].filter(Boolean).join(" ") || "Color tag";
 }
 
+function SelectionTagAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Button variant="ghost" size="sm" onClick={onOpen} className="gap-2">
+      <Tag className="h-4 w-4" />
+      Tag
+    </Button>
+  );
+}
+
+function AlbumTagManagerWithSelection({
+  album,
+  open,
+  onOpenChange,
+  onTagsChanged,
+  onApplyTag,
+  onApplyTags,
+}: {
+  album: AlbumDetail;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onTagsChanged: () => Promise<void> | void;
+  onApplyTag: (photoIds: string[], tag: PhotoTag) => Promise<void>;
+  onApplyTags: (photoIds: string[], tags: PhotoTag[]) => Promise<void>;
+}) {
+  const { selectedIds } = usePhotoSelection();
+  const selectedPhotoIds = useMemo(() => Array.from(selectedIds), [selectedIds]);
+
+  return (
+    <AlbumTagManagerModal
+      albumId={album.id}
+      tags={album.tags}
+      open={open}
+      onOpenChange={onOpenChange}
+      onTagsChanged={onTagsChanged}
+      selectedPhotoIds={selectedPhotoIds}
+      onTagCreated={(tag) => onApplyTag(selectedPhotoIds, tag)}
+      onTagsSelected={(tags) => onApplyTags(selectedPhotoIds, tags)}
+    />
+  );
+}
+
 export default function AlbumPage({ params }: AlbumPageProps) {
   const { albumName } = use(params);
   const router = useRouter();
+  const { state: sidebarState, isMobile } = useSidebar();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,19 +113,32 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   const downloadJob = useDownloadJob();
 
   const effectiveDir = sortDir ?? (sortBy === "captured" ? "asc" : "desc");
+  const selectionToolbarLeft = isMobile
+    ? "50%"
+    : sidebarState === "collapsed"
+      ? "calc((100vw + 3rem) / 2)"
+      : "calc((100vw + 16rem) / 2)";
 
   const handleSortByChange = (newSortBy: "captured" | "uploaded") => {
     setSortBy(newSortBy);
     setSortDir(undefined);
+    setGroupByTags(false);
+  };
+
+  const handleGroupByTagsChange = () => {
+    setGroupByTags(true);
   };
 
   const toggleSortDir = () => {
     setSortDir(effectiveDir === "asc" ? "desc" : "asc");
   };
 
-  const fetchAlbum = useCallback(async () => {
+  const fetchAlbum = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? true;
     try {
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setError(null);
       const data = await getAlbumBySlug(albumName, sortBy, sortDir);
       setAlbum(data);
@@ -87,7 +146,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       console.error("Failed to fetch album:", err);
       setError(err instanceof Error ? err.message : "Failed to load album");
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [albumName, sortBy, sortDir]);
 
@@ -184,6 +245,56 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     [album]
   );
 
+  const handleBulkApplyTags = useCallback(
+    async (photoIds: string[], tags: PhotoTag[]) => {
+      if (!album) return;
+
+      const selectedPhotos = album.photos.filter((photo) =>
+        photoIds.includes(photo.id)
+      );
+      const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+
+      const updatedPhotos = await Promise.all(
+        selectedPhotos.map((photo) => {
+          const tagIds = new Set(photo.tags.map((assigned) => assigned.id));
+          for (const tag of tags) {
+            tagIds.add(tag.id);
+          }
+          return updatePhotoTags(album.id, photo.id, Array.from(tagIds));
+        })
+      );
+      const updatedPhotoMap = new Map(
+        updatedPhotos.map((photo) => [photo.id, photo])
+      );
+
+      setAlbum((current) => {
+        if (!current) return current;
+
+        const existingTagIds = new Set(current.tags.map((tag) => tag.id));
+        const tagsToAdd = Array.from(tagsById.values()).filter(
+          (tag) => !existingTagIds.has(tag.id)
+        );
+        return {
+          ...current,
+          tags: tagsToAdd.length
+            ? [...current.tags, ...tagsToAdd]
+            : current.tags,
+          photos: current.photos.map(
+            (photo) => updatedPhotoMap.get(photo.id) || photo
+          ),
+        };
+      });
+    },
+    [album]
+  );
+
+  const handleBulkApplyTag = useCallback(
+    async (photoIds: string[], tag: PhotoTag) => {
+      await handleBulkApplyTags(photoIds, [tag]);
+    },
+    [handleBulkApplyTags]
+  );
+
   const tagGroups = useMemo(() => {
     if (!album) return [];
 
@@ -255,14 +366,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
         {/* Row 2: Action toolbar */}
         <div className="flex items-center gap-2 px-4 pb-3 overflow-x-auto">
-          {/* Sort Toggle */}
           {album.photo_count > 0 && (
             <>
               <div className="flex items-center gap-1 rounded-full border bg-background p-1">
                 <button
                   onClick={() => handleSortByChange("captured")}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                    sortBy === "captured"
+                    sortBy === "captured" && !groupByTags
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -274,7 +384,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 <button
                   onClick={() => handleSortByChange("uploaded")}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                    sortBy === "uploaded"
+                    sortBy === "uploaded" && !groupByTags
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
@@ -283,46 +393,40 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   <Clock className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Uploaded</span>
                 </button>
+                <button
+                  onClick={handleGroupByTagsChange}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    groupByTags
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Group by tag"
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Tag</span>
+                </button>
               </div>
-              <button
-                onClick={toggleSortDir}
-                className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
-              >
-                {effectiveDir === "asc" ? (
-                  <ArrowUp className="h-3.5 w-3.5" />
-                ) : (
-                  <ArrowDown className="h-3.5 w-3.5" />
-                )}
-              </button>
+              {!groupByTags && (
+                <button
+                  onClick={toggleSortDir}
+                  className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  title={
+                    effectiveDir === "asc"
+                      ? "Oldest first (click to reverse)"
+                      : "Newest first (click to reverse)"
+                  }
+                >
+                  {effectiveDir === "asc" ? (
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
             </>
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setTagManagerOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
-            >
-              <Tag className="h-4 w-4" />
-              <span className="hidden sm:inline">Tags</span>
-            </button>
-
-            {album.photo_count > 0 && album.tags.length > 0 && (
-              <button
-                onClick={() => setGroupByTags((current) => !current)}
-                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                  groupByTags
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:text-foreground"
-                }`}
-                title="Group by tags"
-              >
-                <Tag className="h-4 w-4" />
-                <span className="hidden sm:inline">Group</span>
-              </button>
-            )}
-
-            {/* Upload more photos */}
             <label className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer">
               {isUploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -448,10 +552,14 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         <VirtualizedPhotoGrid
           photos={album.photos}
           albumId={album.id}
-          onPhotoDeleted={fetchAlbum}
+          onPhotoDeleted={() => fetchAlbum()}
           dateField={sortBy}
           groupByDate={!groupByTags}
           groups={groupByTags ? tagGroups : undefined}
+          selectionToolbarLeft={selectionToolbarLeft}
+          renderSelectionActions={() => (
+            <SelectionTagAction onOpen={() => setTagManagerOpen(true)} />
+          )}
           renderPhotoCard={({
             photo,
             index,
@@ -511,12 +619,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       )}
 
       {album && (
-        <AlbumTagManagerModal
-          albumId={album.id}
-          tags={album.tags}
+        <AlbumTagManagerWithSelection
+          album={album}
           open={tagManagerOpen}
           onOpenChange={setTagManagerOpen}
-          onTagsChanged={fetchAlbum}
+          onTagsChanged={() => fetchAlbum({ showLoading: false })}
+          onApplyTag={handleBulkApplyTag}
+          onApplyTags={handleBulkApplyTags}
         />
       )}
     </PhotoSelectionProvider>

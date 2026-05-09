@@ -19,7 +19,10 @@ interface PhotoCardProps {
   onOpenLightbox: (index: number) => void;
   isSelected?: boolean;
   isSelectionMode?: boolean;
-  onToggleSelect?: (photoId: string) => void;
+  onToggleSelect?: (
+    photoId: string,
+    options?: { rangeSelect?: boolean },
+  ) => void;
   availableTags?: PhotoTag[];
   onTagsChange?: (photoId: string, tagIds: string[]) => Promise<void> | void;
 }
@@ -55,7 +58,7 @@ function PhotoCardInner({
     // If in selection mode or shift/cmd clicking, toggle selection
     if (isSelectionMode || e.shiftKey || e.metaKey || e.ctrlKey) {
       e.preventDefault();
-      onToggleSelect?.(photo.id);
+      onToggleSelect?.(photo.id, { rangeSelect: e.shiftKey });
     } else {
       onOpenLightbox(index);
     }
@@ -63,7 +66,7 @@ function PhotoCardInner({
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleSelect?.(photo.id);
+    onToggleSelect?.(photo.id, { rangeSelect: e.shiftKey });
   };
 
   const handleTagToggle = async (tagId: string, checked: boolean) => {

@@ -39,13 +39,21 @@ interface VirtualizedPhotoGridProps {
   selectionEnabled?: boolean;
   getPhotoAlbumId?: (photo: VirtualizedGridPhoto) => string | undefined;
   onPhotoOpen?: (index: number) => void;
+  renderSelectionActions?: (args: {
+    selectedPhotoIds: string[];
+    clearSelection: () => void;
+  }) => ReactNode;
+  selectionToolbarLeft?: string;
   renderPhotoCard?: (args: {
     photo: VirtualizedGridPhoto;
     index: number;
     onOpenLightbox: (index: number) => void;
     isSelected: boolean;
     isSelectionMode: boolean;
-    onToggleSelect: (photoId: string) => void;
+    onToggleSelect: (
+      photoId: string,
+      options?: { rangeSelect?: boolean },
+    ) => void;
   }) => ReactNode;
 }
 
@@ -147,6 +155,8 @@ export function VirtualizedPhotoGrid({
   selectionEnabled = true,
   getPhotoAlbumId,
   onPhotoOpen,
+  renderSelectionActions,
+  selectionToolbarLeft,
   renderPhotoCard,
 }: VirtualizedPhotoGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -187,6 +197,29 @@ export function VirtualizedPhotoGrid({
     }
     return map;
   }, [photos]);
+
+  const orderedPhotoIds = useMemo(
+    () =>
+      groups || groupByDate
+        ? photoGroups.flatMap((group) => group.photos.map((photo) => photo.id))
+        : photos.map((photo) => photo.id),
+    [groups, groupByDate, photoGroups, photos]
+  );
+
+  const selectedPhotoIds = useMemo(
+    () => Array.from(selectedIds),
+    [selectedIds]
+  );
+
+  const handleToggleSelection = useCallback(
+    (photoId: string, options?: { rangeSelect?: boolean }) => {
+      toggleSelection(photoId, {
+        ...options,
+        orderedPhotoIds,
+      });
+    },
+    [orderedPhotoIds, toggleSelection]
+  );
 
   const virtualizer = useVirtualizer({
     count: virtualRows.length,
@@ -286,8 +319,11 @@ export function VirtualizedPhotoGrid({
   };
 
   return (
-    <>
-      <div ref={scrollContainerRef} className="masonry-container flex-1 overflow-auto p-6">
+    <div className="relative flex min-h-0 flex-1">
+      <div
+        ref={scrollContainerRef}
+        className="masonry-container flex-1 overflow-auto p-6"
+      >
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,
@@ -333,7 +369,7 @@ export function VirtualizedPhotoGrid({
                             onOpenLightbox: openLightbox,
                             isSelected: isSelected(photo.id),
                             isSelectionMode,
-                            onToggleSelect: toggleSelection,
+                            onToggleSelect: handleToggleSelection,
                           })
                         ) : (
                           <PhotoCard
@@ -343,7 +379,7 @@ export function VirtualizedPhotoGrid({
                             onOpenLightbox={openLightbox}
                             isSelected={isSelected(photo.id)}
                             isSelectionMode={isSelectionMode}
-                            onToggleSelect={toggleSelection}
+                            onToggleSelect={handleToggleSelection}
                           />
                         )
                       );
@@ -363,7 +399,10 @@ export function VirtualizedPhotoGrid({
           onClearSelection={clearSelection}
           onDownload={handleBulkDownload}
           onDelete={handleBulkDelete}
-        />
+          left={selectionToolbarLeft}
+        >
+          {renderSelectionActions?.({ selectedPhotoIds, clearSelection })}
+        </SelectionToolbar>
       )}
 
       {!onPhotoOpen && lightboxIndex !== null && photos[lightboxIndex] && (
@@ -378,6 +417,6 @@ export function VirtualizedPhotoGrid({
           onDelete={onPhotoDeleted ? handlePhotoDeleted : undefined}
         />
       )}
-    </>
+    </div>
   );
 }
