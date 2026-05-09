@@ -57,9 +57,15 @@ function getTagTitle(tag: PhotoTag) {
 
 function SelectionTagAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <Button variant="ghost" size="sm" onClick={onOpen} className="gap-2">
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={onOpen}
+      className="h-9 w-9 gap-2 px-0 sm:w-auto sm:px-3"
+      aria-label="Tag selected"
+    >
       <Tag className="h-4 w-4" />
-      Tag
+      <span className="hidden sm:inline">Tag</span>
     </Button>
   );
 }
@@ -368,10 +374,10 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         <div className="flex items-center gap-2 px-4 pb-3 overflow-x-auto">
           {album.photo_count > 0 && (
             <>
-              <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+              <div className="flex shrink-0 items-center gap-1 rounded-full border bg-background p-1">
                 <button
                   onClick={() => handleSortByChange("captured")}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     sortBy === "captured" && !groupByTags
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -379,11 +385,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   title="Sort by date taken"
                 >
                   <Calendar className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Date Taken</span>
+                  <span className="hidden whitespace-nowrap sm:inline">Date Taken</span>
                 </button>
                 <button
                   onClick={() => handleSortByChange("uploaded")}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     sortBy === "uploaded" && !groupByTags
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -391,11 +397,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   title="Sort by upload date"
                 >
                   <Clock className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Uploaded</span>
+                  <span className="hidden whitespace-nowrap sm:inline">Uploaded</span>
                 </button>
                 <button
                   onClick={handleGroupByTagsChange}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     groupByTags
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -403,13 +409,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   title="Group by tag"
                 >
                   <Tag className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Tag</span>
+                  <span className="hidden whitespace-nowrap sm:inline">Tag</span>
                 </button>
               </div>
               {!groupByTags && (
                 <button
                   onClick={toggleSortDir}
-                  className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                   title={
                     effectiveDir === "asc"
                       ? "Oldest first (click to reverse)"
@@ -426,14 +432,14 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             </>
           )}
 
-          <div className="ml-auto flex items-center gap-2">
-            <label className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors cursor-pointer">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors">
               {isUploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              <span className="hidden sm:inline">
+              <span className="hidden whitespace-nowrap sm:inline">
                 {isUploading ? "Uploading..." : "Add Media"}
               </span>
               <input
@@ -455,12 +461,12 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   }
                 }}
                 disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
-                className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-70"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-70"
               >
                 {downloadJob.status === "preparing" ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden sm:inline">
+                    <span className="hidden whitespace-nowrap sm:inline">
                       {downloadJob.progress > 0
                         ? `Preparing... ${downloadJob.progress}%`
                         : "Preparing..."}
@@ -469,7 +475,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    <span className="hidden sm:inline">Download All</span>
+                    <span className="hidden whitespace-nowrap sm:inline">Download All</span>
                   </>
                 )}
               </button>
@@ -477,15 +483,15 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
             <button
               onClick={() => setShareModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Share</span>
+              <span className="hidden whitespace-nowrap sm:inline">Share</span>
             </button>
 
             <button
               onClick={() => setSettingsModalOpen(true)}
-              className="p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="shrink-0 p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Album settings"
             >
               <Settings className="h-5 w-5" />

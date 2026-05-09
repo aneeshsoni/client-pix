@@ -75,10 +75,11 @@ export function SelectionToolbar({
               exit={{ y: 100, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
             >
-              <div className="flex items-center gap-2 rounded-full bg-background border shadow-lg px-4 py-2">
+              <div className="flex max-w-[calc(100vw-1rem)] items-center gap-1 rounded-full border bg-background px-2 py-2 shadow-lg sm:gap-2 sm:px-4">
                 {/* Selection count */}
-                <span className="text-sm font-medium px-2">
-                  {selectedCount} selected
+                <span className="whitespace-nowrap px-2 text-sm font-medium">
+                  <span>{selectedCount}</span>
+                  <span className="hidden sm:inline"> selected</span>
                 </span>
 
                 <div className="w-px h-6 bg-border" />
@@ -93,14 +94,15 @@ export function SelectionToolbar({
                   size="sm"
                   onClick={handleDownload}
                   disabled={isDownloading}
-                  className="gap-2"
+                  className="h-9 w-9 gap-2 px-0 sm:w-auto sm:px-3"
+                  aria-label="Download selected"
                 >
                   {isDownloading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Download className="h-4 w-4" />
                   )}
-                  Download
+                  <span className="hidden sm:inline">Download</span>
                 </Button>
 
                 {/* Delete button */}
@@ -109,14 +111,15 @@ export function SelectionToolbar({
                   size="sm"
                   onClick={() => setShowDeleteDialog(true)}
                   disabled={isDeleting}
-                  className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="h-9 w-9 gap-2 px-0 text-red-500 hover:bg-red-500/10 hover:text-red-400 sm:w-auto sm:px-3 dark:text-red-400 dark:hover:text-red-300"
+                  aria-label="Delete selected"
                 >
                   {isDeleting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                  Delete
+                  <span className="hidden sm:inline">Delete</span>
                 </Button>
 
                 <div className="w-px h-6 bg-border" />
