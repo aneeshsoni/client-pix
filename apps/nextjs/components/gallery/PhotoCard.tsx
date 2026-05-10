@@ -3,6 +3,7 @@
 import { useState, memo } from "react";
 import Image from "next/image";
 import { Play, Check, Loader2, Tag } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { Photo, PhotoTag } from "@/lib/api";
 import { getSecureImageUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -25,6 +26,10 @@ interface PhotoCardProps {
   ) => void;
   availableTags?: PhotoTag[];
   onTagsChange?: (photoId: string, tagIds: string[]) => Promise<void> | void;
+  className?: string;
+  style?: CSSProperties;
+  fillContainer?: boolean;
+  imageSizes?: string;
 }
 
 function getTagLabel(tag: PhotoTag): string {
@@ -40,6 +45,10 @@ function PhotoCardInner({
   onToggleSelect,
   availableTags = [],
   onTagsChange,
+  className,
+  style,
+  fillContainer = false,
+  imageSizes,
 }: PhotoCardProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
@@ -86,15 +95,22 @@ function PhotoCardInner({
   };
 
   return (
-    <div className="masonry-item animate-fade-in group/card relative">
+    <div
+      className={`${className ?? "masonry-item"} animate-fade-in group/card relative`}
+      style={style}
+    >
       <button
         onClick={handleClick}
         className={`group relative block w-full overflow-hidden bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+          fillContainer ? "h-full" : ""
+        } ${
           isSelected
             ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
             : ""
         }`}
-        style={{ aspectRatio: `${photo.width}/${photo.height}` }}
+        style={
+          fillContainer ? undefined : { aspectRatio: `${photo.width}/${photo.height}` }
+        }
       >
         {/* Loading skeleton */}
         {!isLoaded && (
@@ -109,7 +125,10 @@ function PhotoCardInner({
           className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           } ${isSelected ? "brightness-90" : ""}`}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          sizes={
+            imageSizes ??
+            "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          }
           loading={index < 8 ? "eager" : "lazy"}
           onLoad={() => setIsLoaded(true)}
           unoptimized // Skip Next.js image optimization for external URLs

@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type CSSProperties,
+} from "react";
 import Image from "next/image";
 import {
   Lock,
@@ -67,12 +73,20 @@ function SharedPhotoCard({
   onClick,
   shareToken,
   password,
+  className,
+  style,
+  fillContainer,
+  imageSizes,
 }: {
   photo: SharedPhoto;
   index: number;
   onClick: () => void;
   shareToken: string;
   password: string | null;
+  className?: string;
+  style?: CSSProperties;
+  fillContainer?: boolean;
+  imageSizes?: string;
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -86,13 +100,20 @@ function SharedPhotoCard({
 
   return (
     <div
-      className="masonry-item animate-fade-in"
-      style={{ animationDelay: `${Math.min(index * 30, 500)}ms` }}
+      className={`${className ?? "masonry-item"} animate-fade-in`}
+      style={{
+        ...style,
+        animationDelay: `${Math.min(index * 30, 500)}ms`,
+      }}
     >
       <button
         onClick={onClick}
-        className="group relative block w-full overflow-hidden bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-        style={{ aspectRatio: `${photo.width}/${photo.height}` }}
+        className={`group relative block w-full overflow-hidden bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+          fillContainer ? "h-full" : ""
+        }`}
+        style={
+          fillContainer ? undefined : { aspectRatio: `${photo.width}/${photo.height}` }
+        }
       >
         {/* Loading skeleton */}
         {!isLoaded && (
@@ -107,7 +128,10 @@ function SharedPhotoCard({
           className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          sizes={
+            imageSizes ??
+            "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          }
           loading={index < 8 ? "eager" : "lazy"}
           onLoad={() => setIsLoaded(true)}
           unoptimized
@@ -676,6 +700,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 photo,
                 index,
                 onOpenLightbox,
+                className,
+                style,
+                fillContainer,
+                imageSizes,
               }) => (
                 <SharedPhotoCard
                   key={photo.id}
@@ -684,6 +712,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   onClick={() => onOpenLightbox(index)}
                   shareToken={token}
                   password={verifiedPassword}
+                  className={className}
+                  style={style}
+                  fillContainer={fillContainer}
+                  imageSizes={imageSizes}
                 />
               )}
             />

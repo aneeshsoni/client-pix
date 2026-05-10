@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PhotoCard } from "./PhotoCard";
 import { Lightbox } from "./Lightbox";
 import { SelectionToolbar } from "./SelectionToolbar";
 import { usePhotoSelection } from "@/hooks/use-photo-selection";
-import { useColumnCount } from "@/hooks/use-column-count";
 import {
   bulkDeletePhotos,
   prepareDownload,
@@ -54,6 +62,10 @@ interface VirtualizedPhotoGridProps {
       photoId: string,
       options?: { rangeSelect?: boolean },
     ) => void;
+    className: string;
+    style: CSSProperties;
+    fillContainer: boolean;
+    imageSizes: string;
   }) => ReactNode;
 }
 
@@ -65,7 +77,169 @@ interface PhotoGroup {
 
 type VirtualRow =
   | { type: "header"; id: string; title: string; photoCount: number }
-  | { type: "photoRow"; photos: VirtualizedGridPhoto[] };
+  | { type: "photoRow"; photos: JustifiedPhoto[]; height: number };
+
+interface JustifiedPhoto {
+  photo: VirtualizedGridPhoto;
+  width: number;
+  height: number;
+}
+
+interface JustifiedPhotoCandidate {
+  photo: VirtualizedGridPhoto;
+  aspectRatio: number;
+}
+
+const ROW_GAP = 4;
+const VIRTUAL_ROW_GAP = 16;
+const HEADER_ROW_HEIGHT = 56;
+const MAX_ROW_HEIGHT = 520;
+
+function useElementWidth(ref: RefObject<HTMLElement | null>) {
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const updateWidth = () => {
+      setWidth(element.clientWidth);
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(element);
+
+    return () => resizeObserver.disconnect();
+  }, [ref]);
+
+  return width;
+}
+
+function getTargetRowHeight(containerWidth: number) {
+  if (containerWidth < 520) return 220;
+  if (containerWidth < 768) return 260;
+  if (containerWidth < 1280) return 340;
+  return 400;
+}
+
+function getMinimumTileWidth(containerWidth: number) {
+  if (containerWidth < 520) return 170;
+  if (containerWidth < 768) return 215;
+  if (containerWidth < 1280) return 320;
+  return 360;
+}
+
+function getPhotoAspectRatio(photo: VirtualizedGridPhoto) {
+  if (photo.width > 0 && photo.height > 0) {
+    return photo.width / photo.height;
+  }
+
+  return 1;
+}
+
+function getNaturalRowHeight(
+  candidates: JustifiedPhotoCandidate[],
+  containerWidth: number
+) {
+  const totalGap = ROW_GAP * Math.max(0, candidates.length - 1);
+  const aspectRatioSum = candidates.reduce(
+    (sum, candidate) => sum + candidate.aspectRatio,
+    0
+  );
+  const availableWidth = Math.max(1, containerWidth - totalGap);
+
+  return availableWidth / Math.max(1, aspectRatioSum);
+}
+
+function rowWouldCompressTiles(
+  candidates: JustifiedPhotoCandidate[],
+  containerWidth: number,
+  minTileWidth: number
+) {
+  const naturalHeight = getNaturalRowHeight(candidates, containerWidth);
+
+  return candidates.some(
+    (candidate) => candidate.aspectRatio * naturalHeight < minTileWidth
+  );
+}
+
+function createJustifiedPhotoRow(
+  candidates: JustifiedPhotoCandidate[],
+  containerWidth: number,
+  targetRowHeight: number,
+  stretchToWidth: boolean
+): VirtualRow {
+  const naturalHeight = getNaturalRowHeight(candidates, containerWidth);
+  const rowHeight = stretchToWidth
+    ? Math.min(MAX_ROW_HEIGHT, naturalHeight)
+    : Math.min(targetRowHeight, naturalHeight);
+
+  return {
+    type: "photoRow",
+    height: rowHeight,
+    photos: candidates.map((candidate) => ({
+      photo: candidate.photo,
+      width: candidate.aspectRatio * rowHeight,
+      height: rowHeight,
+    })),
+  };
+}
+
+function buildJustifiedRows(
+  photos: VirtualizedGridPhoto[],
+  containerWidth: number,
+  targetRowHeight: number
+): VirtualRow[] {
+  if (containerWidth <= 0) return [];
+
+  const rows: VirtualRow[] = [];
+  let candidates: JustifiedPhotoCandidate[] = [];
+  let aspectRatioSum = 0;
+  const minTileWidth = getMinimumTileWidth(containerWidth);
+
+  for (const photo of photos) {
+    const aspectRatio = getPhotoAspectRatio(photo);
+    const nextCandidates = [...candidates, { photo, aspectRatio }];
+    const nextAspectRatioSum = aspectRatioSum + aspectRatio;
+
+    const totalGap = ROW_GAP * Math.max(0, nextCandidates.length - 1);
+    const rowWidthAtTarget = nextAspectRatioSum * targetRowHeight + totalGap;
+
+    if (
+      candidates.length > 0 &&
+      rowWidthAtTarget >= containerWidth &&
+      rowWouldCompressTiles(nextCandidates, containerWidth, minTileWidth)
+    ) {
+      rows.push(
+        createJustifiedPhotoRow(candidates, containerWidth, targetRowHeight, true)
+      );
+      candidates = [{ photo, aspectRatio }];
+      aspectRatioSum = aspectRatio;
+      continue;
+    }
+
+    candidates = nextCandidates;
+    aspectRatioSum = nextAspectRatioSum;
+
+    if (rowWidthAtTarget >= containerWidth) {
+      rows.push(
+        createJustifiedPhotoRow(candidates, containerWidth, targetRowHeight, true)
+      );
+      candidates = [];
+      aspectRatioSum = 0;
+    }
+  }
+
+  if (candidates.length > 0) {
+    rows.push(
+      createJustifiedPhotoRow(candidates, containerWidth, targetRowHeight, true)
+    );
+  }
+
+  return rows;
+}
 
 function groupPhotosByDate(
   photos: VirtualizedGridPhoto[],
@@ -106,7 +280,8 @@ function groupPhotosByDate(
 
 function flattenToVirtualRows(
   groups: PhotoGroup[],
-  columnCount: number
+  containerWidth: number,
+  targetRowHeight: number
 ): VirtualRow[] {
   const rows: VirtualRow[] = [];
 
@@ -118,12 +293,7 @@ function flattenToVirtualRows(
       photoCount: group.photos.length,
     });
 
-    for (let i = 0; i < group.photos.length; i += columnCount) {
-      rows.push({
-        type: "photoRow",
-        photos: group.photos.slice(i, i + columnCount),
-      });
-    }
+    rows.push(...buildJustifiedRows(group.photos, containerWidth, targetRowHeight));
   }
 
   return rows;
@@ -131,18 +301,10 @@ function flattenToVirtualRows(
 
 function flattenToVirtualRowsFlat(
   photos: VirtualizedGridPhoto[],
-  columnCount: number
+  containerWidth: number,
+  targetRowHeight: number
 ): VirtualRow[] {
-  const rows: VirtualRow[] = [];
-
-  for (let i = 0; i < photos.length; i += columnCount) {
-    rows.push({
-      type: "photoRow",
-      photos: photos.slice(i, i + columnCount),
-    });
-  }
-
-  return rows;
+  return buildJustifiedRows(photos, containerWidth, targetRowHeight);
 }
 
 export function VirtualizedPhotoGrid({
@@ -160,7 +322,11 @@ export function VirtualizedPhotoGrid({
   renderPhotoCard,
 }: VirtualizedPhotoGridProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const columnCount = useColumnCount(scrollContainerRef);
+  const containerWidth = useElementWidth(scrollContainerRef);
+  const targetRowHeight = useMemo(
+    () => getTargetRowHeight(containerWidth),
+    [containerWidth]
+  );
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const {
     selectedIds,
@@ -185,9 +351,9 @@ export function VirtualizedPhotoGrid({
   const virtualRows = useMemo(
     () =>
       groups || groupByDate
-        ? flattenToVirtualRows(photoGroups, columnCount)
-        : flattenToVirtualRowsFlat(photos, columnCount),
-    [groups, groupByDate, photoGroups, photos, columnCount]
+        ? flattenToVirtualRows(photoGroups, containerWidth, targetRowHeight)
+        : flattenToVirtualRowsFlat(photos, containerWidth, targetRowHeight),
+    [groups, groupByDate, photoGroups, photos, containerWidth, targetRowHeight]
   );
 
   const photoIndexMap = useMemo(() => {
@@ -226,10 +392,10 @@ export function VirtualizedPhotoGrid({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: (index) => {
       const row = virtualRows[index];
-      return row.type === "header" ? 56 : 300;
+      return row.type === "header" ? HEADER_ROW_HEIGHT : row.height;
     },
     overscan: 5,
-    gap: 16,
+    gap: VIRTUAL_ROW_GAP,
   });
 
   const openLightbox = useCallback(
@@ -347,7 +513,7 @@ export function VirtualizedPhotoGrid({
                 }}
               >
                 {row.type === "header" ? (
-                  <div className="mb-4 flex items-center gap-3 pt-4 first:pt-0">
+                  <div className="flex h-14 items-center gap-3">
                     <h2 className="text-lg font-semibold">
                       {row.title}
                     </h2>
@@ -358,9 +524,13 @@ export function VirtualizedPhotoGrid({
                     </span>
                   </div>
                 ) : (
-                  <div className="masonry">
-                    {row.photos.map((photo) => {
+                  <div
+                    className="flex w-full gap-1 overflow-hidden"
+                    style={{ height: row.height }}
+                  >
+                    {row.photos.map(({ photo, width, height }) => {
                       const globalIndex = photoIndexMap.get(photo.id) ?? 0;
+                      const photoStyle = { width, height };
                       return (
                         renderPhotoCard ? (
                           renderPhotoCard({
@@ -370,6 +540,10 @@ export function VirtualizedPhotoGrid({
                             isSelected: isSelected(photo.id),
                             isSelectionMode,
                             onToggleSelect: handleToggleSelection,
+                            className: "shrink-0",
+                            style: photoStyle,
+                            fillContainer: true,
+                            imageSizes: `${Math.ceil(width)}px`,
                           })
                         ) : (
                           <PhotoCard
@@ -380,6 +554,10 @@ export function VirtualizedPhotoGrid({
                             isSelected={isSelected(photo.id)}
                             isSelectionMode={isSelectionMode}
                             onToggleSelect={handleToggleSelection}
+                            className="shrink-0"
+                            style={photoStyle}
+                            fillContainer
+                            imageSizes={`${Math.ceil(width)}px`}
                           />
                         )
                       );
