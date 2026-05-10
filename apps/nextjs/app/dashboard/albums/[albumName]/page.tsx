@@ -578,6 +578,10 @@ export default function AlbumPage({ params }: AlbumPageProps) {
             isSelected,
             isSelectionMode,
             onToggleSelect,
+            className,
+            style,
+            fillContainer,
+            imageSizes,
           }) => (
             <PhotoCard
               key={photo.id}
@@ -589,6 +593,10 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               onToggleSelect={onToggleSelect}
               availableTags={album.tags}
               onTagsChange={handlePhotoTagsChange}
+              className={className}
+              style={style}
+              fillContainer={fillContainer}
+              imageSizes={imageSizes}
             />
           )}
         />
