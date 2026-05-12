@@ -73,7 +73,7 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost}
       JWT_SECRET: ${JWT_SECRET:-}
     volumes:
-      - uploads_data:/app/uploads
+      - ${CLIENT_PIX_UPLOADS_PATH:-uploads_data}:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy

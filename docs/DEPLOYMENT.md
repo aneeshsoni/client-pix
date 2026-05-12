@@ -156,6 +156,7 @@ The production Nginx config includes:
 | `APP_NAME`          | `Client Pix API`   | Application name             |
 | `DEBUG`             | `false`            | Enable debug mode            |
 | `UPLOAD_DIR`        | `/app/uploads`     | Upload directory path        |
+| `CLIENT_PIX_UPLOADS_PATH` | unset / Docker volume | Optional host/NAS folder mounted to `/app/uploads` |
 | `WEB_MAX_DIMENSION` | `2400`             | Max dimension for web images |
 | `ALLOWED_ORIGINS`   | `http://localhost` | CORS allowed origins         |
 
@@ -203,11 +204,13 @@ curl -fsSL https://raw.githubusercontent.com/aneeshsoni/client-pix/main/install.
 The installer will:
 
 - Prompt for a domain (for automatic HTTPS via Caddy) or default to LAN-only access (HTTP via Nginx)
+- Prompt for an optional host/NAS folder for uploaded files
 - Auto-generate a secure database password
 - Create an `upgrade.sh` script for easy future updates
 - Start all services
 
 After install, your data lives in `~/client-pix` (configurable with `INSTALL_DIR`).
+Uploaded files live in Docker's `uploads_data` volume by default, or in the host/NAS folder you choose during install.
 
 **To upgrade later:**
 
@@ -240,6 +243,36 @@ docker compose -f docker-compose.selfhost.yml up -d
 ```
 
 > **Note:** The `.env` file is only needed for production. For local development, `./start.sh` uses the dev compose file which has defaults built in — no `.env` required.
+
+### Optional: Store Uploads in a NAS Folder
+
+Client Pix can store uploads in a normal folder on the Docker host instead of Docker's `uploads_data` volume. This is useful when the app is hosted directly on a NAS and you want photos/videos to live in a visible shared folder.
+
+Set `CLIENT_PIX_UPLOADS_PATH` in `.env` before starting:
+
+```env
+CLIENT_PIX_UPLOADS_PATH=/volume1/photos/client-pix/uploads
+```
+
+Then start normally:
+
+```bash
+docker compose -f docker-compose.selfhost.yml up -d
+```
+
+The folder must be writable by Docker. Client Pix manages its contents and will create subfolders such as:
+
+```text
+originals/
+thumbnails/
+web/
+videos/
+cache/
+chunks/
+.jwt_secret
+```
+
+Leave `CLIENT_PIX_UPLOADS_PATH` unset to keep using the default Docker volume. This option does not import existing NAS photo folders; it only changes where Client Pix stores files uploaded through the app.
 
 ### Step 4: Configure Your Domain
 
@@ -722,7 +755,7 @@ If you installed via `curl ... | bash`, an `upgrade.sh` was automatically create
 cd ~/client-pix && ./upgrade.sh
 ```
 
-This pulls the latest pre-built images from GHCR and restarts services. Your data (database + uploads) is preserved in Docker volumes.
+This pulls the latest pre-built images from GHCR and restarts services. Your data is preserved in Docker volumes by default.
 
 ### Clone/Build Users
 
@@ -758,7 +791,7 @@ If you need to restore from a previous backup:
 
 ### Data Safety
 
-Your data is stored in Docker volumes (`postgres_data`, `uploads_data`). These are preserved during normal upgrades. The upgrade script automatically creates backups and keeps the last 5.
+Your database is stored in the `postgres_data` Docker volume. Uploaded files are stored in the `uploads_data` Docker volume by default, or in `CLIENT_PIX_UPLOADS_PATH` when configured. The upgrade script automatically creates backups and keeps the last 5.
 
 > **Note:** The `-v` flag in `docker compose down -v` deletes volumes. The upgrade script never uses this flag.
 
