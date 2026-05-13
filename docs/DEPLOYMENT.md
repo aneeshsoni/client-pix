@@ -158,6 +158,7 @@ The production Nginx config includes:
 | `UPLOAD_DIR`        | `/app/uploads`     | Upload directory path        |
 | `CLIENT_PIX_UPLOADS_PATH` | unset / Docker volume | Optional host/NAS folder mounted to `/app/uploads` |
 | `WEB_MAX_DIMENSION` | `2400`             | Max dimension for web images |
+| `VIDEO_THUMBNAIL_MAX_DIMENSION` | `1600` | Max dimension for generated video preview thumbnails |
 | `ALLOWED_ORIGINS`   | `http://localhost` | CORS allowed origins         |
 
 ---

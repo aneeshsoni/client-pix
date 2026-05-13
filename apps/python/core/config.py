@@ -26,6 +26,12 @@ THUMBNAIL_QUALITY = 90  # WebP quality (0-100)
 WEB_MAX_DIMENSION = int(os.getenv("WEB_MAX_DIMENSION", "2400"))
 WEB_QUALITY = 90  # Higher quality for full-screen viewing
 
+# Video poster frames used in grid previews. These are separate from image
+# thumbnails because a single poster frame is much cheaper than storing
+# multiple video-derived variants, and it needs enough resolution for large
+# gallery tiles.
+VIDEO_THUMBNAIL_MAX_DIMENSION = int(os.getenv("VIDEO_THUMBNAIL_MAX_DIMENSION", "1600"))
+
 # Download cache TTL in hours (cached ZIPs are deleted after this)
 DOWNLOAD_CACHE_TTL_HOURS = int(os.getenv("DOWNLOAD_CACHE_TTL_HOURS", "24"))
 
