@@ -16,6 +16,7 @@ from core.config import (
     THUMBNAIL_QUALITY,
     THUMBNAIL_SIZE,
     UPLOAD_DIR,
+    VIDEO_THUMBNAIL_MAX_DIMENSION,
     WEB_MAX_DIMENSION,
     WEB_QUALITY,
 )
@@ -28,6 +29,15 @@ CHUNK_SIZE = 8 * 1024 * 1024
 
 # Background tasks for video thumbnail generation
 _background_tasks: set[asyncio.Task] = set()
+
+
+def _fit_within_max_dimension_filter(max_dimension: int) -> str:
+    """Build an ffmpeg scale filter that fits either orientation within a box."""
+    return (
+        f"scale='if(gt(iw,ih),min({max_dimension},iw),-1)':"
+        f"'if(gt(iw,ih),-1,min({max_dimension},ih))'"
+    )
+
 
 # Enable HEIC/HEIF decoding in Pillow.
 register_heif_opener()
@@ -517,13 +527,11 @@ class StorageService:
         # Get video dimensions
         width, height = await self._get_video_dimensions(video_path)
 
-        # Generate thumbnail (small poster at 1 second)
+        # Generate thumbnail poster at 1 second.
         thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
         thumb_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            # Scale to fit within THUMBNAIL_SIZE while maintaining aspect ratio
-            thumb_max = THUMBNAIL_SIZE[0]
             result = await loop.run_in_executor(
                 None,
                 partial(
@@ -538,9 +546,9 @@ class StorageService:
                         "-vframes",
                         "1",
                         "-vf",
-                        f"scale='min({thumb_max},iw)':-1",
+                        _fit_within_max_dimension_filter(VIDEO_THUMBNAIL_MAX_DIMENSION),
                         "-q:v",
-                        "10",  # WebP quality (0-100, lower is better quality)
+                        str(THUMBNAIL_QUALITY),
                         str(thumb_path),
                     ],
                     capture_output=True,
@@ -571,9 +579,9 @@ class StorageService:
                         "-vframes",
                         "1",
                         "-vf",
-                        f"scale='min({WEB_MAX_DIMENSION},iw)':-1",
+                        _fit_within_max_dimension_filter(WEB_MAX_DIMENSION),
                         "-q:v",
-                        "8",  # WebP quality (0-100, lower is better quality)
+                        str(WEB_QUALITY),
                         str(web_path),
                     ],
                     capture_output=True,
