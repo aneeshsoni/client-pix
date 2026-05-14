@@ -66,6 +66,12 @@ interface SharePageClientProps {
 
 type PageState = "loading" | "password" | "album" | "error" | "expired";
 
+function shouldContainThumbnailOnMobile(photo: SharedPhoto): boolean {
+  if (photo.width <= 0 || photo.height <= 0) return false;
+
+  return photo.width / photo.height < 0.58;
+}
+
 // Photo card component matching the admin view style
 function SharedPhotoCard({
   photo,
@@ -89,6 +95,9 @@ function SharedPhotoCard({
   imageSizes?: string;
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const imageFitClass = shouldContainThumbnailOnMobile(photo)
+    ? "object-contain object-center sm:object-cover"
+    : "object-cover object-center";
 
   // Use secure share URL
   const imageUrl = getSharedImageUrl(
@@ -125,7 +134,7 @@ function SharedPhotoCard({
           src={imageUrl}
           alt={photo.original_filename}
           fill
-          className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
+          className={`${imageFitClass} transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           }`}
           sizes={

@@ -94,6 +94,8 @@ const ROW_GAP = 4;
 const VIRTUAL_ROW_GAP = 16;
 const HEADER_ROW_HEIGHT = 56;
 const MAX_ROW_HEIGHT = 520;
+const EXTREME_PORTRAIT_ASPECT_RATIO = 0.58;
+const MOBILE_EXTREME_PORTRAIT_LAYOUT_ASPECT_RATIO = 0.72;
 
 function useElementWidth(ref: RefObject<HTMLElement | null>) {
   const [width, setWidth] = useState(0);
@@ -137,6 +139,19 @@ function getPhotoAspectRatio(photo: VirtualizedGridPhoto) {
   }
 
   return 1;
+}
+
+function getPhotoLayoutAspectRatio(
+  photo: VirtualizedGridPhoto,
+  containerWidth: number
+) {
+  const aspectRatio = getPhotoAspectRatio(photo);
+
+  if (containerWidth < 768 && aspectRatio < EXTREME_PORTRAIT_ASPECT_RATIO) {
+    return MOBILE_EXTREME_PORTRAIT_LAYOUT_ASPECT_RATIO;
+  }
+
+  return aspectRatio;
 }
 
 function getNaturalRowHeight(
@@ -200,7 +215,7 @@ function buildJustifiedRows(
   const minTileWidth = getMinimumTileWidth(containerWidth);
 
   for (const photo of photos) {
-    const aspectRatio = getPhotoAspectRatio(photo);
+    const aspectRatio = getPhotoLayoutAspectRatio(photo, containerWidth);
     const nextCandidates = [...candidates, { photo, aspectRatio }];
     const nextAspectRatioSum = aspectRatioSum + aspectRatio;
 
