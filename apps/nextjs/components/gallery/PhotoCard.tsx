@@ -36,6 +36,12 @@ function getTagLabel(tag: PhotoTag): string {
   return [tag.emoji, tag.name].filter(Boolean).join(" ") || "Color tag";
 }
 
+function shouldContainThumbnailOnMobile(photo: Photo): boolean {
+  if (photo.width <= 0 || photo.height <= 0) return false;
+
+  return photo.width / photo.height < 0.58;
+}
+
 function PhotoCardInner({
   photo,
   index,
@@ -55,6 +61,9 @@ function PhotoCardInner({
   const { token } = useAuth();
   const assignedTags = photo.tags ?? [];
   const showTagControls = availableTags.length > 0 && Boolean(onTagsChange);
+  const imageFitClass = shouldContainThumbnailOnMobile(photo)
+    ? "object-contain object-center sm:object-cover"
+    : "object-cover object-center";
 
   // Get the secure thumbnail URL with auth token
   const thumbnailUrl = getSecureImageUrl(
@@ -122,7 +131,7 @@ function PhotoCardInner({
           src={thumbnailUrl}
           alt={photo.original_filename}
           fill
-          className={`object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
+          className={`${imageFitClass} transition-[transform,opacity] duration-300 group-hover:scale-[1.02] ${
             isLoaded ? "opacity-100" : "opacity-0"
           } ${isSelected ? "brightness-90" : ""}`}
           sizes={
