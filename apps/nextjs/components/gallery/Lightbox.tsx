@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import Image from "next/image";
 import {
   X,
@@ -29,6 +29,27 @@ interface LightboxProps {
   onDelete?: (photoId: string) => void;
 }
 
+const SWIPE_DISTANCE_THRESHOLD = 80;
+const SWIPE_VELOCITY_THRESHOLD = 500;
+
+const mediaVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 320 : -320,
+    opacity: 0,
+    scale: 0.98,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? -320 : 320,
+    opacity: 0,
+    scale: 0.98,
+  }),
+};
+
 export function Lightbox({
   photo,
   albumId,
@@ -43,6 +64,7 @@ export function Lightbox({
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState(1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { token } = useAuth();
 
@@ -94,6 +116,41 @@ export function Lightbox({
   const imageUrl = getSecureImageUrl(photo.id, "web", token || undefined);
   const downloadUrl = getDownloadUrl(albumId, photo.id);
 
+  const goToNext = useCallback(() => {
+    if (totalCount <= 1) return;
+    setSwipeDirection(1);
+    setIsPlaying(false);
+    onNext();
+    setIsImageLoaded(false);
+  }, [onNext, totalCount]);
+
+  const goToPrev = useCallback(() => {
+    if (totalCount <= 1) return;
+    setSwipeDirection(-1);
+    setIsPlaying(false);
+    onPrev();
+    setIsImageLoaded(false);
+  }, [onPrev, totalCount]);
+
+  const handleDragEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      if (totalCount <= 1) return;
+
+      if (
+        info.offset.x < -SWIPE_DISTANCE_THRESHOLD ||
+        info.velocity.x < -SWIPE_VELOCITY_THRESHOLD
+      ) {
+        goToNext();
+      } else if (
+        info.offset.x > SWIPE_DISTANCE_THRESHOLD ||
+        info.velocity.x > SWIPE_VELOCITY_THRESHOLD
+      ) {
+        goToPrev();
+      }
+    },
+    [goToNext, goToPrev, totalCount]
+  );
+
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -102,14 +159,10 @@ export function Lightbox({
           onClose();
           break;
         case "ArrowRight":
-          setIsPlaying(false);
-          onNext();
-          setIsImageLoaded(false);
+          goToNext();
           break;
         case "ArrowLeft":
-          setIsPlaying(false);
-          onPrev();
-          setIsImageLoaded(false);
+          goToPrev();
           break;
         case "i":
           setShowMetadata((prev) => !prev);
@@ -122,7 +175,7 @@ export function Lightbox({
           break;
       }
     },
-    [onClose, onNext, onPrev, photo.is_video]
+    [onClose, goToNext, goToPrev, photo.is_video]
   );
 
   useEffect(() => {
@@ -228,44 +281,56 @@ export function Lightbox({
           )}
 
           {/* Video or Image */}
-          <motion.div
-            key={photo.id}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: isImageLoaded ? 1 : 0, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="relative h-full w-full flex items-center justify-center"
-          >
-            {photo.is_video ? (
-              <video
-                ref={videoRef}
-                src={imageUrl}
-                controls
-                autoPlay
-                className="max-h-full max-w-full object-contain"
-                onLoadedData={() => setIsImageLoaded(true)}
-                playsInline
-              />
-            ) : (
-              <Image
-                src={imageUrl}
-                alt={photo.original_filename}
-                fill
-                className="object-contain"
-                sizes="100vw"
-                priority
-                onLoad={() => setIsImageLoaded(true)}
-                unoptimized
-              />
-            )}
-          </motion.div>
+          <AnimatePresence initial={false} custom={swipeDirection} mode="popLayout">
+            <motion.div
+              key={photo.id}
+              custom={swipeDirection}
+              variants={mediaVariants}
+              initial="enter"
+              animate={isImageLoaded ? "center" : { opacity: 0, scale: 0.98, x: 0 }}
+              exit="exit"
+              transition={{
+                x: { type: "spring", stiffness: 280, damping: 32 },
+                opacity: { duration: 0.2 },
+                scale: { duration: 0.2 },
+              }}
+              drag={totalCount > 1 ? "x" : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.22}
+              onDragEnd={handleDragEnd}
+              className="relative flex h-full w-full touch-pan-y cursor-grab select-none items-center justify-center active:cursor-grabbing"
+            >
+              {photo.is_video ? (
+                <video
+                  ref={videoRef}
+                  src={imageUrl}
+                  controls
+                  autoPlay
+                  className="h-full w-full object-contain"
+                  onLoadedData={() => setIsImageLoaded(true)}
+                  playsInline
+                />
+              ) : (
+                <Image
+                  src={imageUrl}
+                  alt={photo.original_filename}
+                  fill
+                  className="object-contain"
+                  sizes="100vw"
+                  priority
+                  onLoad={() => setIsImageLoaded(true)}
+                  draggable={false}
+                  unoptimized
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Navigation buttons */}
         <button
           onClick={() => {
-            setIsPlaying(false);
-            onPrev();
-            setIsImageLoaded(false);
+            goToPrev();
           }}
           className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/30 text-white/80 hover:bg-black/50 hover:text-white transition-colors backdrop-blur-sm"
           title="Previous (←)"
@@ -275,9 +340,7 @@ export function Lightbox({
 
         <button
           onClick={() => {
-            setIsPlaying(false);
-            onNext();
-            setIsImageLoaded(false);
+            goToNext();
           }}
           className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-black/30 text-white/80 hover:bg-black/50 hover:text-white transition-colors backdrop-blur-sm"
           title="Next (→)"

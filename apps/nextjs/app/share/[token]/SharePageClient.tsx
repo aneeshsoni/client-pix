@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { VirtualizedPhotoGrid } from "@/components/gallery";
 import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
 import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
@@ -36,6 +36,26 @@ import { toast } from "sonner";
 
 // Empty string = relative URLs (works with any domain)
 const API_BASE_URL = "";
+const SWIPE_DISTANCE_THRESHOLD = 80;
+const SWIPE_VELOCITY_THRESHOLD = 500;
+
+const mediaVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 320 : -320,
+    opacity: 0,
+    scale: 0.98,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? -320 : 320,
+    opacity: 0,
+    scale: 0.98,
+  }),
+};
 
 interface SharedPhoto {
   id: string;
@@ -175,6 +195,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
@@ -200,6 +221,43 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
       : null;
+
+  const goToPreviousPhoto = useCallback(() => {
+    if (!album || selectedPhotoIndex === null || album.photos.length <= 1) return;
+
+    setSwipeDirection(-1);
+    setIsPlaying(false);
+    setSelectedPhotoIndex(
+      (selectedPhotoIndex - 1 + album.photos.length) % album.photos.length,
+    );
+  }, [album, selectedPhotoIndex]);
+
+  const goToNextPhoto = useCallback(() => {
+    if (!album || selectedPhotoIndex === null || album.photos.length <= 1) return;
+
+    setSwipeDirection(1);
+    setIsPlaying(false);
+    setSelectedPhotoIndex((selectedPhotoIndex + 1) % album.photos.length);
+  }, [album, selectedPhotoIndex]);
+
+  const handleLightboxDragEnd = useCallback(
+    (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      if (!album || album.photos.length <= 1) return;
+
+      if (
+        info.offset.x < -SWIPE_DISTANCE_THRESHOLD ||
+        info.velocity.x < -SWIPE_VELOCITY_THRESHOLD
+      ) {
+        goToNextPhoto();
+      } else if (
+        info.offset.x > SWIPE_DISTANCE_THRESHOLD ||
+        info.velocity.x > SWIPE_VELOCITY_THRESHOLD
+      ) {
+        goToPreviousPhoto();
+      }
+    },
+    [album, goToNextPhoto, goToPreviousPhoto],
+  );
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -339,15 +397,10 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           setIsPlaying(false);
           break;
         case "ArrowLeft":
-          setIsPlaying(false);
-          setSelectedPhotoIndex(
-            (selectedPhotoIndex - 1 + album.photos.length) %
-              album.photos.length,
-          );
+          goToPreviousPhoto();
           break;
         case "ArrowRight":
-          setIsPlaying(false);
-          setSelectedPhotoIndex((selectedPhotoIndex + 1) % album.photos.length);
+          goToNextPhoto();
           break;
         case " ":
           e.preventDefault();
@@ -360,7 +413,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedPhotoIndex, album, selectedPhoto]);
+  }, [selectedPhotoIndex, album, selectedPhoto, goToNextPhoto, goToPreviousPhoto]);
 
   // Slideshow auto-advance
   useEffect(() => {
@@ -368,6 +421,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     if (selectedPhoto?.is_video) return;
 
     const timer = setInterval(() => {
+      setSwipeDirection(1);
       setSelectedPhotoIndex((prev) =>
         prev !== null ? (prev + 1) % album.photos.length : null,
       );
@@ -815,11 +869,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsPlaying(false);
-                    setSelectedPhotoIndex(
-                      (selectedPhotoIndex - 1 + album.photos.length) %
-                        album.photos.length,
-                    );
+                    goToPreviousPhoto();
                   }}
                   className="absolute left-4 z-10 p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
                 >
@@ -833,10 +883,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsPlaying(false);
-                    setSelectedPhotoIndex(
-                      (selectedPhotoIndex + 1) % album.photos.length,
-                    );
+                    goToNextPhoto();
                   }}
                   className="absolute right-4 z-10 p-2 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/70 transition-colors"
                 >
@@ -846,45 +893,58 @@ export default function SharePageClient({ token }: SharePageClientProps) {
               )}
 
               {/* Image or Video */}
-              <motion.div
-                key={selectedPhoto.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className="max-w-[90vw] max-h-[90vh] flex items-center justify-center"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {selectedPhoto.is_video ? (
-                  <video
-                    src={getSharedImageUrl(
-                      token,
-                      selectedPhoto.id,
-                      "web",
-                      verifiedPassword || undefined,
-                    )}
-                    controls
-                    autoPlay
-                    className="max-w-full max-h-[90vh] w-auto h-auto object-contain"
-                    playsInline
-                  />
-                ) : (
-                  <Image
-                    src={getSharedImageUrl(
-                      token,
-                      selectedPhoto.id,
-                      "web",
-                      verifiedPassword || undefined,
-                    )}
-                    alt={selectedPhoto.original_filename}
-                    width={selectedPhoto.width}
-                    height={selectedPhoto.height}
-                    className="max-w-full max-h-[90vh] w-auto h-auto object-contain"
-                    unoptimized
-                    priority
-                  />
-                )}
-              </motion.div>
+              <AnimatePresence initial={false} custom={swipeDirection} mode="popLayout">
+                <motion.div
+                  key={selectedPhoto.id}
+                  custom={swipeDirection}
+                  variants={mediaVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{
+                    x: { type: "spring", stiffness: 280, damping: 32 },
+                    opacity: { duration: 0.2 },
+                    scale: { duration: 0.2 },
+                  }}
+                  drag={album.photos.length > 1 ? "x" : false}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.22}
+                  onDragEnd={handleLightboxDragEnd}
+                  className="flex max-h-[90vh] max-w-[90vw] touch-pan-y cursor-grab select-none items-center justify-center active:cursor-grabbing"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {selectedPhoto.is_video ? (
+                    <video
+                      src={getSharedImageUrl(
+                        token,
+                        selectedPhoto.id,
+                        "web",
+                        verifiedPassword || undefined,
+                      )}
+                      controls
+                      autoPlay
+                      className="h-auto max-h-[90vh] w-auto max-w-full object-contain"
+                      playsInline
+                    />
+                  ) : (
+                    <Image
+                      src={getSharedImageUrl(
+                        token,
+                        selectedPhoto.id,
+                        "web",
+                        verifiedPassword || undefined,
+                      )}
+                      alt={selectedPhoto.original_filename}
+                      width={selectedPhoto.width}
+                      height={selectedPhoto.height}
+                      className="h-auto max-h-[90vh] w-auto max-w-full object-contain"
+                      draggable={false}
+                      unoptimized
+                      priority
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </motion.div>
           )}
         </AnimatePresence>
