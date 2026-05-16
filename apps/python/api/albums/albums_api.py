@@ -849,8 +849,9 @@ async def complete_chunked_upload(
     await db.flush()
     await db.refresh(photo, ["file_hash"])
 
-    # Auto-set cover photo if needed (prefer images)
-    if needs_cover and not stored.is_video:
+    # Auto-set cover photo if needed. Bulk uploads still prefer images when
+    # available, but a single video upload should be usable as a cover too.
+    if needs_cover:
         album.cover_photo_id = photo.id
 
     await db.commit()

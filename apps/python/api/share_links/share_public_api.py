@@ -626,7 +626,7 @@ async def complete_shared_chunked_upload(
         db=db,
     )
 
-    if needs_cover and uploaded_count > 0 and not stored.is_video:
+    if needs_cover and uploaded_count > 0:
         album.cover_photo_id = photo_id
 
     await db.commit()

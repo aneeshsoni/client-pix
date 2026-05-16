@@ -111,7 +111,7 @@ export function SelectionToolbar({
                   size="sm"
                   onClick={() => setShowDeleteDialog(true)}
                   disabled={isDeleting}
-                  className="h-9 w-9 gap-2 px-0 text-red-500 hover:bg-red-500/10 hover:text-red-400 sm:w-auto sm:px-3 dark:text-red-400 dark:hover:text-red-300"
+                  className="h-9 w-9 gap-2 px-0 text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto sm:px-3"
                   aria-label="Delete selected"
                 >
                   {isDeleting ? (

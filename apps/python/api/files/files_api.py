@@ -140,15 +140,21 @@ async def get_authenticated_file_by_hash(
     if not fh:
         raise HTTPException(status_code=404, detail="File not found")
 
-    file_path = get_file_path(file_hash, variant, fh.file_extension)
+    is_video = fh.mime_type.startswith("video/")
+    file_path = get_file_path(file_hash, variant, fh.file_extension, is_video)
 
     if not file_path.exists():
         if variant != "original":
-            file_path = get_file_path(file_hash, "original", fh.file_extension)
+            file_path = get_file_path(
+                file_hash, "original", fh.file_extension, is_video
+            )
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
+    if is_video and variant != "thumbnail":
+        media_type = fh.mime_type
+    else:
+        media_type = "image/webp" if variant in ("thumbnail", "web") else fh.mime_type
 
     return FileResponse(
         path=file_path,
