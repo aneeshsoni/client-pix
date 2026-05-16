@@ -77,7 +77,12 @@ interface PhotoGroup {
 
 type VirtualRow =
   | { type: "header"; id: string; title: string; photoCount: number }
-  | { type: "photoRow"; photos: JustifiedPhoto[]; height: number };
+  | {
+      type: "photoRow";
+      photos: JustifiedPhoto[];
+      height: number;
+      fillsContainer: boolean;
+    };
 
 interface JustifiedPhoto {
   photo: VirtualizedGridPhoto;
@@ -187,10 +192,12 @@ function createJustifiedPhotoRow(
   const rowHeight = stretchToWidth
     ? Math.min(MAX_ROW_HEIGHT, naturalHeight)
     : Math.min(targetRowHeight, naturalHeight);
+  const fillsContainer = stretchToWidth && naturalHeight <= MAX_ROW_HEIGHT;
 
   return {
     type: "photoRow",
     height: rowHeight,
+    fillsContainer,
     photos: candidates.map((candidate) => ({
       photo: candidate.photo,
       width: candidate.aspectRatio * rowHeight,
@@ -538,12 +545,24 @@ export function VirtualizedPhotoGrid({
                   </div>
                 ) : (
                   <div
-                    className="flex w-full gap-1 overflow-hidden"
-                    style={{ height: row.height }}
+                    className={row.fillsContainer ? "grid w-full gap-1" : "flex w-full gap-1"}
+                    style={{
+                      height: row.height,
+                      gridTemplateColumns: row.fillsContainer
+                        ? row.photos
+                            .map(({ width }) => `minmax(0, ${width}fr)`)
+                            .join(" ")
+                        : undefined,
+                    }}
                   >
                     {row.photos.map(({ photo, width, height }) => {
                       const globalIndex = photoIndexMap.get(photo.id) ?? 0;
-                      const photoStyle = { width, height };
+                      const photoStyle = row.fillsContainer
+                        ? { width: "100%", height }
+                        : { width, height };
+                      const photoClassName = row.fillsContainer
+                        ? "min-w-0"
+                        : "shrink-0";
                       return (
                         renderPhotoCard ? (
                           renderPhotoCard({
@@ -553,7 +572,7 @@ export function VirtualizedPhotoGrid({
                             isSelected: isSelected(photo.id),
                             isSelectionMode,
                             onToggleSelect: handleToggleSelection,
-                            className: "shrink-0",
+                            className: photoClassName,
                             style: photoStyle,
                             fillContainer: true,
                             imageSizes: `${Math.ceil(width)}px`,
@@ -567,7 +586,7 @@ export function VirtualizedPhotoGrid({
                             isSelected={isSelected(photo.id)}
                             isSelectionMode={isSelectionMode}
                             onToggleSelect={handleToggleSelection}
-                            className="shrink-0"
+                            className={photoClassName}
                             style={photoStyle}
                             fillContainer
                             imageSizes={`${Math.ceil(width)}px`}

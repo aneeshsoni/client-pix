@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Loader2, Check, Trash2 } from "lucide-react";
+import { Loader2, Check, Trash2, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,12 +29,14 @@ const CROP_ASPECT = 4 / 3;
 function CoverPositionAdjuster({
   photoId,
   token,
+  variant = "web",
   positionX,
   positionY,
   onPositionChange,
 }: {
   photoId: string;
   token: string | null;
+  variant?: "thumbnail" | "web";
   positionX: number;
   positionY: number;
   onPositionChange: (x: number, y: number) => void;
@@ -44,7 +46,7 @@ function CoverPositionAdjuster({
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const dragStartRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
 
-  const imageUrl = getSecureImageUrl(photoId, "web", token || undefined);
+  const imageUrl = getSecureImageUrl(photoId, variant, token || undefined);
 
   // Load natural image dimensions
   useEffect(() => {
@@ -178,6 +180,7 @@ export function AlbumSettingsModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { token } = useAuth();
+  const selectedCover = photos.find((photo) => photo.id === selectedCoverId);
 
   // Load album details when opened
   useEffect(() => {
@@ -289,7 +292,7 @@ export function AlbumSettingsModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-h-[94vh] overflow-hidden flex flex-col sm:max-w-3xl lg:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Album Settings</DialogTitle>
         </DialogHeader>
@@ -328,9 +331,9 @@ export function AlbumSettingsModal({
 
           {/* Cover Photo Selection */}
           <div>
-            <Label className="text-sm font-medium">Cover Photo</Label>
+            <Label className="text-sm font-medium">Cover Media</Label>
             <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-              Select a photo to use as the album cover
+              Select a photo or video to use as the album cover
             </p>
 
             {isLoading ? (
@@ -339,10 +342,10 @@ export function AlbumSettingsModal({
               </div>
             ) : photos.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                No photos in this album yet
+                No media in this album yet
               </p>
             ) : (
-              <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto rounded-lg border p-2">
+              <div className="grid max-h-[min(52vh,36rem)] grid-cols-2 gap-3 overflow-y-auto rounded-lg border p-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {photos.map((photo) => (
                   <motion.button
                     key={photo.id}
@@ -368,6 +371,11 @@ export function AlbumSettingsModal({
                       sizes="100px"
                       unoptimized
                     />
+                    {photo.is_video && (
+                      <div className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white backdrop-blur-sm">
+                        <Play className="h-3 w-3 fill-current" />
+                      </div>
+                    )}
                     {selectedCoverId === photo.id && (
                       <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
                         <div className="bg-primary text-primary-foreground rounded-full p-1">
@@ -391,6 +399,7 @@ export function AlbumSettingsModal({
               <CoverPositionAdjuster
                 photoId={selectedCoverId}
                 token={token}
+                variant={selectedCover?.is_video ? "thumbnail" : "web"}
                 positionX={positionX}
                 positionY={positionY}
                 onPositionChange={(x, y) => {
