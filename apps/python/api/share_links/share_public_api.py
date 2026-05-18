@@ -28,11 +28,13 @@ from models.api.downloads_api_models import (
 from models.api.share_links_api_models import (
     SharedAlbumPhotoResponse,
     SharedAlbumResponse,
+    SharedPhotoTagResponse,
     ShareLinkVerifyRequest,
 )
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
+from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.storage_service import storage_service
 from sqlalchemy import func, select
@@ -102,7 +104,10 @@ async def get_share_info(
     album_stmt = (
         select(Album)
         .where(Album.id == share_link.album_id)
-        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+        .options(
+            selectinload(Album.photos).selectinload(Photo.file_hash),
+            selectinload(Album.photos).selectinload(Photo.tags),
+        )
     )
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
@@ -212,6 +217,22 @@ async def access_shared_album(
     else:  # uploaded
         photos_list.sort(key=lambda p: p.created_at, reverse=is_descending)
 
+    tag_result = await db.execute(
+        select(PhotoTag)
+        .where(PhotoTag.album_id == album.id)
+        .order_by(PhotoTag.sort_order.asc(), PhotoTag.created_at.asc())
+    )
+    tags = [
+        SharedPhotoTagResponse(
+            id=tag.id,
+            name=tag.name,
+            emoji=tag.emoji,
+            color=tag.color,
+            sort_order=tag.sort_order,
+        )
+        for tag in tag_result.scalars().all()
+    ]
+
     # Build photo responses with paths from file_hash
     photos = []
     for photo in photos_list:
@@ -219,6 +240,10 @@ async def access_shared_album(
             hash_prefix = photo.file_hash.sha256_hash[:2]
             hash_subdir = photo.file_hash.sha256_hash[2:4]
             base_name = photo.file_hash.sha256_hash
+            photo_tags = sorted(
+                photo.tags,
+                key=lambda tag: (tag.sort_order, tag.created_at),
+            )
 
             photos.append(
                 SharedAlbumPhotoResponse(
@@ -231,6 +256,16 @@ async def access_shared_album(
                     captured_at=photo.captured_at,
                     created_at=photo.created_at,
                     is_video=photo.is_video,
+                    tags=[
+                        SharedPhotoTagResponse(
+                            id=tag.id,
+                            name=tag.name,
+                            emoji=tag.emoji,
+                            color=tag.color,
+                            sort_order=tag.sort_order,
+                        )
+                        for tag in photo_tags
+                    ],
                 )
             )
 
@@ -240,6 +275,7 @@ async def access_shared_album(
         description=album.description,
         photo_count=len(photos),
         photos=photos,
+        tags=tags,
         is_password_protected=share_link.is_password_protected,
         allows_uploads=share_link.allows_uploads,
         requires_password=False,
