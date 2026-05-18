@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   useRef,
   type CSSProperties,
 } from "react";
@@ -24,6 +25,7 @@ import {
   ArrowUp,
   ArrowDown,
   Upload,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +69,15 @@ interface SharedPhoto {
   captured_at: string | null;
   created_at: string | null;
   is_video: boolean;
+  tags: SharedPhotoTag[];
+}
+
+interface SharedPhotoTag {
+  id: string;
+  name: string | null;
+  emoji: string | null;
+  color: string | null;
+  sort_order: number;
 }
 
 interface SharedAlbum {
@@ -75,6 +86,7 @@ interface SharedAlbum {
   description: string | null;
   photo_count: number;
   photos: SharedPhoto[];
+  tags: SharedPhotoTag[];
   allows_uploads: boolean;
   is_password_protected: boolean;
   requires_password: boolean;
@@ -90,6 +102,10 @@ function shouldContainThumbnailOnMobile(photo: SharedPhoto): boolean {
   if (photo.width <= 0 || photo.height <= 0) return false;
 
   return photo.width / photo.height < 0.58;
+}
+
+function getTagTitle(tag: SharedPhotoTag) {
+  return [tag.emoji, tag.name].filter(Boolean).join(" ") || "Color tag";
 }
 
 // Photo card component matching the admin view style
@@ -175,6 +191,31 @@ function SharedPhotoCard({
           </div>
         )}
 
+        {photo.tags.length > 0 && isLoaded && (
+          <div className="pointer-events-none absolute bottom-2 left-2 right-2 z-10 flex flex-wrap gap-1">
+            {photo.tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium leading-none text-white"
+              >
+                {tag.color && (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full border border-white/60"
+                    style={{ backgroundColor: tag.color }}
+                  />
+                )}
+                {tag.emoji && <span>{tag.emoji}</span>}
+                {tag.name && <span className="truncate">{tag.name}</span>}
+              </span>
+            ))}
+            {photo.tags.length > 3 && (
+              <span className="rounded-full bg-black/65 px-2 py-1 text-[11px] font-medium leading-none text-white">
+                +{photo.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
       </button>
@@ -194,6 +235,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   );
   const [sortBy, setSortBy] = useState<"captured" | "uploaded">("captured");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | undefined>(undefined);
+  const [groupByTags, setGroupByTags] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
@@ -212,6 +254,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   const handleSortByChange = (newSortBy: "captured" | "uploaded") => {
     setSortBy(newSortBy);
     setSortDir(undefined);
+    setGroupByTags(false);
+  };
+
+  const handleGroupByTagsChange = () => {
+    setGroupByTags(true);
   };
 
   const toggleSortDir = () => {
@@ -221,6 +268,31 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     selectedPhotoIndex !== null && album
       ? album.photos[selectedPhotoIndex]
       : null;
+
+  const tagGroups = useMemo(() => {
+    if (!album) return [];
+
+    const groups = album.tags
+      .map((tag) => ({
+        id: tag.id,
+        title: getTagTitle(tag),
+        photos: album.photos.filter((photo) =>
+          photo.tags.some((assigned) => assigned.id === tag.id),
+        ),
+      }))
+      .filter((group) => group.photos.length > 0);
+
+    const untagged = album.photos.filter((photo) => photo.tags.length === 0);
+    if (untagged.length > 0) {
+      groups.push({
+        id: "untagged",
+        title: "Untagged",
+        photos: untagged,
+      });
+    }
+
+    return groups;
+  }, [album]);
 
   const goToPreviousPhoto = useCallback(() => {
     if (!album || selectedPhotoIndex === null || album.photos.length <= 1) return;
@@ -642,7 +714,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     <button
                       onClick={() => handleSortByChange("captured")}
                       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                        sortBy === "captured"
+                        sortBy === "captured" && !groupByTags
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
@@ -654,7 +726,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     <button
                       onClick={() => handleSortByChange("uploaded")}
                       className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                        sortBy === "uploaded"
+                        sortBy === "uploaded" && !groupByTags
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
@@ -663,18 +735,34 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                       <Clock className="h-3.5 w-3.5" />
                       <span className="hidden sm:inline">Uploaded</span>
                     </button>
-                  </div>
-                  <button
-                    onClick={toggleSortDir}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
-                  >
-                    {effectiveDir === "asc" ? (
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ArrowDown className="h-3.5 w-3.5" />
+                    {album.tags.length > 0 && (
+                      <button
+                        onClick={handleGroupByTagsChange}
+                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          groupByTags
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        title="Group by tag"
+                      >
+                        <Tag className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Tag</span>
+                      </button>
                     )}
-                  </button>
+                  </div>
+                  {!groupByTags && (
+                    <button
+                      onClick={toggleSortDir}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      title={effectiveDir === "asc" ? "Oldest first (click to reverse)" : "Newest first (click to reverse)"}
+                    >
+                      {effectiveDir === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  )}
                 </>
               )}
               {album.photos.length > 0 && (
@@ -756,7 +844,8 @@ export default function SharePageClient({ token }: SharePageClientProps) {
             <VirtualizedPhotoGrid
               photos={album.photos}
               dateField={sortBy}
-              groupByDate
+              groupByDate={!groupByTags}
+              groups={groupByTags ? tagGroups : undefined}
               selectionEnabled={false}
               onPhotoOpen={setSelectedPhotoIndex}
               renderPhotoCard={({

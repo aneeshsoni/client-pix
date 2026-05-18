@@ -68,6 +68,18 @@ class ShareLinkVerifyRequest(BaseModel):
     password: str | None = None
 
 
+class SharedPhotoTagResponse(BaseModel):
+    """Tag details exposed in shared album views."""
+
+    id: uuid.UUID
+    name: str | None
+    emoji: str | None
+    color: str | None
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
 class SharedAlbumPhotoResponse(BaseModel):
     """Photo details for shared album view (limited info)."""
 
@@ -80,6 +92,7 @@ class SharedAlbumPhotoResponse(BaseModel):
     captured_at: datetime | None = None
     created_at: datetime | None = None
     is_video: bool = False
+    tags: list[SharedPhotoTagResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -92,6 +105,7 @@ class SharedAlbumResponse(BaseModel):
     description: str | None
     photo_count: int
     photos: list[SharedAlbumPhotoResponse]
+    tags: list[SharedPhotoTagResponse] = Field(default_factory=list)
     is_password_protected: bool
     allows_uploads: bool = False
     requires_password: bool  # True if password required but not yet provided
