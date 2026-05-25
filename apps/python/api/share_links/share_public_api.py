@@ -189,7 +189,10 @@ async def access_shared_album(
     album_stmt = (
         select(Album)
         .where(Album.id == share_link.album_id)
-        .options(selectinload(Album.photos).selectinload(Photo.file_hash))
+        .options(
+            selectinload(Album.photos).selectinload(Photo.file_hash),
+            selectinload(Album.photos).selectinload(Photo.tags),
+        )
     )
     album_result = await db.execute(album_stmt)
     album = album_result.scalar_one_or_none()
