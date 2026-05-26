@@ -65,3 +65,34 @@ async def test_access_shared_album_with_tagged_photo(
     assert data["title"] == "Austin Condo"
     assert data["tags"][0]["name"] == "Kitchen"
     assert data["photos"][0]["tags"][0]["name"] == "Kitchen"
+
+
+@pytest.mark.asyncio
+async def test_share_upload_rejects_unsupported_file(
+    client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Public share uploads should reject non-media files before persistence."""
+    album = Album(
+        title="Austin Condo",
+        description="Client gallery",
+        slug="austin-condo",
+    )
+    share_link = ShareLink(
+        album=album,
+        token="share-token",
+        custom_slug="austin-condo-uploads",
+        is_password_protected=False,
+        allows_uploads=True,
+    )
+
+    db_session.add_all([album, share_link])
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/share/austin-condo-uploads/upload",
+        files={"files": ("payload.txt", b"not a real image", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported file type" in response.json()["detail"]

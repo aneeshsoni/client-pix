@@ -13,11 +13,13 @@ from models.api.system_api_models import (
     StorageInfo,
     TempFilesInfo,
 )
+from models.db.admin_db_models import Admin
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from utils.auth_util import get_admin_from_token_or_query
 
 router = APIRouter()
 
@@ -28,7 +30,7 @@ async def health_check():
 
 
 @router.get("/system/storage", response_model=StorageInfo)
-async def get_storage_info():
+async def get_storage_info(_admin: Admin = Depends(get_admin_from_token_or_query)):
     """Get storage information for the entire filesystem."""
     # Get disk usage statistics for the entire filesystem
     # (using UPLOAD_DIR just to determine which filesystem to check)
@@ -45,7 +47,10 @@ async def get_storage_info():
 
 
 @router.get("/system/storage/albums", response_model=StorageBreakdown)
-async def get_storage_breakdown(db: AsyncSession = Depends(get_db)):
+async def get_storage_breakdown(
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
     """Get storage breakdown by album."""
     # Get disk usage
     total, used, free = shutil.disk_usage(UPLOAD_DIR)
@@ -156,7 +161,7 @@ def _get_chunked_upload_stats() -> tuple[int, int]:
 
 
 @router.get("/system/temp-files", response_model=TempFilesInfo)
-async def get_temp_files_info():
+async def get_temp_files_info(_admin: Admin = Depends(get_admin_from_token_or_query)):
     """Get information about orphaned temporary files."""
     download_count, download_bytes = _get_download_temp_stats()
     upload_count, upload_bytes = _get_upload_temp_stats()
@@ -174,7 +179,9 @@ async def get_temp_files_info():
 
 
 @router.post("/system/cleanup/downloads", response_model=CleanupResult)
-async def cleanup_download_temp_files():
+async def cleanup_download_temp_files(
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
     """Manually clean up orphaned download ZIP files."""
     count = 0
     total_bytes = 0
@@ -196,7 +203,9 @@ async def cleanup_download_temp_files():
 
 
 @router.post("/system/cleanup/uploads", response_model=CleanupResult)
-async def cleanup_upload_temp_files():
+async def cleanup_upload_temp_files(
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
     """Manually clean up orphaned upload temp files and chunked uploads."""
     count = 0
     total_bytes = 0

@@ -13,6 +13,10 @@ from typing import BinaryIO
 
 import aiofiles
 from core.config import (
+    FFMPEG_TIMEOUT_SECONDS,
+    FFPROBE_TIMEOUT_SECONDS,
+    MAX_IMAGE_PIXELS,
+    MAX_UPLOAD_FILE_BYTES,
     THUMBNAIL_QUALITY,
     THUMBNAIL_SIZE,
     UPLOAD_DIR,
@@ -23,6 +27,11 @@ from core.config import (
 from PIL import Image, ImageOps
 from PIL.ExifTags import Base, IFD
 from pillow_heif import register_heif_opener
+from utils.upload_validation_util import (
+    UploadRejectedError,
+    validate_file_size_limit,
+    validate_supported_filename,
+)
 
 # Chunk size for streaming (8MB - optimized for large RAW/video files)
 CHUNK_SIZE = 8 * 1024 * 1024
@@ -41,6 +50,7 @@ def _fit_within_max_dimension_filter(max_dimension: int) -> str:
 
 # Enable HEIC/HEIF decoding in Pillow.
 register_heif_opener()
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
 @dataclass
@@ -165,10 +175,19 @@ class StorageService:
             return self.VIDEO_MIME_TYPES[ext]
         return "application/octet-stream"
 
+    def allowed_extensions(self) -> set[str]:
+        """Return all supported media extensions."""
+        return set(self.IMAGE_MIME_TYPES) | set(self.VIDEO_MIME_TYPES)
+
+    def validate_supported_filename(self, filename: str) -> str:
+        """Return the supported extension for an upload filename."""
+        return validate_supported_filename(filename, self.allowed_extensions())
+
     async def store_file_streaming(
         self,
         file: BinaryIO,
         original_filename: str,
+        max_file_size: int = MAX_UPLOAD_FILE_BYTES,
     ) -> StoredFile:
         """
         Store a file using streaming (memory-efficient for large files).
@@ -183,21 +202,20 @@ class StorageService:
         Returns:
             StoredFile with file details
         """
-        extension = Path(original_filename).suffix.lower()
-        if not extension:
-            extension = ".bin"
+        extension = self.validate_supported_filename(original_filename)
 
         # Handle videos differently - no hashing, use UUID
         if self.is_video(extension):
-            return await self._store_video_streaming(file, extension)
+            return await self._store_video_streaming(file, extension, max_file_size)
 
         # For images: stream to temp, hash, then move
-        return await self._store_image_streaming(file, extension)
+        return await self._store_image_streaming(file, extension, max_file_size)
 
     async def _store_video_streaming(
         self,
         file: BinaryIO,
         extension: str,
+        max_file_size: int,
     ) -> StoredFile:
         """Store video file with streaming (no hashing).
 
@@ -209,47 +227,61 @@ class StorageService:
         storage_path = self._get_video_path(file_id, extension)
         storage_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Stream directly to final location
-        file_size = 0
-        async with aiofiles.open(storage_path, "wb") as f:
-            while True:
-                # Support both sync and async read
-                if hasattr(file, "read"):
-                    chunk = file.read(CHUNK_SIZE)
-                    # Handle coroutines from UploadFile
-                    if hasattr(chunk, "__await__"):
-                        chunk = await chunk
-                else:
-                    break
+        try:
+            # Stream directly to final location
+            file_size = 0
+            async with aiofiles.open(storage_path, "wb") as f:
+                while True:
+                    # Support both sync and async read
+                    if hasattr(file, "read"):
+                        chunk = file.read(CHUNK_SIZE)
+                        # Handle coroutines from UploadFile
+                        if hasattr(chunk, "__await__"):
+                            chunk = await chunk
+                    else:
+                        break
 
-                if not chunk:
-                    break
+                    if not chunk:
+                        break
 
-                await f.write(chunk)
-                file_size += len(chunk)
+                    await f.write(chunk)
+                    file_size += len(chunk)
+                    validate_file_size_limit(file_size, max_file_size)
 
-        # Get video dimensions quickly with ffprobe (fast operation)
-        width, height = await self._get_video_dimensions(storage_path)
+            validate_file_size_limit(file_size, max_file_size)
 
-        # Schedule thumbnail generation in background (don't block upload)
-        self._schedule_background_thumbnails(storage_path, file_id)
+            # Get video dimensions quickly with ffprobe (fast operation)
+            width, height = await self._get_video_dimensions(storage_path)
+            if width <= 0 or height <= 0:
+                raise UploadRejectedError(
+                    "Unsupported or invalid video file",
+                    status_code=415,
+                )
 
-        return StoredFile(
-            file_id=file_id,
-            storage_path=self._get_relative_video_path(file_id, extension),
-            file_extension=extension,
-            mime_type=self.get_mime_type(extension),
-            file_size=file_size,
-            width=width,
-            height=height,
-            is_duplicate=False,
-            is_video=True,
-        )
+            # Schedule thumbnail generation in background (don't block upload)
+            self._schedule_background_thumbnails(storage_path, file_id)
+
+            return StoredFile(
+                file_id=file_id,
+                storage_path=self._get_relative_video_path(file_id, extension),
+                file_extension=extension,
+                mime_type=self.get_mime_type(extension),
+                file_size=file_size,
+                width=width,
+                height=height,
+                is_duplicate=False,
+                is_video=True,
+            )
+        except Exception:
+            if storage_path.exists():
+                storage_path.unlink()
+            raise
 
     async def _store_image_streaming(
         self,
         file: BinaryIO,
         extension: str,
+        max_file_size: int,
     ) -> StoredFile:
         """Store image file with streaming and SHA256 deduplication."""
         # Stream to temp file while computing hash
@@ -274,6 +306,9 @@ class StorageService:
                     await f.write(chunk)
                     sha256.update(chunk)
                     file_size += len(chunk)
+                    validate_file_size_limit(file_size, max_file_size)
+
+            validate_file_size_limit(file_size, max_file_size)
 
             file_id = sha256.hexdigest()
 
@@ -294,6 +329,8 @@ class StorageService:
                 if not thumb_path.exists() or not web_path.exists():
                     await self._generate_thumbnails(storage_path, file_id, extension)
             else:
+                width, height = self._validate_image_dimensions(temp_path)
+
                 # Move temp to final location
                 storage_path.parent.mkdir(parents=True, exist_ok=True)
                 temp_path.rename(storage_path)
@@ -302,7 +339,8 @@ class StorageService:
                 await self._generate_thumbnails(storage_path, file_id, extension)
 
             # Get dimensions and EXIF date
-            width, height = self.get_image_dimensions(storage_path)
+            if is_duplicate:
+                width, height = self._validate_image_dimensions(storage_path)
             captured_at = self.get_exif_date(storage_path)
 
             return StoredFile(
@@ -334,6 +372,16 @@ class StorageService:
                 return img.size
         except Exception:
             return self._get_dimensions_with_ffprobe(file_path)
+
+    def _validate_image_dimensions(self, file_path: Path) -> tuple[int, int]:
+        """Return dimensions only when the file probes as a real image."""
+        width, height = self.get_image_dimensions(file_path)
+        if width <= 0 or height <= 0:
+            raise UploadRejectedError(
+                "Unsupported or invalid image file",
+                status_code=415,
+            )
+        return width, height
 
     def get_exif_date(self, file_path: Path) -> datetime | None:
         """Extract the captured date from EXIF data.
@@ -429,6 +477,7 @@ class StorageService:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=FFPROBE_TIMEOUT_SECONDS,
             )
             if result.returncode == 0:
                 probe_data = json.loads(result.stdout)
@@ -475,6 +524,7 @@ class StorageService:
                     ],
                     capture_output=True,
                     text=True,
+                    timeout=FFPROBE_TIMEOUT_SECONDS,
                 ),
             )
             if probe_result.returncode == 0:
@@ -485,7 +535,7 @@ class StorageService:
         except Exception as e:
             print(f"Warning: Could not probe video dimensions: {e}")
 
-        return 1920, 1080  # Default fallback
+        return 0, 0
 
     def _schedule_background_thumbnails(self, video_path: Path, file_id: str) -> None:
         """Schedule video thumbnail generation in background (non-blocking)."""
@@ -553,6 +603,7 @@ class StorageService:
                     ],
                     capture_output=True,
                     text=True,
+                    timeout=FFMPEG_TIMEOUT_SECONDS,
                 ),
             )
             if result.returncode != 0:
@@ -586,6 +637,7 @@ class StorageService:
                     ],
                     capture_output=True,
                     text=True,
+                    timeout=FFMPEG_TIMEOUT_SECONDS,
                 ),
             )
             if result.returncode != 0:
