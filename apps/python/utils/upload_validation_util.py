@@ -42,10 +42,12 @@ def validate_file_size_limit(file_size: int, max_file_size: int) -> None:
         )
 
 
-def validate_upload_file_count(files: list[UploadFile], max_files: int) -> None:
+def validate_upload_file_count(files: list[UploadFile], max_files: int | None) -> None:
     """Reject empty or overly large multipart upload batches."""
     if not files:
         raise UploadRejectedError("No files provided")
+    if max_files is None:
+        return
     if len(files) > max_files:
         raise UploadRejectedError(
             f"Too many files in one request. Maximum is {max_files}",

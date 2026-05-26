@@ -17,19 +17,30 @@ DATABASE_URL = os.getenv(
 # Storage
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 
-# Upload safety limits. Defaults are intentionally configurable so deployments
-# can tune them for their storage and expected video sizes.
+
+def _optional_positive_int(name: str) -> int | None:
+    """Read an optional positive integer env var, treating unset/0 as disabled."""
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return None
+
+    value = int(raw_value)
+    return value if value > 0 else None
+
+
+# Upload safety limits. File size limits stay enabled by default; batch-count
+# and image-pixel caps are opt-in because legitimate galleries can vary widely.
 MAX_UPLOAD_FILE_BYTES = int(os.getenv("MAX_UPLOAD_FILE_BYTES", str(5 * 1024**3)))
 MAX_SHARED_UPLOAD_FILE_BYTES = int(
     os.getenv("MAX_SHARED_UPLOAD_FILE_BYTES", str(1 * 1024**3))
 )
-MAX_UPLOAD_FILES_PER_REQUEST = int(os.getenv("MAX_UPLOAD_FILES_PER_REQUEST", "25"))
-MAX_SHARED_UPLOAD_FILES_PER_REQUEST = int(
-    os.getenv("MAX_SHARED_UPLOAD_FILES_PER_REQUEST", "10")
+MAX_UPLOAD_FILES_PER_REQUEST = _optional_positive_int("MAX_UPLOAD_FILES_PER_REQUEST")
+MAX_SHARED_UPLOAD_FILES_PER_REQUEST = _optional_positive_int(
+    "MAX_SHARED_UPLOAD_FILES_PER_REQUEST"
 )
 MAX_BULK_DELETE_PHOTOS = int(os.getenv("MAX_BULK_DELETE_PHOTOS", "100"))
 CHUNK_UPLOAD_SIZE_BYTES = int(os.getenv("CHUNK_UPLOAD_SIZE_BYTES", str(1024 * 1024)))
-MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "100000000"))
+MAX_IMAGE_PIXELS = _optional_positive_int("MAX_IMAGE_PIXELS")
 FFPROBE_TIMEOUT_SECONDS = int(os.getenv("FFPROBE_TIMEOUT_SECONDS", "10"))
 FFMPEG_TIMEOUT_SECONDS = int(os.getenv("FFMPEG_TIMEOUT_SECONDS", "60"))
 
