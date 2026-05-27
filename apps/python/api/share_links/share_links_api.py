@@ -15,10 +15,15 @@ from models.api.share_links_api_models import (
 )
 from models.db.album_db_models import Album
 from models.db.share_link_db_models import ShareLink
+from utils.auth_util import get_admin_from_token_or_query
 from utils.security_util import generate_token, hash_password
 from utils.url_util import build_share_url
 
-router = APIRouter(prefix="/albums", tags=["share-links"])
+router = APIRouter(
+    prefix="/albums",
+    tags=["share-links"],
+    dependencies=[Depends(get_admin_from_token_or_query)],
+)
 
 
 @router.post("/{album_id}/share", response_model=ShareLinkResponse, status_code=201)

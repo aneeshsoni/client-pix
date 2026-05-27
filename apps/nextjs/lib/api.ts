@@ -88,7 +88,7 @@ export async function createAlbum(
   title: string,
   description?: string,
 ): Promise<Album> {
-  const response = await fetch(`${API_BASE_URL}/api/albums`, {
+  const response = await authFetch(`${API_BASE_URL}/api/albums`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -105,7 +105,7 @@ export async function createAlbum(
 
 export async function listAlbums(): Promise<AlbumListResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/albums`, {
+    const response = await authFetch(`${API_BASE_URL}/api/albums`, {
       cache: "no-store", // Always fetch latest
     });
 
@@ -134,7 +134,7 @@ export async function getAlbum(
 ): Promise<AlbumDetail> {
   const params = new URLSearchParams({ sort_by: sortBy });
   if (sortDir) params.set("sort_dir", sortDir);
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}?${params}`,
   );
 
@@ -153,7 +153,7 @@ export async function getAlbumBySlug(
   try {
     const params = new URLSearchParams({ sort_by: sortBy });
     if (sortDir) params.set("sort_dir", sortDir);
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/api/albums/slug/${encodeURIComponent(slug)}?${params}`,
     );
 
@@ -177,7 +177,7 @@ export async function updateAlbum(
   albumId: string,
   data: { title?: string; description?: string; cover_photo_id?: string; cover_photo_position_x?: number; cover_photo_position_y?: number },
 ): Promise<Album> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}`, {
+  const response = await authFetch(`${API_BASE_URL}/api/albums/${albumId}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -196,7 +196,7 @@ export async function deleteAlbum(
   albumId: string,
   deletePhotos: boolean = false,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}?delete_photos=${deletePhotos}`,
     {
       method: "DELETE",
@@ -209,7 +209,7 @@ export async function deleteAlbum(
 }
 
 export async function listAlbumTags(albumId: string): Promise<PhotoTag[]> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/tags`);
+  const response = await authFetch(`${API_BASE_URL}/api/albums/${albumId}/tags`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch tags: ${response.statusText}`);
@@ -222,7 +222,7 @@ export async function createAlbumTag(
   albumId: string,
   data: PhotoTagPayload,
 ): Promise<PhotoTag> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/tags`, {
+  const response = await authFetch(`${API_BASE_URL}/api/albums/${albumId}/tags`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -242,7 +242,7 @@ export async function updateAlbumTag(
   tagId: string,
   data: PhotoTagPayload,
 ): Promise<PhotoTag> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/tags/${tagId}`,
     {
       method: "PATCH",
@@ -264,7 +264,7 @@ export async function deleteAlbumTag(
   albumId: string,
   tagId: string,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/tags/${tagId}`,
     {
       method: "DELETE",
@@ -281,7 +281,7 @@ export async function updatePhotoTags(
   photoId: string,
   tagIds: string[],
 ): Promise<Photo> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/tags`,
     {
       method: "PUT",
@@ -308,6 +308,7 @@ function uploadFileWithProgress(
   formData: FormData,
   onProgress?: (loaded: number, total: number) => void,
   timeoutMs: number = 15 * 60 * 1000,
+  authToken?: string | null,
 ): Promise<PhotoUploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -353,6 +354,9 @@ function uploadFileWithProgress(
     });
 
     xhr.open("POST", url);
+    if (authToken) {
+      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+    }
     xhr.timeout = timeoutMs;
     xhr.send(formData);
   });
@@ -373,7 +377,7 @@ async function uploadLargeFileChunked(
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<PhotoUploadResponse> {
   // Initialize upload session
-  const initResponse = await fetch(
+  const initResponse = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/upload/init?filename=${encodeURIComponent(
       file.name,
     )}&file_size=${file.size}`,
@@ -395,7 +399,7 @@ async function uploadLargeFileChunked(
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const chunk = file.slice(start, end);
 
-    const chunkResponse = await fetch(
+    const chunkResponse = await authFetch(
       `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/chunk?chunk_index=${chunkIndex}`,
       {
         method: "POST",
@@ -417,7 +421,7 @@ async function uploadLargeFileChunked(
   }
 
   // Complete the upload
-  const completeResponse = await fetch(
+  const completeResponse = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/complete`,
     { method: "POST" },
   );
@@ -568,6 +572,7 @@ export async function uploadPhotosToAlbum(
             onUploadProgress?.(uploadedSize + loaded, totalSize);
           },
           15 * 60 * 1000,
+          getAuthToken(),
         );
       }
 
@@ -604,7 +609,7 @@ export async function deletePhoto(
   albumId: string,
   photoId: string,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}`,
     {
       method: "DELETE",
@@ -620,7 +625,7 @@ export async function bulkDeletePhotos(
   albumId: string,
   photoIds: string[],
 ): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-delete`,
     {
       method: "POST",
@@ -640,7 +645,7 @@ export async function bulkDownloadPhotos(
   albumId: string,
   photoIds: string[],
 ): Promise<Blob> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/photos/bulk-download`,
     {
       method: "POST",
@@ -662,7 +667,7 @@ export async function setCoverPhoto(
   albumId: string,
   photoId: string,
 ): Promise<Album> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/cover/${photoId}`,
     {
       method: "PUT",
@@ -683,7 +688,7 @@ export async function getAllPhotos(
   try {
     const params = new URLSearchParams({ sort_by: sortBy });
     if (sortDir) params.set("sort_dir", sortDir);
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/api/albums/photos/all?${params}`,
       {
         cache: "no-store",
@@ -909,12 +914,16 @@ export function getShareDownloadFileUrl(
 
 export function getDownloadUrl(albumId: string, photoId: string): string {
   // Use the download endpoint which sets proper Content-Disposition header
-  return `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/download`;
+  const token = getAuthToken();
+  const params = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/download${params}`;
 }
 
 export function getDownloadAllUrl(albumId: string): string {
   // Direct link to download all photos in an album as a zip
-  return `${API_BASE_URL}/api/albums/${albumId}/download-all`;
+  const token = getAuthToken();
+  const params = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${API_BASE_URL}/api/albums/${albumId}/download-all${params}`;
 }
 
 // --- Share Link Types ---
@@ -947,7 +956,7 @@ export async function createShareLink(
   expiresAt?: string,
   allowsUploads: boolean = false,
 ): Promise<ShareLink> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
+  const response = await authFetch(`${API_BASE_URL}/api/albums/${albumId}/share`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -969,7 +978,7 @@ export async function createShareLink(
 }
 
 export async function getShareLinks(albumId: string): Promise<ShareLink[]> {
-  const response = await fetch(`${API_BASE_URL}/api/albums/${albumId}/share`);
+  const response = await authFetch(`${API_BASE_URL}/api/albums/${albumId}/share`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch share links: ${response.statusText}`);
@@ -989,7 +998,7 @@ export async function updateShareLink(
     allows_uploads?: boolean;
   },
 ): Promise<ShareLink> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
     {
       method: "PATCH",
@@ -1012,7 +1021,7 @@ export async function deleteShareLink(
   albumId: string,
   shareLinkId: string,
 ): Promise<void> {
-  const response = await fetch(
+  const response = await authFetch(
     `${API_BASE_URL}/api/albums/${albumId}/share/${shareLinkId}`,
     {
       method: "DELETE",
@@ -1127,7 +1136,7 @@ export interface StorageBreakdown {
 }
 
 export async function getStorageInfo(): Promise<StorageInfo> {
-  const response = await fetch(`${API_BASE_URL}/api/system/storage`, {
+  const response = await authFetch(`${API_BASE_URL}/api/system/storage`, {
     cache: "no-store",
   });
 
@@ -1139,7 +1148,7 @@ export async function getStorageInfo(): Promise<StorageInfo> {
 }
 
 export async function getStorageBreakdown(): Promise<StorageBreakdown> {
-  const response = await fetch(`${API_BASE_URL}/api/system/storage/albums`, {
+  const response = await authFetch(`${API_BASE_URL}/api/system/storage/albums`, {
     cache: "no-store",
   });
 
@@ -1163,7 +1172,7 @@ export interface TempFilesInfo {
 }
 
 export async function getTempFilesInfo(): Promise<TempFilesInfo> {
-  const response = await fetch(`${API_BASE_URL}/api/system/temp-files`, {
+  const response = await authFetch(`${API_BASE_URL}/api/system/temp-files`, {
     cache: "no-store",
   });
 
@@ -1181,7 +1190,7 @@ export interface CleanupResult {
 }
 
 export async function cleanupDownloadTempFiles(): Promise<CleanupResult> {
-  const response = await fetch(`${API_BASE_URL}/api/system/cleanup/downloads`, {
+  const response = await authFetch(`${API_BASE_URL}/api/system/cleanup/downloads`, {
     method: "POST",
   });
 
@@ -1193,7 +1202,7 @@ export async function cleanupDownloadTempFiles(): Promise<CleanupResult> {
 }
 
 export async function cleanupUploadTempFiles(): Promise<CleanupResult> {
-  const response = await fetch(`${API_BASE_URL}/api/system/cleanup/uploads`, {
+  const response = await authFetch(`${API_BASE_URL}/api/system/cleanup/uploads`, {
     method: "POST",
   });
 
