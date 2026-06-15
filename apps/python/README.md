@@ -2,6 +2,38 @@
 
 This covers everything to get started from initial setup to production deployment for our python backend.
 
+## Face Recognition Models
+
+People recognition uses OpenCV YuNet and SFace ONNX model files stored outside
+git. Install them in the backend app directory:
+
+```bash
+cd apps/python
+uv run python scripts/download_face_models.py
+```
+
+Default paths:
+
+```text
+models_ml/faces/face_detection_yunet_2023mar.onnx
+models_ml/faces/face_recognition_sface_2021dec.onnx
+```
+
+The app starts without these files, but `/api/face-scans/status` will report
+the face backend as not ready and queued scan jobs will wait. Existing uploaded
+photos are indexed from the dashboard People page with the "Scan Existing"
+action.
+
+Relevant environment variables:
+
+```bash
+FACE_DETECTION_ENABLED=true
+FACE_SCAN_ON_UPLOAD=true
+FACE_WORKER_CONCURRENCY=1
+FACE_DETECTION_MODEL_PATH=./models_ml/faces/face_detection_yunet_2023mar.onnx
+FACE_RECOGNITION_MODEL_PATH=./models_ml/faces/face_recognition_sface_2021dec.onnx
+```
+
 ## Database Migrations
 
 This project uses [Alembic](https://alembic.sqlalchemy.org/) for database migrations.

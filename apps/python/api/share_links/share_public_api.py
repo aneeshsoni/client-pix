@@ -9,6 +9,7 @@ from pathlib import Path
 import aiofiles
 from core.config import (
     CHUNK_UPLOAD_SIZE_BYTES,
+    FACE_SCAN_ON_UPLOAD,
     MAX_SHARED_UPLOAD_FILE_BYTES,
     MAX_SHARED_UPLOAD_FILES_PER_REQUEST,
     UPLOAD_DIR,
@@ -46,6 +47,7 @@ from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
+from services.face_recognition_service import face_recognition_service
 from services.storage_service import storage_service
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -381,6 +383,8 @@ async def _persist_shared_photo(
 
         if existing_photo:
             await db.refresh(existing_photo, ["file_hash"])
+            if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+                await face_recognition_service.enqueue_file_hash(db, file_hash.id)
             return build_photo_response(existing_photo), 0, 1, existing_photo.id
 
         file_hash.reference_count += 1
@@ -410,6 +414,10 @@ async def _persist_shared_photo(
     db.add(photo)
     await db.flush()
     await db.refresh(photo, ["file_hash"])
+
+    if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+        await face_recognition_service.enqueue_file_hash(db, file_hash.id)
+
     return build_photo_response(photo), 1, duplicate_count, photo.id
 
 

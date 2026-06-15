@@ -4,10 +4,15 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import MAX_UPLOAD_FILE_BYTES, MAX_UPLOAD_FILES_PER_REQUEST
+from core.config import (
+    FACE_SCAN_ON_UPLOAD,
+    MAX_UPLOAD_FILE_BYTES,
+    MAX_UPLOAD_FILES_PER_REQUEST,
+)
 from core.database import get_db
 from models.api.uploads_api_models import UploadResponse, UploadMultipleResponse
 from models.db.file_hash_db_models import FileHash
+from services.face_recognition_service import face_recognition_service
 from services.storage_service import storage_service
 from utils.auth_util import get_admin_from_token_or_query
 from utils.upload_validation_util import (
@@ -45,6 +50,10 @@ async def _create_or_update_file_hash(
             reference_count=1,
         )
         db.add(file_hash)
+        await db.flush()
+
+    if FACE_SCAN_ON_UPLOAD:
+        await face_recognition_service.enqueue_file_hash(db, file_hash.id)
 
     await db.commit()
     await db.refresh(file_hash)

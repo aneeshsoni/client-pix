@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Settings2, Images, Folder } from "lucide-react";
+import { Settings2, Images, Folder, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
@@ -86,7 +86,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         pathname?.startsWith("/dashboard/settings"),
     };
 
-    return [galleryItem, albumsItem, settingsItem];
+    const peopleItem = {
+      title: "People",
+      url: "/dashboard/people",
+      icon: Users,
+      isActive:
+        pathname === "/dashboard/people" ||
+        pathname?.startsWith("/dashboard/people"),
+    };
+
+    return [galleryItem, albumsItem, peopleItem, settingsItem];
   }, [albums, pathname]);
 
   return (

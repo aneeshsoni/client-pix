@@ -4,6 +4,9 @@
 apps/python/uploads/*
 !apps/python/uploads/.gitkeep
 
+# Local ML model assets
+apps/python/models_ml/
+
 .env
 
 # Ignore vscode settings

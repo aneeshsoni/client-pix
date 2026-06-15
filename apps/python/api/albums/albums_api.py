@@ -8,6 +8,7 @@ from pathlib import Path
 import aiofiles
 from core.config import (
     CHUNK_UPLOAD_SIZE_BYTES,
+    FACE_SCAN_ON_UPLOAD,
     MAX_BULK_DELETE_PHOTOS,
     MAX_UPLOAD_FILE_BYTES,
     MAX_UPLOAD_FILES_PER_REQUEST,
@@ -46,6 +47,7 @@ from models.db.photo_db_models import Photo
 from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.download_service import download_service
+from services.face_recognition_service import face_recognition_service
 from services.storage_service import storage_service
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -863,6 +865,8 @@ async def complete_chunked_upload(
 
         if existing_photo:
             await db.refresh(existing_photo, ["file_hash"])
+            if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+                await face_recognition_service.enqueue_file_hash(db, file_hash.id)
             await db.commit()
             return PhotoUploadResponse(
                 photos=[build_photo_response(existing_photo)],
@@ -898,6 +902,9 @@ async def complete_chunked_upload(
     db.add(photo)
     await db.flush()
     await db.refresh(photo, ["file_hash"])
+
+    if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+        await face_recognition_service.enqueue_file_hash(db, file_hash.id)
 
     # Auto-set cover photo if needed. Bulk uploads still prefer images when
     # available, but a single video upload should be usable as a cover too.
@@ -979,6 +986,8 @@ async def upload_photos_to_album(
 
             if existing_photo:
                 # Already in this album — skip, count as duplicate
+                if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+                    await face_recognition_service.enqueue_file_hash(db, file_hash.id)
                 duplicate_count += 1
                 continue
 
@@ -1009,6 +1018,9 @@ async def upload_photos_to_album(
         db.add(photo)
         await db.flush()
         await db.refresh(photo, ["file_hash"])
+
+        if FACE_SCAN_ON_UPLOAD and not stored.is_video:
+            await face_recognition_service.enqueue_file_hash(db, file_hash.id)
 
         # Track first photo for auto-cover (prefer images over videos)
         if first_photo_id is None:

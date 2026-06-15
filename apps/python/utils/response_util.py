@@ -86,6 +86,7 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         sort_order=photo.sort_order,
         captured_at=photo.captured_at,
         is_video=photo.is_video,
+        file_hash_id=file_hash.id,
         storage_path=file_hash.storage_path,
         thumbnail_path=f"thumbnails/{shard1}/{shard2}/{filename_base}.webp",
         web_path=f"web/{shard1}/{shard2}/{filename_base}.webp",

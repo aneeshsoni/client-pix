@@ -59,6 +59,29 @@ WEB_QUALITY = 90  # Higher quality for full-screen viewing
 # gallery tiles.
 VIDEO_THUMBNAIL_MAX_DIMENSION = int(os.getenv("VIDEO_THUMBNAIL_MAX_DIMENSION", "1600"))
 
+# Face recognition settings. Model files are intentionally external so the app
+# can start in deployments that have not installed the local ML assets yet.
+FACE_DETECTION_ENABLED = os.getenv("FACE_DETECTION_ENABLED", "true").lower() == "true"
+FACE_SCAN_ON_UPLOAD = os.getenv("FACE_SCAN_ON_UPLOAD", "true").lower() == "true"
+FACE_WORKER_CONCURRENCY = int(os.getenv("FACE_WORKER_CONCURRENCY", "1"))
+FACE_MODEL_VERSION = os.getenv("FACE_MODEL_VERSION", "opencv-yunet-sface-v1")
+FACE_DETECTION_MODEL_PATH = Path(
+    os.getenv(
+        "FACE_DETECTION_MODEL_PATH",
+        "./models_ml/faces/face_detection_yunet_2023mar.onnx",
+    )
+)
+FACE_RECOGNITION_MODEL_PATH = Path(
+    os.getenv(
+        "FACE_RECOGNITION_MODEL_PATH",
+        "./models_ml/faces/face_recognition_sface_2021dec.onnx",
+    )
+)
+FACE_MIN_DETECTION_CONFIDENCE = float(os.getenv("FACE_MIN_DETECTION_CONFIDENCE", "0.9"))
+FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.42"))
+FACE_WORKER_POLL_SECONDS = float(os.getenv("FACE_WORKER_POLL_SECONDS", "2"))
+FACE_MAX_JOB_ATTEMPTS = int(os.getenv("FACE_MAX_JOB_ATTEMPTS", "3"))
+
 # Download cache TTL in hours (cached ZIPs are deleted after this)
 DOWNLOAD_CACHE_TTL_HOURS = int(os.getenv("DOWNLOAD_CACHE_TTL_HOURS", "24"))
 

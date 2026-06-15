@@ -89,6 +89,7 @@ class PhotoResponse(BaseModel):
     captured_at: datetime | None = None
     is_video: bool = False
     # File details (from file_hash)
+    file_hash_id: uuid.UUID
     storage_path: str
     thumbnail_path: str
     web_path: str

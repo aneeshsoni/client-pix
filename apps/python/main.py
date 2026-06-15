@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
 from services.download_service import download_service
+from services.face_scan_worker import start_face_scan_workers, stop_face_scan_workers
 from core.rate_limit import limiter
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,10 +41,15 @@ async def lifespan(app: FastAPI):
     start_cleanup_task(UPLOAD_DIR)
     print("✓ Periodic cleanup task started (runs every 30 min)")
 
+    # Start face scan workers. Workers idle when models are not installed.
+    start_face_scan_workers()
+    print("✓ Face scan worker started")
+
     yield
 
     # Shutdown: Cancel cleanup task
     await stop_cleanup_task()
+    await stop_face_scan_workers()
     print("✓ Shutting down")
 
 

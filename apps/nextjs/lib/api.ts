@@ -45,6 +45,7 @@ export interface Photo {
   created_at: string;
   captured_at: string | null;
   is_video: boolean;
+  file_hash_id: string;
   tags: PhotoTag[];
 }
 
@@ -80,6 +81,63 @@ export interface PhotoTagPayload {
   emoji?: string | null;
   color?: string | null;
   sort_order?: number;
+}
+
+export interface FaceBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface FaceDetection {
+  id: string;
+  file_hash_id: string;
+  bbox: FaceBox;
+  confidence: number;
+  quality: number;
+  created_at: string;
+}
+
+export interface Person {
+  id: string;
+  display_name: string;
+  hidden: boolean;
+  cover_face_id: string | null;
+  face_count: number;
+  photo_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonDetail extends Person {
+  photos: Photo[];
+  faces: FaceDetection[];
+}
+
+export interface PeopleListResponse {
+  people: Person[];
+  total_count: number;
+}
+
+export interface FaceScanStatus {
+  enabled: boolean;
+  ready: boolean;
+  model_version: string;
+  reason: string | null;
+  total_images: number;
+  queued: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  last_error: string | null;
+}
+
+export interface FaceScanBackfillResponse {
+  queued_count: number;
+  skipped_count: number;
+  total_count: number;
 }
 
 // --- API Functions ---
@@ -714,6 +772,132 @@ export async function getAllPhotos(
   }
 }
 
+// --- People / Face Recognition API ---
+
+export async function listPeople(
+  includeHidden: boolean = false,
+): Promise<PeopleListResponse> {
+  const params = new URLSearchParams({
+    include_hidden: String(includeHidden),
+  });
+  const response = await authFetch(`${API_BASE_URL}/api/people?${params}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch people: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getPerson(personId: string): Promise<PersonDetail> {
+  const response = await authFetch(`${API_BASE_URL}/api/people/${personId}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch person: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function updatePerson(
+  personId: string,
+  data: {
+    display_name?: string;
+    hidden?: boolean;
+    cover_face_id?: string | null;
+  },
+): Promise<Person> {
+  const response = await authFetch(`${API_BASE_URL}/api/people/${personId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update person: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function mergePeople(
+  targetPersonId: string,
+  sourcePersonIds: string[],
+): Promise<Person> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/people/${targetPersonId}/merge`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_person_ids: sourcePersonIds }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to merge people: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function removeFaceFromPerson(
+  personId: string,
+  faceId: string,
+): Promise<void> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/people/${personId}/faces/${faceId}`,
+    { method: "DELETE" },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to remove face: ${response.statusText}`);
+  }
+}
+
+export async function getFaceScanStatus(): Promise<FaceScanStatus> {
+  const response = await authFetch(`${API_BASE_URL}/api/face-scans/status`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch face scan status: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function startFaceBackfill(
+  force: boolean = false,
+): Promise<FaceScanBackfillResponse> {
+  const response = await authFetch(`${API_BASE_URL}/api/face-scans/backfill`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ force }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to start face scan: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function retryFailedFaceScans(): Promise<{ retried_count: number }> {
+  const response = await authFetch(`${API_BASE_URL}/api/face-scans/retry-failed`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to retry face scans: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
 // --- Helper to get image URLs (Secure - requires auth token) ---
 
 /**
@@ -750,6 +934,14 @@ export function getSecureImageUrlByHash(
   let url = `${API_BASE_URL}/api/files/hash/${fileHash}?variant=${variant}`;
   if (token) {
     url += `&token=${encodeURIComponent(token)}`;
+  }
+  return url;
+}
+
+export function getFaceCropUrl(faceId: string, token?: string): string {
+  let url = `${API_BASE_URL}/api/faces/${faceId}/crop`;
+  if (token) {
+    url += `?token=${encodeURIComponent(token)}`;
   }
   return url;
 }
