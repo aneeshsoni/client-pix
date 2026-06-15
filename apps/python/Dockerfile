@@ -38,6 +38,10 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy application code
 COPY . .
 
+# Download face recognition model assets into the production image so simple
+# Docker deployments do not need manual server-side setup.
+RUN /app/.venv/bin/python scripts/download_face_models.py
+
 # Create uploads directory and make entrypoint executable
 RUN mkdir -p /app/uploads && \
     chmod +x /app/docker-entrypoint.sh

@@ -16,6 +16,9 @@ htmlcov/
 # Uploads (handled by volumes)
 uploads/
 
+# Model assets are downloaded during image build/startup.
+models_ml/
+
 # Local env files
 .env
 .env.local
