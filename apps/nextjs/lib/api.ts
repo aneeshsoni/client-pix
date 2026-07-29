@@ -62,6 +62,76 @@ export interface PhotoUploadResponse {
   photos: Photo[];
   uploaded_count: number;
   duplicate_count: number;
+  failed_files?: UploadFailure[];
+}
+
+export interface UploadFailure {
+  filename: string;
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface UploadCapabilities {
+  max_file_bytes: number;
+  resumable_threshold_bytes: number;
+  chunk_size_bytes: number;
+  resumable_uploads: boolean;
+}
+
+export class UploadApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code = "UNKNOWN_UPLOAD_ERROR",
+    public readonly retryable = false,
+  ) {
+    super(message);
+    this.name = "UploadApiError";
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+function uploadErrorFromBody(
+  body: unknown,
+  fallback: string,
+  status?: number,
+): UploadApiError {
+  const data = body as {
+    detail?: string | { error?: { code?: string; message?: string; retryable?: boolean } };
+    error?: { code?: string; message?: string; retryable?: boolean };
+  };
+  const structured =
+    typeof data?.detail === "object" ? data.detail?.error : data?.error;
+  if (structured?.message) {
+    return new UploadApiError(
+      structured.message,
+      structured.code,
+      structured.retryable,
+    );
+  }
+  if (typeof data?.detail === "string") {
+    return new UploadApiError(
+      data.detail,
+      status === 413 ? "FILE_TOO_LARGE" : "UPLOAD_FAILED",
+    );
+  }
+  return new UploadApiError(fallback);
+}
+
+async function responseUploadError(
+  response: Response,
+  fallback: string,
+): Promise<UploadApiError> {
+  try {
+    return uploadErrorFromBody(await response.json(), fallback, response.status);
+  } catch {
+    return new UploadApiError(fallback);
+  }
 }
 
 export interface PhotoTag {
@@ -331,8 +401,10 @@ function uploadFileWithProgress(
         try {
           const errorData = JSON.parse(xhr.responseText);
           reject(
-            new Error(
-              errorData.detail || `Upload failed: ${xhr.status} ${xhr.statusText}`,
+            uploadErrorFromBody(
+              errorData,
+              `Upload failed: ${xhr.status} ${xhr.statusText}`,
+              xhr.status,
             ),
           );
         } catch {
@@ -362,10 +434,70 @@ function uploadFileWithProgress(
   });
 }
 
-// Threshold for chunked upload (50MB)
-const CHUNKED_UPLOAD_THRESHOLD = 50 * 1024 * 1024;
-// Chunk size (1MB - small enough to pass through proxy buffers)
-const CHUNK_SIZE = 1 * 1024 * 1024;
+const capabilityCache = new Map<
+  string,
+  { expiresAt: number; value: UploadCapabilities }
+>();
+
+async function getUploadCapabilities(
+  url: string,
+  authenticated: boolean,
+): Promise<UploadCapabilities> {
+  const cached = capabilityCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const response = authenticated
+    ? await authFetch(url, { cache: "no-store" })
+    : await fetch(url, { cache: "no-store" });
+  if (!response.ok) {
+    throw await responseUploadError(
+      response,
+      "Unable to determine the upload limit.",
+    );
+  }
+  const value: UploadCapabilities = await response.json();
+  capabilityCache.set(url, { expiresAt: Date.now() + 60_000, value });
+  return value;
+}
+
+async function sendChunkWithRetry(
+  url: string,
+  chunk: Blob,
+  authenticated: boolean,
+): Promise<void> {
+  let lastError: UploadApiError | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = authenticated
+        ? await authFetch(url, {
+            method: "POST",
+            body: chunk,
+            headers: { "Content-Type": "application/octet-stream" },
+          })
+        : await fetch(url, {
+            method: "POST",
+            body: chunk,
+            headers: { "Content-Type": "application/octet-stream" },
+          });
+      if (response.ok) return;
+      lastError = await responseUploadError(
+        response,
+        "A file chunk could not be uploaded.",
+      );
+      if (!lastError.retryable && response.status < 500) throw lastError;
+    } catch (error) {
+      lastError =
+        error instanceof UploadApiError
+          ? error
+          : new UploadApiError("Network error during upload", "NETWORK_ERROR", true);
+      if (!lastError.retryable) throw lastError;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+  }
+  throw (
+    lastError ??
+    new UploadApiError("Upload interrupted", "UPLOAD_INTERRUPTED", true)
+  );
+}
 
 /**
  * Upload a large file using chunked upload.
@@ -376,43 +508,62 @@ async function uploadLargeFileChunked(
   file: File,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<PhotoUploadResponse> {
-  // Initialize upload session
-  const initResponse = await authFetch(
-    `${API_BASE_URL}/api/albums/${albumId}/upload/init?filename=${encodeURIComponent(
-      file.name,
-    )}&file_size=${file.size}`,
-    { method: "POST" },
-  );
+  const resumeKey = `client-pix-upload:admin:${albumId}:${file.name}:${file.size}:${file.lastModified}`;
+  let uploadId = window.localStorage.getItem(resumeKey);
+  let chunkSize = 0;
+  let chunksReceived = new Set<number>();
 
-  if (!initResponse.ok) {
-    throw new Error(`Failed to initialize upload: ${initResponse.statusText}`);
+  if (uploadId) {
+    const statusResponse = await authFetch(
+      `${API_BASE_URL}/api/albums/${albumId}/upload/${uploadId}`,
+      { cache: "no-store" },
+    );
+    if (statusResponse.ok) {
+      const status = await statusResponse.json();
+      if (status.file_size === file.size) {
+        chunkSize = status.chunk_size;
+        chunksReceived = new Set(status.chunks_received);
+      } else {
+        uploadId = null;
+      }
+    } else {
+      uploadId = null;
+    }
   }
 
-  const { upload_id } = await initResponse.json();
+  if (!uploadId) {
+    const initResponse = await authFetch(
+      `${API_BASE_URL}/api/albums/${albumId}/upload/init?filename=${encodeURIComponent(
+        file.name,
+      )}&file_size=${file.size}`,
+      { method: "POST" },
+    );
+    if (!initResponse.ok) {
+      throw await responseUploadError(
+        initResponse,
+        "Failed to initialize upload.",
+      );
+    }
+    const initialized = await initResponse.json();
+    uploadId = initialized.upload_id;
+    chunkSize = initialized.chunk_size;
+    window.localStorage.setItem(resumeKey, initialized.upload_id);
+  }
 
   // Upload chunks
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const totalChunks = Math.ceil(file.size / chunkSize);
   let uploadedBytes = 0;
 
   for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
     const chunk = file.slice(start, end);
 
-    const chunkResponse = await authFetch(
-      `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/chunk?chunk_index=${chunkIndex}`,
-      {
-        method: "POST",
-        body: chunk,
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
-      },
-    );
-
-    if (!chunkResponse.ok) {
-      throw new Error(
-        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`,
+    if (!chunksReceived.has(chunkIndex)) {
+      await sendChunkWithRetry(
+        `${API_BASE_URL}/api/albums/${albumId}/upload/${uploadId}/chunk?chunk_index=${chunkIndex}`,
+        chunk,
+        true,
       );
     }
 
@@ -422,15 +573,19 @@ async function uploadLargeFileChunked(
 
   // Complete the upload
   const completeResponse = await authFetch(
-    `${API_BASE_URL}/api/albums/${albumId}/upload/${upload_id}/complete`,
+    `${API_BASE_URL}/api/albums/${albumId}/upload/${uploadId}/complete`,
     { method: "POST" },
   );
 
   if (!completeResponse.ok) {
     const errorText = await completeResponse.text();
-    throw new Error(`Failed to complete upload: ${errorText}`);
+    throw await responseUploadError(
+      completeResponse,
+      `Failed to complete upload: ${errorText}`,
+    );
   }
 
+  window.localStorage.removeItem(resumeKey);
   return completeResponse.json();
 }
 
@@ -446,23 +601,56 @@ async function uploadLargeFileChunkedToShareLink(
   });
   if (password) params.set("password", password);
 
-  const initResponse = await fetch(
-    `${API_BASE_URL}/api/share/${token}/upload/init?${params}`,
-    { method: "POST" },
-  );
-
-  if (!initResponse.ok) {
-    throw new Error(`Failed to initialize upload: ${initResponse.statusText}`);
+  const resumeKey = `client-pix-upload:share:${token}:${file.name}:${file.size}:${file.lastModified}`;
+  let uploadId = window.localStorage.getItem(resumeKey);
+  let chunkSize = 0;
+  let chunksReceived = new Set<number>();
+  if (uploadId) {
+    const statusParams = new URLSearchParams();
+    if (password) statusParams.set("password", password);
+    const statusQuery = statusParams.toString();
+    const statusResponse = await fetch(
+      `${API_BASE_URL}/api/share/${token}/upload/${uploadId}${
+        statusQuery ? `?${statusQuery}` : ""
+      }`,
+      { cache: "no-store" },
+    );
+    if (statusResponse.ok) {
+      const status = await statusResponse.json();
+      if (status.file_size === file.size) {
+        chunkSize = status.chunk_size;
+        chunksReceived = new Set(status.chunks_received);
+      } else {
+        uploadId = null;
+      }
+    } else {
+      uploadId = null;
+    }
   }
 
-  const { upload_id } = await initResponse.json();
+  if (!uploadId) {
+    const initResponse = await fetch(
+      `${API_BASE_URL}/api/share/${token}/upload/init?${params}`,
+      { method: "POST" },
+    );
+    if (!initResponse.ok) {
+      throw await responseUploadError(
+        initResponse,
+        "Failed to initialize upload.",
+      );
+    }
+    const initialized = await initResponse.json();
+    uploadId = initialized.upload_id;
+    chunkSize = initialized.chunk_size;
+    window.localStorage.setItem(resumeKey, initialized.upload_id);
+  }
 
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const totalChunks = Math.ceil(file.size / chunkSize);
   let uploadedBytes = 0;
 
   for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-    const start = chunkIndex * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
     const chunk = file.slice(start, end);
 
     const chunkParams = new URLSearchParams({
@@ -470,20 +658,11 @@ async function uploadLargeFileChunkedToShareLink(
     });
     if (password) chunkParams.set("password", password);
 
-    const chunkResponse = await fetch(
-      `${API_BASE_URL}/api/share/${token}/upload/${upload_id}/chunk?${chunkParams}`,
-      {
-        method: "POST",
-        body: chunk,
-        headers: {
-          "Content-Type": "application/octet-stream",
-        },
-      },
-    );
-
-    if (!chunkResponse.ok) {
-      throw new Error(
-        `Failed to upload chunk ${chunkIndex}: ${chunkResponse.statusText}`,
+    if (!chunksReceived.has(chunkIndex)) {
+      await sendChunkWithRetry(
+        `${API_BASE_URL}/api/share/${token}/upload/${uploadId}/chunk?${chunkParams}`,
+        chunk,
+        false,
       );
     }
 
@@ -495,15 +674,19 @@ async function uploadLargeFileChunkedToShareLink(
   if (password) completeParams.set("password", password);
   const completeQs = completeParams.toString();
   const completeResponse = await fetch(
-    `${API_BASE_URL}/api/share/${token}/upload/${upload_id}/complete${completeQs ? `?${completeQs}` : ""}`,
+    `${API_BASE_URL}/api/share/${token}/upload/${uploadId}/complete${completeQs ? `?${completeQs}` : ""}`,
     { method: "POST" },
   );
 
   if (!completeResponse.ok) {
     const errorText = await completeResponse.text();
-    throw new Error(`Failed to complete upload: ${errorText}`);
+    throw await responseUploadError(
+      completeResponse,
+      `Failed to complete upload: ${errorText}`,
+    );
   }
 
+  window.localStorage.removeItem(resumeKey);
   return completeResponse.json();
 }
 
@@ -532,6 +715,11 @@ export async function uploadPhotosToAlbum(
   let totalUploaded = 0;
   let totalDuplicates = 0;
   let successfullyProcessed = 0;
+  const failures: UploadFailure[] = [];
+  const capabilities = await getUploadCapabilities(
+    `${API_BASE_URL}/api/albums/${albumId}/upload-capabilities`,
+    true,
+  );
 
   // Calculate total size for progress
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
@@ -542,9 +730,15 @@ export async function uploadPhotosToAlbum(
     const file = files[i];
 
     try {
+      if (file.size > capabilities.max_file_bytes) {
+        throw new UploadApiError(
+          `"${file.name}" is ${formatFileSize(file.size)}. The maximum file size is ${formatFileSize(capabilities.max_file_bytes)}.`,
+          "FILE_TOO_LARGE",
+        );
+      }
       let result: PhotoUploadResponse;
 
-      if (file.size > CHUNKED_UPLOAD_THRESHOLD) {
+      if (file.size > capabilities.resumable_threshold_bytes) {
         // Use chunked upload for large files
         console.log(
           `Using chunked upload for ${file.name} (${(
@@ -586,7 +780,18 @@ export async function uploadPhotosToAlbum(
       uploadedSize += file.size;
     } catch (error) {
       console.error(`File ${i + 1}/${files.length} error:`, error);
-      uploadedSize += file.size; // Still count for progress
+      const uploadError =
+        error instanceof UploadApiError
+          ? error
+          : new UploadApiError(
+              error instanceof Error ? error.message : "Upload failed",
+            );
+      failures.push({
+        filename: file.name,
+        code: uploadError.code,
+        message: uploadError.message,
+        retryable: uploadError.retryable,
+      });
     }
 
     // Report file progress
@@ -595,13 +800,18 @@ export async function uploadPhotosToAlbum(
 
   // If nothing was uploaded at all, throw an error
   if (successfullyProcessed === 0 && files.length > 0) {
-    throw new Error("Failed to upload any files. Please try again.");
+    throw new UploadApiError(
+      failures[0]?.message ?? "Failed to upload any files. Please try again.",
+      failures[0]?.code,
+      failures[0]?.retryable,
+    );
   }
 
   return {
     photos: allPhotos,
     uploaded_count: totalUploaded,
     duplicate_count: totalDuplicates,
+    failed_files: failures,
   };
 }
 
@@ -1045,6 +1255,16 @@ export async function uploadSharePhotos(
   let totalUploaded = 0;
   let totalDuplicates = 0;
   let successfullyProcessed = 0;
+  const failures: UploadFailure[] = [];
+  const capabilityParams = new URLSearchParams();
+  if (password) capabilityParams.set("password", password);
+  const capabilityQuery = capabilityParams.toString();
+  const capabilities = await getUploadCapabilities(
+    `${API_BASE_URL}/api/share/${token}/upload-capabilities${
+      capabilityQuery ? `?${capabilityQuery}` : ""
+    }`,
+    false,
+  );
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
   let uploadedSize = 0;
 
@@ -1052,9 +1272,15 @@ export async function uploadSharePhotos(
     const file = files[i];
 
     try {
+      if (file.size > capabilities.max_file_bytes) {
+        throw new UploadApiError(
+          `"${file.name}" is ${formatFileSize(file.size)}. The maximum file size is ${formatFileSize(capabilities.max_file_bytes)}.`,
+          "FILE_TOO_LARGE",
+        );
+      }
       let result: PhotoUploadResponse;
 
-      if (file.size > CHUNKED_UPLOAD_THRESHOLD) {
+      if (file.size > capabilities.resumable_threshold_bytes) {
         result = await uploadLargeFileChunkedToShareLink(
           token,
           file,
@@ -1090,20 +1316,36 @@ export async function uploadSharePhotos(
       uploadedSize += file.size;
     } catch (error) {
       console.error(`Shared upload file ${i + 1}/${files.length} error:`, error);
-      uploadedSize += file.size;
+      const uploadError =
+        error instanceof UploadApiError
+          ? error
+          : new UploadApiError(
+              error instanceof Error ? error.message : "Upload failed",
+            );
+      failures.push({
+        filename: file.name,
+        code: uploadError.code,
+        message: uploadError.message,
+        retryable: uploadError.retryable,
+      });
     }
 
     onProgress?.(i + 1, files.length);
   }
 
   if (successfullyProcessed === 0 && files.length > 0) {
-    throw new Error("Failed to upload any files. Please try again.");
+    throw new UploadApiError(
+      failures[0]?.message ?? "Failed to upload any files. Please try again.",
+      failures[0]?.code,
+      failures[0]?.retryable,
+    );
   }
 
   return {
     photos: allPhotos,
     uploaded_count: totalUploaded,
     duplicate_count: totalDuplicates,
+    failed_files: failures,
   };
 }
 
@@ -1114,6 +1356,58 @@ export interface StorageInfo {
   used_bytes: number;
   free_bytes: number;
   used_percentage: number;
+}
+
+export interface UploadLimitSettings {
+  admin_upload: {
+    max_file_bytes: number;
+    max_file_bytes_cap: number;
+  };
+  shared_upload: {
+    max_file_bytes: number;
+    max_file_bytes_cap: number;
+  };
+  resumable_threshold_bytes: number;
+  chunk_size_bytes: number;
+}
+
+export async function getUploadLimitSettings(): Promise<UploadLimitSettings> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/system/settings/upload-limits`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw await responseUploadError(
+      response,
+      "Failed to load upload limits.",
+    );
+  }
+  return response.json();
+}
+
+export async function updateUploadLimitSettings(
+  maxUploadFileBytes: number,
+  maxSharedUploadFileBytes: number,
+): Promise<UploadLimitSettings> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/system/settings/upload-limits`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        max_upload_file_bytes: maxUploadFileBytes,
+        max_shared_upload_file_bytes: maxSharedUploadFileBytes,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw await responseUploadError(
+      response,
+      "Failed to update upload limits.",
+    );
+  }
+  capabilityCache.clear();
+  return response.json();
 }
 
 export interface AlbumStorageStats {

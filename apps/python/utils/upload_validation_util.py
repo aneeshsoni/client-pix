@@ -8,14 +8,49 @@ from typing import Any
 
 import aiofiles
 from fastapi import HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 
 class UploadRejectedError(ValueError):
     """Raised when an uploaded file or chunk should be rejected."""
 
-    def __init__(self, message: str, status_code: int = 400):
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 400,
+        code: str = "UPLOAD_REJECTED",
+        **context: Any,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        self.code = code
+        self.context = context
+
+
+class UploadHTTPException(HTTPException):
+    """HTTP exception that preserves both legacy and structured error fields."""
+
+    def __init__(self, exc: UploadRejectedError):
+        super().__init__(status_code=exc.status_code, detail=str(exc))
+        self.code = exc.code
+        self.context = exc.context
+
+
+async def upload_http_exception_handler(
+    _request: Request, exc: UploadHTTPException
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error": {
+                "code": exc.code,
+                "message": exc.detail,
+                "retryable": False,
+                **exc.context,
+            },
+        },
+    )
 
 
 def _format_bytes(size: int) -> str:
@@ -28,17 +63,28 @@ def _format_bytes(size: int) -> str:
 
 def upload_http_exception(exc: UploadRejectedError) -> HTTPException:
     """Convert an upload rejection into a client-facing HTTP error."""
-    return HTTPException(status_code=exc.status_code, detail=str(exc))
+    return UploadHTTPException(exc)
 
 
-def validate_file_size_limit(file_size: int, max_file_size: int) -> None:
+def validate_file_size_limit(
+    file_size: int, max_file_size: int, filename: str | None = None
+) -> None:
     """Reject empty or oversized files."""
     if file_size <= 0:
-        raise UploadRejectedError("Uploaded file is empty")
+        raise UploadRejectedError(
+            "Uploaded file is empty",
+            code="EMPTY_FILE",
+            filename=filename,
+            file_size_bytes=file_size,
+        )
     if file_size > max_file_size:
         raise UploadRejectedError(
             f"File exceeds the maximum allowed size of {_format_bytes(max_file_size)}",
             status_code=413,
+            code="FILE_TOO_LARGE",
+            filename=filename,
+            file_size_bytes=file_size,
+            max_file_size_bytes=max_file_size,
         )
 
 
@@ -52,6 +98,7 @@ def validate_upload_file_count(files: list[UploadFile], max_files: int | None) -
         raise UploadRejectedError(
             f"Too many files in one request. Maximum is {max_files}",
             status_code=413,
+            code="TOO_MANY_FILES",
         )
 
 
@@ -65,12 +112,14 @@ def validate_supported_filename(
         raise UploadRejectedError(
             "Unsupported file type. Uploads must include a supported media extension",
             status_code=415,
+            code="UNSUPPORTED_FILE_TYPE",
         )
     if extension not in allowed_extensions:
         allowed = ", ".join(sorted(allowed_extensions))
         raise UploadRejectedError(
             f"Unsupported file type '{extension}'. Allowed types: {allowed}",
             status_code=415,
+            code="UNSUPPORTED_FILE_TYPE",
         )
     return extension
 
@@ -142,6 +191,83 @@ async def write_request_chunk(
         raise UploadRejectedError("Uploaded chunk is empty")
 
     return total_size
+
+
+async def write_request_chunk_at_offset(
+    request: Request,
+    staging_path: Path,
+    max_chunk_size: int,
+    offset: int,
+) -> int:
+    """Write a retryable chunk directly into a single staging file."""
+    total_size = 0
+    mode = "r+b" if staging_path.exists() else "w+b"
+    async with aiofiles.open(staging_path, mode) as file:
+        await file.seek(offset)
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            total_size += len(chunk)
+            if total_size > max_chunk_size:
+                raise UploadRejectedError(
+                    f"Chunk exceeds the maximum allowed size of "
+                    f"{_format_bytes(max_chunk_size)}",
+                    status_code=413,
+                    code="CHUNK_TOO_LARGE",
+                )
+            await file.write(chunk)
+    if total_size <= 0:
+        raise UploadRejectedError("Uploaded chunk is empty", code="EMPTY_CHUNK")
+    return total_size
+
+
+def validate_complete_staging_file(
+    staging_path: Path,
+    metadata: dict[str, Any],
+    chunk_size: int,
+    max_file_size: int,
+) -> Path:
+    """Validate the received range map and completed staging file."""
+    try:
+        file_size = int(metadata["file_size"])
+        received = {int(index) for index in metadata.get("chunks_received", [])}
+        received_sizes = {
+            int(index): int(size)
+            for index, size in metadata.get("chunk_sizes", {}).items()
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        raise UploadRejectedError("Upload session metadata is invalid") from exc
+
+    validate_file_size_limit(file_size, max_file_size, metadata.get("filename"))
+    expected_count = expected_chunk_count(file_size, chunk_size)
+    expected_indexes = set(range(expected_count))
+    if received != expected_indexes:
+        missing_count = len(expected_indexes - received)
+        raise UploadRejectedError(
+            f"Upload is incomplete. Missing {missing_count} chunk(s)",
+            code="UPLOAD_INCOMPLETE",
+        )
+
+    for index in expected_indexes:
+        expected_size = min(chunk_size, file_size - index * chunk_size)
+        if received_sizes.get(index) != expected_size:
+            raise UploadRejectedError(
+                f"Chunk {index} has an unexpected size",
+                code="INVALID_CHUNK_SIZE",
+            )
+
+    try:
+        staged_size = staging_path.stat().st_size
+    except FileNotFoundError as exc:
+        raise UploadRejectedError(
+            "Upload staging file is missing", code="UPLOAD_INCOMPLETE"
+        ) from exc
+    if staged_size != file_size:
+        raise UploadRejectedError(
+            "Completed upload size does not match the declared file size",
+            code="UPLOAD_SIZE_MISMATCH",
+        )
+    return staging_path
 
 
 def validate_complete_chunk_set(

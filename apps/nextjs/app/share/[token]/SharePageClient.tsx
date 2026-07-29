@@ -542,9 +542,15 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
         setUploadProgress("Upload complete! Refreshing...");
         setUploadProgressPercent(100);
-        toast.success(
-          `Uploaded ${result.uploaded_count} file${result.uploaded_count !== 1 ? "s" : ""}`,
-        );
+        if (result.failed_files?.length) {
+          toast.warning(
+            `Uploaded ${result.uploaded_count} of ${selectedFiles.length} files. ${result.failed_files[0].message}`,
+          );
+        } else {
+          toast.success(
+            `Uploaded ${result.uploaded_count} file${result.uploaded_count !== 1 ? "s" : ""}`,
+          );
+        }
 
         if (result.duplicate_count > 0) {
           toast.info(

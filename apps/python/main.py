@@ -15,6 +15,10 @@ from utils.cleanup_util import (
     start_cleanup_task,
     stop_cleanup_task,
 )
+from utils.upload_validation_util import (
+    UploadHTTPException,
+    upload_http_exception_handler,
+)
 
 
 @asynccontextmanager
@@ -56,6 +60,7 @@ app = FastAPI(
 # Register rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(UploadHTTPException, upload_http_exception_handler)
 
 # CORS middleware for frontend
 # Origins are configured via ALLOWED_ORIGINS environment variable
