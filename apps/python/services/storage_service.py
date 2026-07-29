@@ -183,6 +183,55 @@ class StorageService:
         """Return the supported extension for an upload filename."""
         return validate_supported_filename(filename, self.allowed_extensions())
 
+    async def store_prepared_file(
+        self,
+        prepared_path: Path,
+        original_filename: str,
+        max_file_size: int = MAX_UPLOAD_FILE_BYTES,
+    ) -> StoredFile:
+        """Finalize a resumable staging file without recopying large videos."""
+        extension = self.validate_supported_filename(original_filename)
+        file_size = prepared_path.stat().st_size
+        validate_file_size_limit(file_size, max_file_size, original_filename)
+
+        if not self.is_video(extension):
+            async with aiofiles.open(prepared_path, "rb") as file:
+                return await self.store_file_streaming(
+                    file,
+                    original_filename,
+                    max_file_size,
+                )
+
+        file_id = uuid.uuid4().hex
+        storage_path = self._get_video_path(file_id, extension)
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        prepared_path.replace(storage_path)
+        try:
+            width, height = await self._get_video_dimensions(storage_path)
+            if width <= 0 or height <= 0:
+                raise UploadRejectedError(
+                    "Unsupported or invalid video file",
+                    status_code=415,
+                    code="UNSUPPORTED_FILE_TYPE",
+                    filename=original_filename,
+                )
+            self._schedule_background_thumbnails(storage_path, file_id)
+            return StoredFile(
+                file_id=file_id,
+                storage_path=self._get_relative_video_path(file_id, extension),
+                file_extension=extension,
+                mime_type=self.get_mime_type(extension),
+                file_size=file_size,
+                width=width,
+                height=height,
+                is_duplicate=False,
+                is_video=True,
+            )
+        except Exception:
+            if storage_path.exists():
+                storage_path.unlink()
+            raise
+
     async def store_file_streaming(
         self,
         file: BinaryIO,

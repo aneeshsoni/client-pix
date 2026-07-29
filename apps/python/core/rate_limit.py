@@ -21,4 +21,4 @@ SHARE_UPLOAD_RATE_LIMIT = os.getenv(
 SHARE_UPLOAD_CHUNK_RATE_LIMIT = os.getenv(
     "SHARE_UPLOAD_CHUNK_RATE_LIMIT",
     "600/minute",
-)  # 1MB public share chunks
+)  # Public share upload chunks

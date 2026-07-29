@@ -192,7 +192,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       setUploadBytes(null);
 
       try {
-        await uploadPhotosToAlbum(
+        const result = await uploadPhotosToAlbum(
           album.id,
           Array.from(files),
           (uploaded, total) => {
@@ -212,7 +212,14 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         setUploadProgress("Upload complete! Refreshing...");
         setUploadProgressPercent(100);
         await fetchAlbum(); // Refresh album data
-        setUploadProgress("");
+        if (result.failed_files?.length) {
+          const firstFailure = result.failed_files[0];
+          setUploadProgress(
+            `Uploaded ${result.uploaded_count} of ${files.length} files. ${firstFailure.message}`,
+          );
+        } else {
+          setUploadProgress("");
+        }
         setUploadProgressPercent(0);
         setUploadDuplicates(0);
         setUploadBytes(null);

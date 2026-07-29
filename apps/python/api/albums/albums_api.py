@@ -5,11 +5,9 @@ import shutil
 import uuid
 from pathlib import Path
 
-import aiofiles
 from core.config import (
     CHUNK_UPLOAD_SIZE_BYTES,
     MAX_BULK_DELETE_PHOTOS,
-    MAX_UPLOAD_FILE_BYTES,
     MAX_UPLOAD_FILES_PER_REQUEST,
     UPLOAD_DIR,
 )
@@ -40,6 +38,7 @@ from models.api.albums_api_models import (
     PhotoTagUpdate,
     PhotoUploadResponse,
 )
+from models.api.upload_settings_api_models import UploadCapabilities
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
@@ -47,6 +46,7 @@ from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.download_service import download_service
 from services.storage_service import storage_service
+from services.upload_settings_service import get_upload_limits
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -64,11 +64,11 @@ from utils.upload_validation_util import (
     load_chunk_metadata,
     upload_http_exception,
     validate_chunk_index,
-    validate_complete_chunk_set,
+    validate_complete_staging_file,
     validate_file_size_limit,
     validate_upload_file_count,
     write_chunk_metadata,
-    write_request_chunk,
+    write_request_chunk_at_offset,
 )
 
 # Directory for chunked uploads in progress
@@ -701,6 +701,24 @@ async def update_photo_tags(
 # --- Chunked Upload for Large Files ---
 
 
+@router.get(
+    "/{album_id}/upload-capabilities",
+    response_model=UploadCapabilities,
+)
+async def get_album_upload_capabilities(
+    album_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    album_exists = await db.scalar(select(Album.id).where(Album.id == album_id))
+    if album_exists is None:
+        raise HTTPException(status_code=404, detail="Album not found")
+    limits = await get_upload_limits(db)
+    return UploadCapabilities(
+        max_file_bytes=limits.admin_bytes,
+        chunk_size_bytes=CHUNK_UPLOAD_SIZE_BYTES,
+    )
+
+
 @router.post("/{album_id}/upload/init")
 async def init_chunked_upload(
     album_id: uuid.UUID,
@@ -709,8 +727,9 @@ async def init_chunked_upload(
     db: AsyncSession = Depends(get_db),
 ):
     """Initialize a chunked upload session for a large file."""
+    limits = await get_upload_limits(db)
     try:
-        validate_file_size_limit(file_size, MAX_UPLOAD_FILE_BYTES)
+        validate_file_size_limit(file_size, limits.admin_bytes, filename)
         storage_service.validate_supported_filename(filename)
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
@@ -733,7 +752,10 @@ async def init_chunked_upload(
         "album_id": str(album_id),
         "filename": filename,
         "file_size": file_size,
+        "max_file_size": limits.admin_bytes,
+        "chunk_size": CHUNK_UPLOAD_SIZE_BYTES,
         "chunks_received": [],
+        "chunk_sizes": {},
     }
     (upload_dir / "metadata.json").write_text(json.dumps(metadata))
 
@@ -757,25 +779,50 @@ async def upload_chunk(
         raise HTTPException(status_code=400, detail="Album ID mismatch")
 
     try:
+        session_chunk_size = int(metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES))
         validate_chunk_index(
             chunk_index,
             int(metadata["file_size"]),
-            CHUNK_UPLOAD_SIZE_BYTES,
+            session_chunk_size,
         )
-        chunk_path = upload_dir / f"chunk_{chunk_index:06d}"
-        chunk_size = await write_request_chunk(
+        extension = Path(metadata["filename"]).suffix.lower() or ".bin"
+        staging_path = upload_dir / f"staging{extension}"
+        chunk_size = await write_request_chunk_at_offset(
             request,
-            chunk_path,
-            CHUNK_UPLOAD_SIZE_BYTES,
+            staging_path,
+            session_chunk_size,
+            chunk_index * session_chunk_size,
         )
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
 
     if chunk_index not in metadata["chunks_received"]:
         metadata["chunks_received"].append(chunk_index)
-        write_chunk_metadata(metadata_path, metadata)
+    metadata.setdefault("chunk_sizes", {})[str(chunk_index)] = chunk_size
+    write_chunk_metadata(metadata_path, metadata)
+    upload_dir.touch()
 
     return {"chunk_index": chunk_index, "size": chunk_size}
+
+
+@router.get("/{album_id}/upload/{upload_id}")
+async def get_chunked_upload_status(
+    album_id: uuid.UUID,
+    upload_id: str,
+):
+    """Return received chunks so an interrupted browser upload can resume."""
+    upload_dir = get_chunk_upload_dir(CHUNKS_DIR, upload_id)
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    metadata = load_chunk_metadata(upload_dir / "metadata.json")
+    if str(album_id) != metadata["album_id"]:
+        raise HTTPException(status_code=400, detail="Album ID mismatch")
+    return {
+        "upload_id": upload_id,
+        "file_size": metadata["file_size"],
+        "chunk_size": metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES),
+        "chunks_received": metadata["chunks_received"],
+    }
 
 
 @router.post(
@@ -804,33 +851,23 @@ async def complete_chunked_upload(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
 
-    # Assemble chunks into final file
+    # Validate and finalize the single resumable staging file.
     filename = metadata["filename"]
     extension = Path(filename).suffix.lower() or ".bin"
-    temp_file = upload_dir / f"assembled{extension}"
+    temp_file = upload_dir / f"staging{extension}"
 
     try:
-        chunk_files = validate_complete_chunk_set(
-            upload_dir,
+        validate_complete_staging_file(
+            temp_file,
             metadata,
-            CHUNK_UPLOAD_SIZE_BYTES,
-            MAX_UPLOAD_FILE_BYTES,
+            int(metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES)),
+            int(metadata["max_file_size"]),
         )
-
-        # Sort and concatenate chunks
-        async with aiofiles.open(temp_file, "wb") as out_f:
-            for chunk_path in chunk_files:
-                async with aiofiles.open(chunk_path, "rb") as chunk_f:
-                    while data := await chunk_f.read(CHUNK_UPLOAD_SIZE_BYTES):
-                        await out_f.write(data)
-
-        # Process the assembled file using storage service
-        async with aiofiles.open(temp_file, "rb") as f:
-            stored = await storage_service.store_file_streaming(
-                file=f,
-                original_filename=filename,
-                max_file_size=MAX_UPLOAD_FILE_BYTES,
-            )
+        stored = await storage_service.store_prepared_file(
+            temp_file,
+            original_filename=filename,
+            max_file_size=int(metadata["max_file_size"]),
+        )
     except UploadRejectedError as exc:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise upload_http_exception(exc) from exc
@@ -926,8 +963,12 @@ async def upload_photos_to_album(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload photos to an album. Auto-sets cover photo if album has none."""
+    limits = await get_upload_limits(db)
     try:
         validate_upload_file_count(files, MAX_UPLOAD_FILES_PER_REQUEST)
+        for file in files:
+            if file.size is not None:
+                validate_file_size_limit(file.size, limits.admin_bytes, file.filename)
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
 
@@ -958,7 +999,7 @@ async def upload_photos_to_album(
             stored = await storage_service.store_file_streaming(
                 file=file.file,
                 original_filename=file.filename or "unnamed",
-                max_file_size=MAX_UPLOAD_FILE_BYTES,
+                max_file_size=limits.admin_bytes,
             )
         except UploadRejectedError as exc:
             raise upload_http_exception(exc) from exc

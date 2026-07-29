@@ -2,9 +2,14 @@ import glob
 import os
 import shutil
 
-from core.config import UPLOAD_DIR
+from core.config import (
+    CHUNK_UPLOAD_SIZE_BYTES,
+    MAX_SHARED_UPLOAD_FILE_BYTES_CAP,
+    MAX_UPLOAD_FILE_BYTES_CAP,
+    UPLOAD_DIR,
+)
 from core.database import get_db
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from models.api.system_api_models import (
     AlbumStorageStats,
     CleanupResult,
@@ -13,6 +18,11 @@ from models.api.system_api_models import (
     StorageInfo,
     TempFilesInfo,
 )
+from models.api.upload_settings_api_models import (
+    UploadLimitValue,
+    UploadSettingsResponse,
+    UploadSettingsUpdate,
+)
 from models.db.admin_db_models import Admin
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
@@ -20,8 +30,58 @@ from models.db.photo_db_models import Photo
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.auth_util import get_admin_from_token_or_query
+from services.upload_settings_service import get_upload_limits, update_upload_limits
 
 router = APIRouter()
+
+
+def _upload_settings_response(admin_bytes: int, shared_bytes: int):
+    return UploadSettingsResponse(
+        admin_upload=UploadLimitValue(
+            max_file_bytes=admin_bytes,
+            max_file_bytes_cap=MAX_UPLOAD_FILE_BYTES_CAP,
+        ),
+        shared_upload=UploadLimitValue(
+            max_file_bytes=shared_bytes,
+            max_file_bytes_cap=MAX_SHARED_UPLOAD_FILE_BYTES_CAP,
+        ),
+        chunk_size_bytes=CHUNK_UPLOAD_SIZE_BYTES,
+    )
+
+
+@router.get("/system/settings/upload-limits", response_model=UploadSettingsResponse)
+async def get_upload_limit_settings(
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
+    limits = await get_upload_limits(db)
+    return _upload_settings_response(limits.admin_bytes, limits.shared_bytes)
+
+
+@router.patch("/system/settings/upload-limits", response_model=UploadSettingsResponse)
+async def patch_upload_limit_settings(
+    values: UploadSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    _admin: Admin = Depends(get_admin_from_token_or_query),
+):
+    try:
+        limits = await update_upload_limits(
+            db,
+            values.max_upload_file_bytes,
+            values.max_shared_upload_file_bytes,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "INVALID_UPLOAD_LIMIT",
+                    "message": str(exc),
+                    "retryable": False,
+                }
+            },
+        ) from exc
+    return _upload_settings_response(limits.admin_bytes, limits.shared_bytes)
 
 
 @router.get("/system/health", response_model=HealthCheckResponse)

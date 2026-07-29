@@ -32,8 +32,11 @@ import {
   getTempFilesInfo,
   cleanupDownloadTempFiles,
   cleanupUploadTempFiles,
+  getUploadLimitSettings,
+  updateUploadLimitSettings,
   type StorageBreakdown,
   type TempFilesInfo,
+  type UploadLimitSettings,
 } from "@/lib/api";
 import { authFetch } from "@/lib/auth";
 import { AlbumStorageBar } from "@/components/settings";
@@ -68,6 +71,17 @@ export default function SettingsPage() {
   const [cleaningDownloads, setCleaningDownloads] = useState(false);
   const [cleaningUploads, setCleaningUploads] = useState(false);
   const [cleanupMessage, setCleanupMessage] = useState<string | null>(null);
+
+  // Upload limits state
+  const [uploadLimits, setUploadLimits] = useState<UploadLimitSettings | null>(
+    null,
+  );
+  const [adminUploadGb, setAdminUploadGb] = useState("");
+  const [sharedUploadGb, setSharedUploadGb] = useState("");
+  const [uploadLimitsLoading, setUploadLimitsLoading] = useState(true);
+  const [uploadLimitsSaving, setUploadLimitsSaving] = useState(false);
+  const [uploadLimitsMessage, setUploadLimitsMessage] = useState("");
+  const [uploadLimitsError, setUploadLimitsError] = useState("");
 
   // Profile form state
   const [name, setName] = useState(admin?.name || "");
@@ -106,6 +120,26 @@ export default function SettingsPage() {
       }
     }
     fetchStorage();
+  }, []);
+
+  useEffect(() => {
+    async function fetchUploadLimits() {
+      try {
+        const data = await getUploadLimitSettings();
+        setUploadLimits(data);
+        setAdminUploadGb((data.admin_upload.max_file_bytes / 1024 ** 3).toString());
+        setSharedUploadGb(
+          (data.shared_upload.max_file_bytes / 1024 ** 3).toString(),
+        );
+      } catch (err) {
+        setUploadLimitsError(
+          err instanceof Error ? err.message : "Failed to load upload limits",
+        );
+      } finally {
+        setUploadLimitsLoading(false);
+      }
+    }
+    fetchUploadLimits();
   }, []);
 
   useEffect(() => {
@@ -165,6 +199,36 @@ export default function SettingsPage() {
     } finally {
       setCleaningUploads(false);
       setTimeout(() => setCleanupMessage(null), 5000);
+    }
+  };
+
+  const handleUploadLimitsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploadLimitsError("");
+    setUploadLimitsMessage("");
+    const adminBytes = Math.round(Number(adminUploadGb) * 1024 ** 3);
+    const sharedBytes = Math.round(Number(sharedUploadGb) * 1024 ** 3);
+    if (!Number.isFinite(adminBytes) || !Number.isFinite(sharedBytes)) {
+      setUploadLimitsError("Enter valid upload limits.");
+      return;
+    }
+    setUploadLimitsSaving(true);
+    try {
+      const updated = await updateUploadLimitSettings(adminBytes, sharedBytes);
+      setUploadLimits(updated);
+      setAdminUploadGb(
+        (updated.admin_upload.max_file_bytes / 1024 ** 3).toString(),
+      );
+      setSharedUploadGb(
+        (updated.shared_upload.max_file_bytes / 1024 ** 3).toString(),
+      );
+      setUploadLimitsMessage("Upload limits updated.");
+    } catch (err) {
+      setUploadLimitsError(
+        err instanceof Error ? err.message : "Failed to update upload limits",
+      );
+    } finally {
+      setUploadLimitsSaving(false);
     }
   };
 
@@ -757,6 +821,92 @@ export default function SettingsPage() {
               System
             </h2>
             <div className="space-y-6">
+              <div className="rounded-lg border bg-card p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Upload className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold">Upload Limits</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Set the maximum size of an individual file. Large uploads are
+                  automatically split into resumable chunks; normal image
+                  uploads keep using the standard upload path.
+                </p>
+
+                {uploadLimitsLoading ? (
+                  <div className="flex items-center py-4 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading upload limits...
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleUploadLimitsSubmit}
+                    className="space-y-4"
+                  >
+                    {uploadLimitsError && (
+                      <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                        {uploadLimitsError}
+                      </div>
+                    )}
+                    {uploadLimitsMessage && (
+                      <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
+                        {uploadLimitsMessage}
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="adminUploadLimit">
+                        Dashboard uploads (GB)
+                      </Label>
+                      <Input
+                        id="adminUploadLimit"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={adminUploadGb}
+                        onChange={(e) => setAdminUploadGb(e.target.value)}
+                        required
+                      />
+                      {uploadLimits && (
+                        <p className="text-xs text-muted-foreground">
+                          Server ceiling:{" "}
+                          {formatBytes(
+                            uploadLimits.admin_upload.max_file_bytes_cap,
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="sharedUploadLimit">
+                        Public share-link uploads (GB)
+                      </Label>
+                      <Input
+                        id="sharedUploadLimit"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={sharedUploadGb}
+                        onChange={(e) => setSharedUploadGb(e.target.value)}
+                        required
+                      />
+                      {uploadLimits && (
+                        <p className="text-xs text-muted-foreground">
+                          Server ceiling:{" "}
+                          {formatBytes(
+                            uploadLimits.shared_upload.max_file_bytes_cap,
+                          )}
+                          . The share limit cannot exceed the dashboard limit.
+                        </p>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={uploadLimitsSaving}>
+                      {uploadLimitsSaving && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Save Upload Limits
+                    </Button>
+                  </form>
+                )}
+              </div>
+
               {/* Storage Section with Album Breakdown */}
               <div className="rounded-lg border bg-card p-6">
                 <div className="flex items-center gap-2 mb-4">

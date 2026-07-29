@@ -6,10 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-import aiofiles
 from core.config import (
     CHUNK_UPLOAD_SIZE_BYTES,
-    MAX_SHARED_UPLOAD_FILE_BYTES,
     MAX_SHARED_UPLOAD_FILES_PER_REQUEST,
     UPLOAD_DIR,
 )
@@ -41,12 +39,14 @@ from models.api.share_links_api_models import (
     SharedPhotoTagResponse,
     ShareLinkVerifyRequest,
 )
+from models.api.upload_settings_api_models import UploadCapabilities
 from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.storage_service import storage_service
+from services.upload_settings_service import get_upload_limits
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -60,11 +60,11 @@ from utils.upload_validation_util import (
     load_chunk_metadata,
     upload_http_exception,
     validate_chunk_index,
-    validate_complete_chunk_set,
+    validate_complete_staging_file,
     validate_file_size_limit,
     validate_upload_file_count,
     write_chunk_metadata,
-    write_request_chunk,
+    write_request_chunk_at_offset,
 )
 
 router = APIRouter(prefix="/share", tags=["share-public"])
@@ -502,8 +502,12 @@ async def upload_shared_photos(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload photos into the shared album when the link allows uploads."""
+    limits = await get_upload_limits(db)
     try:
         validate_upload_file_count(files, MAX_SHARED_UPLOAD_FILES_PER_REQUEST)
+        for file in files:
+            if file.size is not None:
+                validate_file_size_limit(file.size, limits.shared_bytes, file.filename)
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
 
@@ -529,7 +533,7 @@ async def upload_shared_photos(
             stored = await storage_service.store_file_streaming(
                 file=file.file,
                 original_filename=file.filename or "unnamed",
-                max_file_size=MAX_SHARED_UPLOAD_FILE_BYTES,
+                max_file_size=limits.shared_bytes,
             )
         except UploadRejectedError as exc:
             raise upload_http_exception(exc) from exc
@@ -573,6 +577,21 @@ async def upload_shared_photos(
     )
 
 
+@router.get("/{token}/upload-capabilities", response_model=UploadCapabilities)
+async def get_shared_upload_capabilities(
+    token: str,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+    limits = await get_upload_limits(db)
+    return UploadCapabilities(
+        max_file_bytes=limits.shared_bytes,
+        chunk_size_bytes=CHUNK_UPLOAD_SIZE_BYTES,
+    )
+
+
 @router.post("/{token}/upload/init")
 @limiter.limit(SHARE_UPLOAD_RATE_LIMIT)
 async def init_shared_chunked_upload(
@@ -584,8 +603,9 @@ async def init_shared_chunked_upload(
     db: AsyncSession = Depends(get_db),
 ):
     """Initialize a chunked upload session for a shared link."""
+    limits = await get_upload_limits(db)
     try:
-        validate_file_size_limit(file_size, MAX_SHARED_UPLOAD_FILE_BYTES)
+        validate_file_size_limit(file_size, limits.shared_bytes, filename)
         storage_service.validate_supported_filename(filename)
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
@@ -603,7 +623,10 @@ async def init_shared_chunked_upload(
         "album_id": str(share_link.album_id),
         "filename": filename,
         "file_size": file_size,
+        "max_file_size": limits.shared_bytes,
+        "chunk_size": CHUNK_UPLOAD_SIZE_BYTES,
         "chunks_received": [],
+        "chunk_sizes": {},
     }
     (upload_dir / "metadata.json").write_text(json.dumps(metadata))
 
@@ -634,25 +657,54 @@ async def upload_shared_chunk(
         raise HTTPException(status_code=400, detail="Share link mismatch")
 
     try:
+        session_chunk_size = int(metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES))
         validate_chunk_index(
             chunk_index,
             int(metadata["file_size"]),
-            CHUNK_UPLOAD_SIZE_BYTES,
+            session_chunk_size,
         )
-        chunk_path = upload_dir / f"chunk_{chunk_index:06d}"
-        chunk_size = await write_request_chunk(
+        extension = Path(metadata["filename"]).suffix.lower() or ".bin"
+        staging_path = upload_dir / f"staging{extension}"
+        chunk_size = await write_request_chunk_at_offset(
             request,
-            chunk_path,
-            CHUNK_UPLOAD_SIZE_BYTES,
+            staging_path,
+            session_chunk_size,
+            chunk_index * session_chunk_size,
         )
     except UploadRejectedError as exc:
         raise upload_http_exception(exc) from exc
 
     if chunk_index not in metadata["chunks_received"]:
         metadata["chunks_received"].append(chunk_index)
-        write_chunk_metadata(metadata_path, metadata)
+    metadata.setdefault("chunk_sizes", {})[str(chunk_index)] = chunk_size
+    write_chunk_metadata(metadata_path, metadata)
+    upload_dir.touch()
 
     return {"chunk_index": chunk_index, "size": chunk_size}
+
+
+@router.get("/{token}/upload/{upload_id}")
+async def get_shared_chunked_upload_status(
+    token: str,
+    upload_id: str,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return received chunks so an interrupted public upload can resume."""
+    share_link = await _validate_share_link(token, password, db)
+    _validate_share_upload_allowed(share_link)
+    upload_dir = get_chunk_upload_dir(CHUNKS_DIR, upload_id)
+    if not upload_dir.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    metadata = load_chunk_metadata(upload_dir / "metadata.json")
+    if metadata["share_link_id"] != str(share_link.id):
+        raise HTTPException(status_code=400, detail="Share link mismatch")
+    return {
+        "upload_id": upload_id,
+        "file_size": metadata["file_size"],
+        "chunk_size": metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES),
+        "chunks_received": metadata["chunks_received"],
+    }
 
 
 @router.post("/{token}/upload/{upload_id}/complete", response_model=PhotoUploadResponse)
@@ -682,28 +734,20 @@ async def complete_shared_chunked_upload(
     album = await _get_shared_album_or_404(share_link, db)
     filename = metadata["filename"]
     extension = Path(filename).suffix.lower() or ".bin"
-    temp_file = upload_dir / f"assembled{extension}"
+    temp_file = upload_dir / f"staging{extension}"
 
     try:
-        chunk_files = validate_complete_chunk_set(
-            upload_dir,
+        validate_complete_staging_file(
+            temp_file,
             metadata,
-            CHUNK_UPLOAD_SIZE_BYTES,
-            MAX_SHARED_UPLOAD_FILE_BYTES,
+            int(metadata.get("chunk_size", CHUNK_UPLOAD_SIZE_BYTES)),
+            int(metadata["max_file_size"]),
         )
-
-        async with aiofiles.open(temp_file, "wb") as out_f:
-            for chunk_path in chunk_files:
-                async with aiofiles.open(chunk_path, "rb") as chunk_f:
-                    while data := await chunk_f.read(CHUNK_UPLOAD_SIZE_BYTES):
-                        await out_f.write(data)
-
-        async with aiofiles.open(temp_file, "rb") as f:
-            stored = await storage_service.store_file_streaming(
-                file=f,
-                original_filename=filename,
-                max_file_size=MAX_SHARED_UPLOAD_FILE_BYTES,
-            )
+        stored = await storage_service.store_prepared_file(
+            temp_file,
+            original_filename=filename,
+            max_file_size=int(metadata["max_file_size"]),
+        )
     except UploadRejectedError as exc:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise upload_http_exception(exc) from exc

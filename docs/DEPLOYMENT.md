@@ -161,16 +161,23 @@ The production Nginx config includes:
 | `VIDEO_THUMBNAIL_MAX_DIMENSION` | `1600` | Max dimension for generated video preview thumbnails |
 | `MAX_UPLOAD_FILE_BYTES` | `5368709120` | Max admin upload file size in bytes |
 | `MAX_SHARED_UPLOAD_FILE_BYTES` | `1073741824` | Max public share upload file size in bytes |
+| `MAX_UPLOAD_FILE_BYTES_CAP` | `107374182400` | Deployment ceiling for the admin limit configured in the dashboard |
+| `MAX_SHARED_UPLOAD_FILE_BYTES_CAP` | `26843545600` | Deployment ceiling for the public share limit configured in the dashboard |
 | `MAX_UPLOAD_FILES_PER_REQUEST` | unset | Optional admin upload file-count cap; unset/`0` disables |
 | `MAX_SHARED_UPLOAD_FILES_PER_REQUEST` | unset | Optional public share upload file-count cap; unset/`0` disables |
 | `MAX_IMAGE_PIXELS` | unset | Optional image pixel cap; unset/`0` disables |
 | `MAX_BULK_DELETE_PHOTOS` | `100` | Max selected photos deleted by one bulk-delete request |
-| `CHUNK_UPLOAD_SIZE_BYTES` | `1048576` | Chunk size expected by chunked upload endpoints |
+| `CHUNK_UPLOAD_SIZE_BYTES` | `67108864` | Chunk size expected by resumable upload endpoints |
 | `FFPROBE_TIMEOUT_SECONDS` | `10` | Media probe timeout |
 | `FFMPEG_TIMEOUT_SECONDS` | `60` | Video thumbnail generation timeout |
 | `SHARE_UPLOAD_RATE_LIMIT` | `60/minute` | Public share upload init/complete/multipart rate limit |
 | `SHARE_UPLOAD_CHUNK_RATE_LIMIT` | `600/minute` | Public share chunk upload rate limit |
 | `ALLOWED_ORIGINS`   | `http://localhost` | CORS allowed origins         |
+
+The active admin and public-share upload limits can be changed without a
+restart from **Dashboard → Settings → Upload Limits**. The corresponding
+`*_CAP` variables are deployment safety ceilings and still require a container
+restart when changed.
 
 ---
 
