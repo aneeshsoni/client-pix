@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Settings2, Images, Folder } from "lucide-react";
+import { Settings2, Images, Folder, Library } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
@@ -86,7 +86,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         pathname?.startsWith("/dashboard/settings"),
     };
 
-    return [galleryItem, albumsItem, settingsItem];
+    const collectionsItem = {
+      title: "Collections",
+      url: "/dashboard/collections",
+      icon: Library,
+      isActive:
+        pathname === "/dashboard/collections" ||
+        pathname?.startsWith("/dashboard/collections/"),
+    };
+
+    return [galleryItem, albumsItem, collectionsItem, settingsItem];
   }, [albums, pathname]);
 
   return (
