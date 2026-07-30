@@ -58,6 +58,67 @@ export interface AlbumListResponse {
   total_count: number;
 }
 
+export interface CollectionAlbum {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string;
+  cover_photo_id: string | null;
+  cover_photo_position_x: number;
+  cover_photo_position_y: number;
+  photo_count: number;
+}
+
+export interface Collection {
+  id: string;
+  title: string;
+  description: string | null;
+  token: string;
+  share_url: string;
+  access_level: "public" | "private";
+  album_count: number;
+  albums: CollectionAlbum[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionPayload {
+  title?: string;
+  description?: string | null;
+  access_level?: "public" | "private";
+  password?: string;
+  album_ids?: string[];
+}
+
+export interface SharedCollection {
+  id: string;
+  title: string;
+  description: string | null;
+  is_password_protected: boolean;
+  requires_password: boolean;
+  albums: CollectionAlbum[];
+}
+
+export interface SharedCollectionPhoto {
+  id: string;
+  thumbnail_path: string;
+  web_path: string;
+  width: number;
+  height: number;
+  original_filename: string;
+  captured_at: string | null;
+  created_at: string | null;
+  is_video: boolean;
+}
+
+export interface SharedCollectionAlbum {
+  id: string;
+  title: string;
+  description: string | null;
+  photo_count: number;
+  photos: SharedCollectionPhoto[];
+}
+
 export interface PhotoUploadResponse {
   photos: Photo[];
   uploaded_count: number;
@@ -195,6 +256,152 @@ export async function listAlbums(): Promise<AlbumListResponse> {
     }
     throw error;
   }
+}
+
+export async function listCollections(): Promise<Collection[]> {
+  const response = await authFetch(`${API_BASE_URL}/api/collections`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch collections: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.collections;
+}
+
+export async function getCollection(
+  collectionId: string,
+): Promise<Collection> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/collections/${collectionId}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch collection: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function createCollection(
+  payload: Required<Pick<CollectionPayload, "title" | "access_level">> &
+    CollectionPayload,
+): Promise<Collection> {
+  const response = await authFetch(`${API_BASE_URL}/api/collections`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to create collection");
+  }
+  return response.json();
+}
+
+export async function updateCollection(
+  collectionId: string,
+  payload: CollectionPayload,
+): Promise<Collection> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/collections/${collectionId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to update collection");
+  }
+  return response.json();
+}
+
+export async function deleteCollection(collectionId: string): Promise<void> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/collections/${collectionId}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to delete collection: ${response.statusText}`);
+  }
+}
+
+export async function getCollectionInfo(token: string): Promise<{
+  title: string;
+  description: string | null;
+  is_password_protected: boolean;
+  album_count: number;
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/collection-share/${token}/info`,
+  );
+  if (!response.ok) {
+    throw new Error("Collection not found");
+  }
+  return response.json();
+}
+
+export async function accessSharedCollection(
+  token: string,
+  password?: string,
+): Promise<SharedCollection> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/collection-share/${token}/access`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password || null }),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(
+      response.status === 401
+        ? "Incorrect password"
+        : data?.detail || "Unable to open collection",
+    );
+  }
+  return response.json();
+}
+
+export async function accessSharedCollectionAlbum(
+  token: string,
+  albumId: string,
+  password?: string,
+  sortBy: "captured" | "uploaded" = "captured",
+  sortDir: SortDir = "asc",
+): Promise<SharedCollectionAlbum> {
+  const params = new URLSearchParams({ sort_by: sortBy, sort_dir: sortDir });
+  const response = await fetch(
+    `${API_BASE_URL}/api/collection-share/${token}/albums/${albumId}/access?${params}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password || null }),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(
+      response.status === 401
+        ? "Incorrect password"
+        : data?.detail || "Unable to open album",
+    );
+  }
+  return response.json();
+}
+
+export function getCollectionImageUrl(
+  collectionToken: string,
+  albumId: string,
+  photoId: string,
+  variant: "thumbnail" | "web" | "original" = "web",
+  password?: string,
+): string {
+  let url = `${API_BASE_URL}/api/files/collection/${collectionToken}/album/${albumId}/photo/${photoId}?variant=${variant}`;
+  if (password) url += `&password=${encodeURIComponent(password)}`;
+  return url;
 }
 
 export async function getAlbum(

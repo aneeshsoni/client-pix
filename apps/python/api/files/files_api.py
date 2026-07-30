@@ -14,6 +14,11 @@ from core.database import get_db
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.share_link_db_models import ShareLink
+from services.collection_service import (
+    get_collection_by_token,
+    require_collection_album,
+    validate_collection_password,
+)
 from utils.auth_util import get_admin_from_token_or_query
 from utils.security_util import verify_password
 
@@ -45,6 +50,59 @@ def get_file_path(
         return UPLOAD_DIR / "web" / prefix / second / f"{file_hash}.webp"
     else:
         raise HTTPException(status_code=400, detail="Invalid variant")
+
+
+def _file_response_for_photo(photo: Photo, variant: str) -> FileResponse:
+    file_hash = photo.file_hash
+    is_video = photo.is_video
+    file_path = get_file_path(
+        file_hash.sha256_hash, variant, file_hash.file_extension, is_video
+    )
+    if not file_path.exists() and variant != "original":
+        file_path = get_file_path(
+            file_hash.sha256_hash,
+            "original",
+            file_hash.file_extension,
+            is_video,
+        )
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    media_type = (
+        file_hash.mime_type
+        if is_video and variant != "thumbnail"
+        else ("image/webp" if variant in ("thumbnail", "web") else file_hash.mime_type)
+    )
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/collection/{collection_token}/album/{album_id}/photo/{photo_id}")
+async def get_collection_photo(
+    collection_token: str,
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    variant: str = Query("web", pattern="^(original|thumbnail|web)$"),
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serve a photo when its album belongs to an accessible collection."""
+    collection = await get_collection_by_token(collection_token, db)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    validate_collection_password(collection, password)
+    await require_collection_album(collection.id, album_id, db)
+    result = await db.execute(
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photo = result.scalar_one_or_none()
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return _file_response_for_photo(photo, variant)
 
 
 # --- Authenticated File Access (Admin only) ---
