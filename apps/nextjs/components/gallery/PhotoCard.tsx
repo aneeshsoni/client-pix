@@ -69,7 +69,8 @@ function PhotoCardInner({
   const thumbnailUrl = getSecureImageUrl(
     photo.id,
     "thumbnail",
-    token || undefined
+    token || undefined,
+    photo.updated_at,
   );
 
   const handleClick = (e: React.MouseEvent) => {

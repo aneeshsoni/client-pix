@@ -29,6 +29,7 @@ export interface VirtualizedGridPhoto {
   width: number;
   height: number;
   created_at: string | null;
+  updated_at?: string;
   captured_at: string | null;
   is_video: boolean;
 }
@@ -37,6 +38,7 @@ interface VirtualizedPhotoGridProps {
   photos: VirtualizedGridPhoto[];
   albumId?: string;
   onPhotoDeleted?: (photoId: string) => void;
+  onThumbnailUpdated?: () => void;
   dateField?: "captured" | "uploaded";
   groupByDate?: boolean;
   groups?: Array<{
@@ -331,6 +333,7 @@ export function VirtualizedPhotoGrid({
   photos,
   albumId,
   onPhotoDeleted,
+  onThumbnailUpdated,
   dateField = "captured",
   groupByDate = true,
   groups,
@@ -625,6 +628,7 @@ export function VirtualizedPhotoGrid({
           onNext={goToNext}
           onPrev={goToPrev}
           onDelete={onPhotoDeleted ? handlePhotoDeleted : undefined}
+          onThumbnailUpdated={onThumbnailUpdated}
         />
       )}
     </div>

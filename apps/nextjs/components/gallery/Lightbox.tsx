@@ -12,10 +12,17 @@ import {
   Trash2,
   Play,
   Pause,
+  ImagePlus,
+  Loader2,
 } from "lucide-react";
 import { MetadataDrawer } from "./MetadataDrawer";
 import type { Photo } from "@/lib/api";
-import { getSecureImageUrl, getDownloadUrl, deletePhoto } from "@/lib/api";
+import {
+  getSecureImageUrl,
+  getDownloadUrl,
+  deletePhoto,
+  setVideoThumbnail,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 interface LightboxProps {
@@ -27,6 +34,7 @@ interface LightboxProps {
   onNext: () => void;
   onPrev: () => void;
   onDelete?: (photoId: string) => void;
+  onThumbnailUpdated?: () => void;
 }
 
 const SWIPE_DISTANCE_THRESHOLD = 80;
@@ -59,11 +67,13 @@ export function Lightbox({
   onNext,
   onPrev,
   onDelete,
+  onThumbnailUpdated,
 }: LightboxProps) {
   const [showMetadata, setShowMetadata] = useState(false);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSavingThumbnail, setIsSavingThumbnail] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState(1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { token } = useAuth();
@@ -111,6 +121,34 @@ export function Lightbox({
     onClose,
     totalCount,
   ]);
+
+  const handleSetVideoThumbnail = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.currentTime)) return;
+
+    video.pause();
+    const timestamp = video.currentTime;
+    const confirmed = window.confirm(
+      `Use the frame at ${formatVideoTime(timestamp)} as this video's thumbnail?`,
+    );
+    if (!confirmed) return;
+
+    setIsSavingThumbnail(true);
+    try {
+      await setVideoThumbnail(albumId, photo.id, timestamp);
+      onThumbnailUpdated?.();
+      alert("Video thumbnail updated.");
+    } catch (error) {
+      console.error("Failed to update video thumbnail:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update video thumbnail. Please try again.",
+      );
+    } finally {
+      setIsSavingThumbnail(false);
+    }
+  }, [albumId, photo.id, onThumbnailUpdated]);
 
   // Get the full resolution image URL with auth token
   const imageUrl = getSecureImageUrl(photo.id, "web", token || undefined);
@@ -226,6 +264,21 @@ export function Lightbox({
                 title={isPlaying ? "Pause slideshow (Space)" : "Play slideshow (Space)"}
               >
                 {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+              </button>
+            )}
+
+            {photo.is_video && (
+              <button
+                onClick={handleSetVideoThumbnail}
+                disabled={isSavingThumbnail || !isImageLoaded}
+                className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                title="Use current frame as thumbnail"
+              >
+                {isSavingThumbnail ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <ImagePlus className="h-5 w-5" />
+                )}
               </button>
             )}
 
@@ -357,4 +410,11 @@ export function Lightbox({
       </motion.div>
     </AnimatePresence>
   );
+}
+
+function formatVideoTime(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }

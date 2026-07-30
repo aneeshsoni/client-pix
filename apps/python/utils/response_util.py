@@ -94,5 +94,6 @@ def build_photo_response(photo: Photo) -> PhotoResponse:
         file_size=file_hash.file_size,
         mime_type=file_hash.mime_type,
         created_at=photo.created_at,
+        updated_at=photo.updated_at,
         tags=tags,
     )

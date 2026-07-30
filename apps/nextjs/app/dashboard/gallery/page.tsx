@@ -32,9 +32,12 @@ export default function GalleryPage() {
     setSortDir(effectiveDir === "asc" ? "desc" : "asc");
   };
 
-  const fetchPhotos = useCallback(async () => {
+  const fetchPhotos = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? true;
     try {
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setError(null);
       const data = await getAllPhotos(sortBy, sortDir);
       setPhotos(data);
@@ -42,7 +45,9 @@ export default function GalleryPage() {
       console.error("Failed to fetch photos:", err);
       setError(err instanceof Error ? err.message : "Failed to load photos");
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [sortBy, sortDir]);
 
@@ -134,7 +139,8 @@ export default function GalleryPage() {
       ) : (
         <VirtualizedPhotoGrid
           photos={photos}
-          onPhotoDeleted={fetchPhotos}
+          onPhotoDeleted={() => fetchPhotos()}
+          onThumbnailUpdated={() => fetchPhotos({ showLoading: false })}
           dateField={sortBy}
           groupByDate
         />

@@ -615,6 +615,7 @@ class StorageService:
         self,
         video_path: Path,
         file_id: str,
+        timestamp_seconds: float = 1.0,
     ) -> tuple[int, int]:
         """
         Generate thumbnail and web poster frames from video using ffmpeg.
@@ -626,8 +627,13 @@ class StorageService:
         # Get video dimensions
         width, height = await self._get_video_dimensions(video_path)
 
-        # Generate thumbnail poster at 1 second.
+        seek_timestamp = f"{timestamp_seconds:.3f}"
+
+        # Generate the thumbnail poster at the selected frame.
         thumb_path = self._get_storage_path(file_id, self.VARIANT_THUMBNAIL, ".webp")
+        thumb_temp_path = thumb_path.with_name(
+            f"{thumb_path.stem}.{uuid.uuid4().hex}.tmp.webp"
+        )
         thumb_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -639,7 +645,7 @@ class StorageService:
                         "ffmpeg",
                         "-y",  # Overwrite
                         "-ss",
-                        "1",  # Seek to 1 second
+                        seek_timestamp,
                         "-i",
                         str(video_path),
                         "-vframes",
@@ -648,7 +654,7 @@ class StorageService:
                         _fit_within_max_dimension_filter(VIDEO_THUMBNAIL_MAX_DIMENSION),
                         "-q:v",
                         str(THUMBNAIL_QUALITY),
-                        str(thumb_path),
+                        str(thumb_temp_path),
                     ],
                     capture_output=True,
                     text=True,
@@ -656,12 +662,16 @@ class StorageService:
                 ),
             )
             if result.returncode != 0:
-                print(f"Warning: ffmpeg thumbnail failed: {result.stderr}")
+                raise RuntimeError(f"ffmpeg thumbnail failed: {result.stderr}")
         except Exception as e:
-            print(f"Warning: Could not generate video thumbnail: {e}")
+            thumb_temp_path.unlink(missing_ok=True)
+            raise RuntimeError(f"Could not generate video thumbnail: {e}") from e
 
         # Generate web version (larger poster)
         web_path = self._get_storage_path(file_id, self.VARIANT_WEB, ".webp")
+        web_temp_path = web_path.with_name(
+            f"{web_path.stem}.{uuid.uuid4().hex}.tmp.webp"
+        )
         web_path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -673,7 +683,7 @@ class StorageService:
                         "ffmpeg",
                         "-y",
                         "-ss",
-                        "1",
+                        seek_timestamp,
                         "-i",
                         str(video_path),
                         "-vframes",
@@ -682,7 +692,7 @@ class StorageService:
                         _fit_within_max_dimension_filter(WEB_MAX_DIMENSION),
                         "-q:v",
                         str(WEB_QUALITY),
-                        str(web_path),
+                        str(web_temp_path),
                     ],
                     capture_output=True,
                     text=True,
@@ -690,9 +700,14 @@ class StorageService:
                 ),
             )
             if result.returncode != 0:
-                print(f"Warning: ffmpeg web poster failed: {result.stderr}")
+                raise RuntimeError(f"ffmpeg web poster failed: {result.stderr}")
+            thumb_temp_path.replace(thumb_path)
+            web_temp_path.replace(web_path)
         except Exception as e:
-            print(f"Warning: Could not generate video web poster: {e}")
+            raise RuntimeError(f"Could not generate video web poster: {e}") from e
+        finally:
+            thumb_temp_path.unlink(missing_ok=True)
+            web_temp_path.unlink(missing_ok=True)
 
         return width, height
 
@@ -724,6 +739,24 @@ class StorageService:
             return False
 
         await self._generate_thumbnails(original_path, file_id, extension)
+        return True
+
+    async def set_video_thumbnail(
+        self,
+        file_id: str,
+        extension: str,
+        timestamp_seconds: float,
+    ) -> bool:
+        """Replace a video's poster images with the frame at the given timestamp."""
+        video_path = self._get_video_path(file_id, extension)
+        if not video_path.exists():
+            return False
+
+        await self._generate_video_thumbnails(
+            video_path,
+            file_id,
+            timestamp_seconds=timestamp_seconds,
+        )
         return True
 
     async def delete_file(

@@ -97,9 +97,16 @@ class PhotoResponse(BaseModel):
     file_size: int
     mime_type: str
     created_at: datetime
+    updated_at: datetime
     tags: list[PhotoTagResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class VideoThumbnailUpdate(BaseModel):
+    """Selected video frame to use as the poster thumbnail."""
+
+    timestamp_seconds: float = Field(ge=0, allow_inf_nan=False)
 
 
 class AlbumResponse(BaseModel):
