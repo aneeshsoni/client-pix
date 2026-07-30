@@ -123,7 +123,7 @@ export default function GalleryPage() {
         <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
           <p className="text-destructive">{error}</p>
           <button
-            onClick={fetchPhotos}
+            onClick={() => fetchPhotos()}
             className="mt-4 text-sm text-primary hover:underline"
           >
             Try again
