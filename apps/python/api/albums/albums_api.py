@@ -3,6 +3,7 @@
 import json
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core.config import (
@@ -37,6 +38,7 @@ from models.api.albums_api_models import (
     PhotoTagResponse,
     PhotoTagUpdate,
     PhotoUploadResponse,
+    VideoThumbnailUpdate,
 )
 from models.api.upload_settings_api_models import UploadCapabilities
 from models.db.album_db_models import Album
@@ -1334,6 +1336,61 @@ async def regenerate_photo_thumbnails(
         raise HTTPException(status_code=404, detail="Original file not found on disk")
 
     return {"message": "Thumbnails regenerated successfully"}
+
+
+@router.put("/{album_id}/photos/{photo_id}/video-thumbnail", status_code=200)
+async def set_video_thumbnail(
+    album_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    payload: VideoThumbnailUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Use a selected video frame as the video's thumbnail."""
+    stmt = (
+        select(Photo)
+        .where(Photo.id == photo_id, Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    result = await db.execute(stmt)
+    photo = result.scalar_one_or_none()
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not photo.is_video:
+        raise HTTPException(
+            status_code=400,
+            detail="Thumbnails can only be selected for videos",
+        )
+
+    file_hash = photo.file_hash
+    try:
+        success = await storage_service.set_video_thumbnail(
+            file_hash.sha256_hash,
+            file_hash.file_extension,
+            payload.timestamp_seconds,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not capture a frame at that point in the video",
+        ) from exc
+
+    if not success:
+        raise HTTPException(status_code=404, detail="Video file not found on disk")
+
+    # The poster is stored per deduplicated file, so invalidate every reference.
+    updated_at = datetime.now(timezone.utc)
+    await db.execute(
+        update(Photo)
+        .where(Photo.file_hash_id == photo.file_hash_id)
+        .values(updated_at=updated_at)
+    )
+    await db.commit()
+
+    return {
+        "message": "Video thumbnail updated successfully",
+        "updated_at": updated_at,
+    }
 
 
 @router.get("/photos/all", response_model=PhotoListResponse)

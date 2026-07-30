@@ -43,6 +43,7 @@ export interface Photo {
   file_size: number;
   mime_type: string;
   created_at: string;
+  updated_at: string;
   captured_at: string | null;
   is_video: boolean;
   tags: PhotoTag[];
@@ -1038,6 +1039,30 @@ export async function deletePhoto(
   }
 }
 
+export async function setVideoThumbnail(
+  albumId: string,
+  photoId: string,
+  timestampSeconds: number,
+): Promise<{ message: string; updated_at: string }> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/albums/${albumId}/photos/${photoId}/video-thumbnail`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ timestamp_seconds: timestampSeconds }),
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.detail || "Failed to update video thumbnail");
+  }
+
+  return response.json();
+}
+
 export async function bulkDeletePhotos(
   albumId: string,
   photoIds: string[],
@@ -1145,10 +1170,14 @@ export function getSecureImageUrl(
   photoId: string,
   variant: "thumbnail" | "web" | "original" = "web",
   token?: string,
+  version?: string,
 ): string {
   let url = `${API_BASE_URL}/api/files/photo/${photoId}?variant=${variant}`;
   if (token) {
     url += `&token=${encodeURIComponent(token)}`;
+  }
+  if (version) {
+    url += `&v=${encodeURIComponent(version)}`;
   }
   return url;
 }

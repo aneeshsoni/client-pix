@@ -571,6 +571,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           photos={album.photos}
           albumId={album.id}
           onPhotoDeleted={() => fetchAlbum()}
+          onThumbnailUpdated={() => fetchAlbum({ showLoading: false })}
           dateField={sortBy}
           groupByDate={!groupByTags}
           groups={groupByTags ? tagGroups : undefined}
