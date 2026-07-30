@@ -2,6 +2,16 @@
 
 This file provides guidance to coding agents working with this repository.
 
+## Engineering Principles
+
+Do not overcomplicate programming solutions. Prefer the simplest approach that is correct and meets the current requirements.
+
+- Optimize for readability, understandability, and maintainability.
+- Favor straightforward code and established project patterns over clever
+  abstractions, premature optimization, or maximum theoretical precision.
+- Add complexity only when a concrete requirement, measured performance need, or meaningful correctness concern justifies it.
+- When multiple approaches are valid, choose the one that future contributors can understand and change most easily.
+
 ## Validation Policy
 
 When making code changes through an LLM or coding agent, run the relevant local checks before committing and pushing.
