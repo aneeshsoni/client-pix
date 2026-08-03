@@ -32,9 +32,14 @@ import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { VirtualizedPhotoGrid } from "@/components/gallery";
 import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
-import { getSharedImageUrl, uploadSharePhotos } from "@/lib/api";
+import {
+  getShareVideoPlayback,
+  getSharedImageUrl,
+  uploadSharePhotos,
+} from "@/lib/api";
 import { useDownloadJob } from "@/hooks/use-download-job";
 import { toast } from "sonner";
+import { AdaptiveVideoPlayer } from "@/components/gallery/AdaptiveVideoPlayer";
 
 // Empty string = relative URLs (works with any domain)
 const API_BASE_URL = "";
@@ -1009,18 +1014,27 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   {selectedPhoto.is_video ? (
-                    <video
-                      src={getSharedImageUrl(
-                        token,
-                        selectedPhoto.id,
-                        "web",
-                        verifiedPassword || undefined,
-                      )}
-                      controls
-                      autoPlay
-                      className="h-auto max-h-[90vh] w-auto max-w-full object-contain"
-                      playsInline
-                    />
+                    <div className="h-[90vh] w-[90vw]">
+                      <AdaptiveVideoPlayer
+                        sourceUrl={getSharedImageUrl(
+                          token,
+                          selectedPhoto.id,
+                          "web",
+                          verifiedPassword || undefined,
+                        )}
+                        photoId={selectedPhoto.id}
+                        loadPlayback={() =>
+                          getShareVideoPlayback(
+                            token,
+                            selectedPhoto.id,
+                            verifiedPassword || undefined,
+                          )
+                        }
+                        autoPlay
+                        className="h-full w-full object-contain"
+                        playsInline
+                      />
+                    </div>
                   ) : (
                     <Image
                       src={getSharedImageUrl(

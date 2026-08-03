@@ -67,6 +67,7 @@ class StoredFile:
     is_duplicate: bool
     is_video: bool
     captured_at: datetime | None = None  # EXIF date for images
+    duration_seconds: float | None = None
 
 
 class StorageService:
@@ -207,7 +208,7 @@ class StorageService:
         storage_path.parent.mkdir(parents=True, exist_ok=True)
         prepared_path.replace(storage_path)
         try:
-            width, height = await self._get_video_dimensions(storage_path)
+            width, height, duration = await self._get_video_metadata(storage_path)
             if width <= 0 or height <= 0:
                 raise UploadRejectedError(
                     "Unsupported or invalid video file",
@@ -226,6 +227,7 @@ class StorageService:
                 height=height,
                 is_duplicate=False,
                 is_video=True,
+                duration_seconds=duration,
             )
         except Exception:
             if storage_path.exists():
@@ -300,7 +302,7 @@ class StorageService:
             validate_file_size_limit(file_size, max_file_size)
 
             # Get video dimensions quickly with ffprobe (fast operation)
-            width, height = await self._get_video_dimensions(storage_path)
+            width, height, duration = await self._get_video_metadata(storage_path)
             if width <= 0 or height <= 0:
                 raise UploadRejectedError(
                     "Unsupported or invalid video file",
@@ -320,6 +322,7 @@ class StorageService:
                 height=height,
                 is_duplicate=False,
                 is_video=True,
+                duration_seconds=duration,
             )
         except Exception:
             if storage_path.exists():
@@ -551,8 +554,8 @@ class StorageService:
             partial(self._generate_thumbnails_sync, original_path, file_id, extension),
         )
 
-    async def _get_video_dimensions(self, video_path: Path) -> tuple[int, int]:
-        """Get video dimensions using ffprobe (fast operation)."""
+    async def _get_video_metadata(self, video_path: Path) -> tuple[int, int, float]:
+        """Get oriented video dimensions and duration using ffprobe."""
         loop = asyncio.get_event_loop()
 
         try:
@@ -567,6 +570,7 @@ class StorageService:
                         "-print_format",
                         "json",
                         "-show_streams",
+                        "-show_format",
                         "-select_streams",
                         "v:0",
                         str(video_path),
@@ -580,11 +584,29 @@ class StorageService:
                 probe_data = json.loads(probe_result.stdout)
                 if probe_data.get("streams"):
                     stream = probe_data["streams"][0]
-                    return stream.get("width", 1920), stream.get("height", 1080)
+                    width = int(stream.get("width", 0))
+                    height = int(stream.get("height", 0))
+                    rotation = 0
+                    for side_data in stream.get("side_data_list", []):
+                        if "rotation" in side_data:
+                            rotation = int(side_data["rotation"])
+                            break
+                    if abs(rotation) % 180 == 90:
+                        width, height = height, width
+                    duration_value = stream.get("duration") or probe_data.get(
+                        "format", {}
+                    ).get("duration")
+                    duration = float(duration_value) if duration_value else 0.0
+                    return width, height, duration
         except Exception as e:
             print(f"Warning: Could not probe video dimensions: {e}")
 
-        return 0, 0
+        return 0, 0, 0.0
+
+    async def _get_video_dimensions(self, video_path: Path) -> tuple[int, int]:
+        """Get oriented video dimensions using ffprobe."""
+        width, height, _duration = await self._get_video_metadata(video_path)
+        return width, height
 
     def _schedule_background_thumbnails(self, video_path: Path, file_id: str) -> None:
         """Schedule video thumbnail generation in background (non-blocking)."""
@@ -764,9 +786,12 @@ class StorageService:
     ) -> None:
         """Delete all variants of a file."""
         if is_video:
+            from services.video_streaming_service import delete_video_stream_files
+
             path = self._get_video_path(file_id, extension)
             if path.exists():
                 path.unlink()
+            delete_video_stream_files(file_id)
             return
 
         for variant in [

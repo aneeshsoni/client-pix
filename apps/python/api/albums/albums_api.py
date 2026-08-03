@@ -49,6 +49,7 @@ from models.db.share_link_db_models import ShareLink
 from services.download_service import download_service
 from services.storage_service import storage_service
 from services.upload_settings_service import get_upload_limits
+from services.video_streaming_service import queue_video_if_enabled
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -920,6 +921,7 @@ async def complete_chunked_upload(
             file_size=stored.file_size,
             width=stored.width or 0,
             height=stored.height or 0,
+            duration_seconds=stored.duration_seconds,
             reference_count=1,
         )
         db.add(file_hash)
@@ -937,6 +939,8 @@ async def complete_chunked_upload(
     db.add(photo)
     await db.flush()
     await db.refresh(photo, ["file_hash"])
+    if stored.is_video:
+        await queue_video_if_enabled(db, file_hash)
 
     # Auto-set cover photo if needed. Bulk uploads still prefer images when
     # available, but a single video upload should be usable as a cover too.
@@ -1035,6 +1039,7 @@ async def upload_photos_to_album(
                 file_size=stored.file_size,
                 width=stored.width or 0,
                 height=stored.height or 0,
+                duration_seconds=stored.duration_seconds,
                 reference_count=1,
             )
             db.add(file_hash)
@@ -1052,6 +1057,8 @@ async def upload_photos_to_album(
         db.add(photo)
         await db.flush()
         await db.refresh(photo, ["file_hash"])
+        if stored.is_video:
+            await queue_video_if_enabled(db, file_hash)
 
         # Track first photo for auto-cover (prefer images over videos)
         if first_photo_id is None:

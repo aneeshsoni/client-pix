@@ -12,6 +12,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth";
 import {
   Loader2,
@@ -26,17 +27,23 @@ import {
   Copy,
   QrCode,
   AlertTriangle,
+  Clapperboard,
 } from "lucide-react";
 import {
+  backfillVideoRenditions,
+  deleteVideoRenditions,
   getStorageBreakdown,
   getTempFilesInfo,
   cleanupDownloadTempFiles,
   cleanupUploadTempFiles,
   getUploadLimitSettings,
+  getVideoStreamingSettings,
   updateUploadLimitSettings,
+  updateVideoStreamingSettings,
   type StorageBreakdown,
   type TempFilesInfo,
   type UploadLimitSettings,
+  type VideoStreamingSettings,
 } from "@/lib/api";
 import { authFetch } from "@/lib/auth";
 import { AlbumStorageBar } from "@/components/settings";
@@ -82,6 +89,15 @@ export default function SettingsPage() {
   const [uploadLimitsSaving, setUploadLimitsSaving] = useState(false);
   const [uploadLimitsMessage, setUploadLimitsMessage] = useState("");
   const [uploadLimitsError, setUploadLimitsError] = useState("");
+
+  // Optional optimized video playback state
+  const [videoSettings, setVideoSettings] =
+    useState<VideoStreamingSettings | null>(null);
+  const [videoSettingsLoading, setVideoSettingsLoading] = useState(true);
+  const [videoSettingsSaving, setVideoSettingsSaving] = useState(false);
+  const [videoSettingsAction, setVideoSettingsAction] = useState(false);
+  const [videoSettingsMessage, setVideoSettingsMessage] = useState("");
+  const [videoSettingsError, setVideoSettingsError] = useState("");
 
   // Profile form state
   const [name, setName] = useState(admin?.name || "");
@@ -154,6 +170,23 @@ export default function SettingsPage() {
       }
     }
     fetchTempFiles();
+  }, []);
+
+  useEffect(() => {
+    async function fetchVideoSettings() {
+      try {
+        setVideoSettings(await getVideoStreamingSettings());
+      } catch (err) {
+        setVideoSettingsError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load video playback settings",
+        );
+      } finally {
+        setVideoSettingsLoading(false);
+      }
+    }
+    fetchVideoSettings();
   }, []);
 
   const handleCleanupDownloads = async () => {
@@ -229,6 +262,84 @@ export default function SettingsPage() {
       );
     } finally {
       setUploadLimitsSaving(false);
+    }
+  };
+
+  const handleVideoStreamingToggle = async (enabled: boolean) => {
+    setVideoSettingsSaving(true);
+    setVideoSettingsError("");
+    setVideoSettingsMessage("");
+    try {
+      setVideoSettings(await updateVideoStreamingSettings(enabled));
+      setVideoSettingsMessage(
+        enabled
+          ? "Optimized playback enabled for new video uploads."
+          : "Optimized playback disabled. Existing generated files were retained.",
+      );
+    } catch (err) {
+      setVideoSettingsError(
+        err instanceof Error ? err.message : "Failed to update video playback",
+      );
+    } finally {
+      setVideoSettingsSaving(false);
+    }
+  };
+
+  const handleVideoBackfill = async () => {
+    if (!videoSettings) return;
+    const confirmed = window.confirm(
+      `Process ${videoSettings.eligible_existing_videos} existing video${
+        videoSettings.eligible_existing_videos === 1 ? "" : "s"
+      }? Estimated additional storage: ${formatBytes(
+        videoSettings.estimated_backfill_bytes,
+      )}.`,
+    );
+    if (!confirmed) return;
+
+    setVideoSettingsAction(true);
+    setVideoSettingsError("");
+    setVideoSettingsMessage("");
+    try {
+      const result = await backfillVideoRenditions();
+      setVideoSettingsMessage(
+        `${result.queued_count} video${result.queued_count === 1 ? "" : "s"} queued.`,
+      );
+      setVideoSettings(await getVideoStreamingSettings());
+    } catch (err) {
+      setVideoSettingsError(
+        err instanceof Error ? err.message : "Failed to process existing videos",
+      );
+    } finally {
+      setVideoSettingsAction(false);
+    }
+  };
+
+  const handleDeleteVideoRenditions = async () => {
+    const confirmed = window.confirm(
+      "Delete every generated 1080p and 720p video quality? Uploaded videos will be kept.",
+    );
+    if (!confirmed) return;
+
+    setVideoSettingsAction(true);
+    setVideoSettingsError("");
+    setVideoSettingsMessage("");
+    try {
+      const result = await deleteVideoRenditions();
+      setVideoSettingsMessage(
+        `Deleted ${result.deleted_renditions} generated qualities and reclaimed ${formatBytes(
+          result.reclaimed_bytes,
+        )}.`,
+      );
+      setVideoSettings(await getVideoStreamingSettings());
+      setStorageBreakdown(await getStorageBreakdown());
+    } catch (err) {
+      setVideoSettingsError(
+        err instanceof Error
+          ? err.message
+          : "Failed to delete generated video qualities",
+      );
+    } finally {
+      setVideoSettingsAction(false);
     }
   };
 
@@ -905,6 +1016,120 @@ export default function SettingsPage() {
                     </Button>
                   </form>
                 )}
+              </div>
+
+              <div className="rounded-lg border bg-card p-6">
+                <div className="mb-4 flex items-center gap-2">
+                  <Clapperboard className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold">Optimized Video Playback</h3>
+                </div>
+                <p className="mb-1 text-sm text-muted-foreground">
+                  Generate adaptive 1080p and 720p versions for smoother video
+                  playback. Uploaded files are always preserved.
+                </p>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Example: a 1-minute video may add about 60 MB.
+                </p>
+
+                {videoSettingsError && (
+                  <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    {videoSettingsError}
+                  </div>
+                )}
+                {videoSettingsMessage && (
+                  <div className="mb-4 rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
+                    {videoSettingsMessage}
+                  </div>
+                )}
+
+                {videoSettingsLoading ? (
+                  <div className="flex items-center py-4 text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading video playback settings...
+                  </div>
+                ) : videoSettings ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-6 rounded-lg bg-muted/50 p-4">
+                      <div>
+                        <Label htmlFor="optimizedVideoPlayback">
+                          Generate optimized qualities
+                        </Label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Off by default. New videos are processed only while enabled.
+                        </p>
+                      </div>
+                      <Switch
+                        id="optimizedVideoPlayback"
+                        checked={videoSettings.enabled}
+                        disabled={videoSettingsSaving || !videoSettings.available}
+                        onCheckedChange={handleVideoStreamingToggle}
+                      />
+                    </div>
+
+                    {!videoSettings.available && (
+                      <p className="text-sm text-destructive">
+                        Video processing is unavailable on this deployment.
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                      <div className="rounded-md border p-3">
+                        <div className="text-lg font-semibold">
+                          {videoSettings.ready_videos}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Ready</div>
+                      </div>
+                      <div className="rounded-md border p-3">
+                        <div className="text-lg font-semibold">
+                          {videoSettings.pending_jobs + videoSettings.processing_jobs}
+                        </div>
+                        <div className="text-xs text-muted-foreground">In queue</div>
+                      </div>
+                      <div className="rounded-md border p-3">
+                        <div className="text-lg font-semibold">
+                          {videoSettings.failed_jobs}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Failed</div>
+                      </div>
+                      <div className="rounded-md border p-3">
+                        <div className="text-lg font-semibold">
+                          {formatBytes(videoSettings.rendition_bytes)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Generated</div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleVideoBackfill}
+                        disabled={
+                          videoSettingsAction ||
+                          !videoSettings.enabled ||
+                          videoSettings.eligible_existing_videos === 0
+                        }
+                      >
+                        {videoSettingsAction && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Process existing videos
+                        {videoSettings.eligible_existing_videos > 0 &&
+                          ` (${videoSettings.eligible_existing_videos})`}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDeleteVideoRenditions}
+                        disabled={
+                          videoSettingsAction || videoSettings.rendition_bytes === 0
+                        }
+                      >
+                        Delete generated qualities
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* Storage Section with Album Breakdown */}

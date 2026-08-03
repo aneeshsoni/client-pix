@@ -12,6 +12,7 @@ from api.share_links.share_links_api import router as share_links_router
 from api.share_links.share_public_api import router as share_public_router
 from api.system.system_api import router as system_router
 from api.uploads.uploads_api import router as uploads_router
+from api.videos.video_streaming_api import router as videos_router
 
 router = APIRouter(prefix="/api")
 
@@ -25,3 +26,4 @@ router.include_router(share_links_router)
 router.include_router(share_public_router)
 router.include_router(files_router)
 router.include_router(downloads_router)
+router.include_router(videos_router)

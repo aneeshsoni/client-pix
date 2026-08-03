@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, Float, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,6 +49,7 @@ class FileHash(Base):
     # Image dimensions
     width: Mapped[int] = mapped_column(Integer, nullable=False)
     height: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # How many Photo records reference this file
     reference_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

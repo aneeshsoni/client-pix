@@ -47,6 +47,7 @@ from models.db.photo_tag_db_models import PhotoTag
 from models.db.share_link_db_models import ShareLink
 from services.storage_service import storage_service
 from services.upload_settings_service import get_upload_limits
+from services.video_streaming_service import queue_video_if_enabled
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -394,6 +395,7 @@ async def _persist_shared_photo(
             file_size=stored.file_size,
             width=stored.width or 0,
             height=stored.height or 0,
+            duration_seconds=stored.duration_seconds,
             reference_count=1,
         )
         db.add(file_hash)
@@ -410,6 +412,8 @@ async def _persist_shared_photo(
     db.add(photo)
     await db.flush()
     await db.refresh(photo, ["file_hash"])
+    if stored.is_video:
+        await queue_video_if_enabled(db, file_hash)
     return build_photo_response(photo), 1, duplicate_count, photo.id
 
 

@@ -16,6 +16,11 @@ from models.db.photo_db_models import Photo  # noqa: F401
 from models.db.photo_tag_db_models import PhotoTag  # noqa: F401
 from models.db.share_link_db_models import ShareLink  # noqa: F401
 from models.db.upload_settings_db_models import UploadSettings  # noqa: F401
+from models.db.video_streaming_db_models import (  # noqa: F401
+    VideoRendition,
+    VideoStreamingSettings,
+    VideoTranscodeJob,
+)
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
