@@ -67,6 +67,24 @@ WEB_QUALITY = 90  # Higher quality for full-screen viewing
 # gallery tiles.
 VIDEO_THUMBNAIL_MAX_DIMENSION = int(os.getenv("VIDEO_THUMBNAIL_MAX_DIMENSION", "1600"))
 
+# Optional adaptive video playback. Availability is a deployment safety switch;
+# the administrator-controlled database setting remains off by default.
+VIDEO_STREAMING_AVAILABLE = (
+    os.getenv("VIDEO_STREAMING_AVAILABLE", "true").lower() == "true"
+)
+VIDEO_TRANSCODE_CONCURRENCY_CAP = max(
+    1, int(os.getenv("VIDEO_TRANSCODE_CONCURRENCY_CAP", "1"))
+)
+VIDEO_TRANSCODE_TIMEOUT_SECONDS = int(
+    os.getenv("VIDEO_TRANSCODE_TIMEOUT_SECONDS", "21600")
+)
+VIDEO_TRANSCODE_MIN_FREE_BYTES = int(
+    os.getenv("VIDEO_TRANSCODE_MIN_FREE_BYTES", str(1024**3))
+)
+VIDEO_PLAYBACK_TOKEN_TTL_SECONDS = int(
+    os.getenv("VIDEO_PLAYBACK_TOKEN_TTL_SECONDS", "7200")
+)
+
 # Download cache TTL in hours (cached ZIPs are deleted after this)
 DOWNLOAD_CACHE_TTL_HOURS = int(os.getenv("DOWNLOAD_CACHE_TTL_HOURS", "24"))
 

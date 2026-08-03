@@ -21,9 +21,12 @@ import {
   getSecureImageUrl,
   getDownloadUrl,
   deletePhoto,
+  getAdminVideoPlayback,
+  retryVideoProcessing,
   setVideoThumbnail,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { AdaptiveVideoPlayer } from "./AdaptiveVideoPlayer";
 
 interface LightboxProps {
   photo: Photo;
@@ -354,10 +357,12 @@ export function Lightbox({
               className="relative flex h-full w-full touch-pan-y cursor-grab select-none items-center justify-center active:cursor-grabbing"
             >
               {photo.is_video ? (
-                <video
+                <AdaptiveVideoPlayer
                   ref={videoRef}
-                  src={imageUrl}
-                  controls
+                  sourceUrl={imageUrl}
+                  photoId={photo.id}
+                  loadPlayback={() => getAdminVideoPlayback(photo.id)}
+                  onRetry={() => retryVideoProcessing(photo.id)}
                   autoPlay
                   className="h-full w-full object-contain"
                   onLoadedData={() => setIsImageLoaded(true)}

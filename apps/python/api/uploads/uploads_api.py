@@ -44,6 +44,7 @@ async def _create_or_update_file_hash(
             file_size=result.file_size,
             width=result.width or 0,
             height=result.height or 0,
+            duration_seconds=result.duration_seconds,
             reference_count=1,
         )
         db.add(file_hash)

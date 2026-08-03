@@ -7,9 +7,11 @@ import { ArrowLeft, Loader2, X } from "lucide-react";
 import {
   accessSharedCollectionAlbum,
   getCollectionImageUrl,
+  getCollectionVideoPlayback,
   type SharedCollectionAlbum,
   type SharedCollectionPhoto,
 } from "@/lib/api";
+import { AdaptiveVideoPlayer } from "@/components/gallery/AdaptiveVideoPlayer";
 
 export default function CollectionAlbumClient({
   token,
@@ -122,20 +124,29 @@ export default function CollectionAlbumClient({
             <X className="h-6 w-6" />
           </button>
           {selected.is_video ? (
-            <video
-              src={getCollectionImageUrl(
-                token,
-                album.id,
-                selected.id,
-                "web",
-                password || undefined,
-              )}
-              controls
-              autoPlay
-              playsInline
-              className="max-h-[90vh] max-w-[95vw]"
-              onClick={(event) => event.stopPropagation()}
-            />
+            <div className="h-[90vh] w-[95vw]" onClick={(event) => event.stopPropagation()}>
+              <AdaptiveVideoPlayer
+                sourceUrl={getCollectionImageUrl(
+                  token,
+                  album.id,
+                  selected.id,
+                  "web",
+                  password || undefined,
+                )}
+                photoId={selected.id}
+                loadPlayback={() =>
+                  getCollectionVideoPlayback(
+                    token,
+                    album.id,
+                    selected.id,
+                    password || undefined,
+                  )
+                }
+                autoPlay
+                playsInline
+                className="h-full w-full object-contain"
+              />
+            </div>
           ) : (
             <Image
               src={getCollectionImageUrl(

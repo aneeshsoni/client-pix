@@ -27,10 +27,17 @@ from models.db.base import Base
 # Import all models to register them with SQLAlchemy metadata
 from models.db.admin_db_models import Admin  # noqa: F401
 from models.db.album_db_models import Album  # noqa: F401
+from models.db.collection_db_models import Collection, CollectionAlbum  # noqa: F401
 from models.db.file_hash_db_models import FileHash  # noqa: F401
 from models.db.photo_db_models import Photo  # noqa: F401
 from models.db.photo_tag_db_models import PhotoTag  # noqa: F401
 from models.db.share_link_db_models import ShareLink  # noqa: F401
+from models.db.upload_settings_db_models import UploadSettings  # noqa: F401
+from models.db.video_streaming_db_models import (  # noqa: F401
+    VideoRendition,
+    VideoStreamingSettings,
+    VideoTranscodeJob,
+)
 
 # Alembic Config object
 config = context.config

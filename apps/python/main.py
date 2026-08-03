@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from core.config import ALLOWED_ORIGINS, APP_NAME, UPLOAD_DIR
 from core.database import init_db
 from services.download_service import download_service
+from services.video_streaming_service import video_streaming_worker
 from core.rate_limit import limiter
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,9 +45,15 @@ async def lifespan(app: FastAPI):
     start_cleanup_task(UPLOAD_DIR)
     print("✓ Periodic cleanup task started (runs every 30 min)")
 
+    # Start the durable adaptive-video queue worker. The admin setting remains
+    # off by default, so this is idle until the feature is explicitly enabled.
+    await video_streaming_worker.start()
+    print("✓ Video streaming worker ready")
+
     yield
 
     # Shutdown: Cancel cleanup task
+    await video_streaming_worker.stop()
     await stop_cleanup_task()
     print("✓ Shutting down")
 

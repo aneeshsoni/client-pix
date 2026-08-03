@@ -49,6 +49,37 @@ export interface Photo {
   tags: PhotoTag[];
 }
 
+export interface VideoStreamingSettings {
+  available: boolean;
+  enabled: boolean;
+  pending_jobs: number;
+  processing_jobs: number;
+  ready_videos: number;
+  failed_jobs: number;
+  eligible_existing_videos: number;
+  rendition_bytes: number;
+  estimated_backfill_bytes: number;
+}
+
+export interface VideoQuality {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  playlist_url: string | null;
+  is_source: boolean;
+}
+
+export interface VideoPlaybackInfo {
+  enabled: boolean;
+  status: "disabled" | "source_only" | "pending" | "processing" | "ready" | "failed" | "cancelled";
+  source: VideoQuality;
+  qualities: VideoQuality[];
+  manifest_url: string | null;
+  error: string | null;
+  progress: number | null;
+}
+
 export interface AlbumDetail extends Album {
   photos: Photo[];
   tags: PhotoTag[];
@@ -1060,6 +1091,115 @@ export async function setVideoThumbnail(
     throw new Error(payload?.detail || "Failed to update video thumbnail");
   }
 
+  return response.json();
+}
+
+export async function getVideoStreamingSettings(): Promise<VideoStreamingSettings> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/system/settings/video-playback`,
+  );
+  if (!response.ok) throw new Error("Failed to load video playback settings");
+  return response.json();
+}
+
+export async function updateVideoStreamingSettings(
+  enabled: boolean,
+): Promise<VideoStreamingSettings> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/system/settings/video-playback`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to update video playback settings");
+  }
+  return response.json();
+}
+
+export async function backfillVideoRenditions(): Promise<{
+  queued_count: number;
+  skipped_count: number;
+  estimated_additional_bytes: number;
+}> {
+  const response = await authFetch(`${API_BASE_URL}/api/videos/backfill`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to process existing videos");
+  }
+  return response.json();
+}
+
+export async function deleteVideoRenditions(): Promise<{
+  deleted_renditions: number;
+  reclaimed_bytes: number;
+}> {
+  const response = await authFetch(`${API_BASE_URL}/api/videos/renditions`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Failed to delete generated video qualities");
+  return response.json();
+}
+
+export async function getAdminVideoPlayback(
+  photoId: string,
+): Promise<VideoPlaybackInfo> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/videos/${photoId}/playback`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error("Failed to load video playback options");
+  return response.json();
+}
+
+export async function retryVideoProcessing(photoId: string): Promise<void> {
+  const response = await authFetch(
+    `${API_BASE_URL}/api/videos/${photoId}/retry`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to retry video processing");
+  }
+}
+
+export async function getShareVideoPlayback(
+  shareToken: string,
+  photoId: string,
+  password?: string,
+): Promise<VideoPlaybackInfo> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/videos/share/${shareToken}/${photoId}/playback`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password || null }),
+    },
+  );
+  if (!response.ok) throw new Error("Failed to load video playback options");
+  return response.json();
+}
+
+export async function getCollectionVideoPlayback(
+  collectionToken: string,
+  albumId: string,
+  photoId: string,
+  password?: string,
+): Promise<VideoPlaybackInfo> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/videos/collection/${collectionToken}/albums/${albumId}/${photoId}/playback`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: password || null }),
+    },
+  );
+  if (!response.ok) throw new Error("Failed to load video playback options");
   return response.json();
 }
 

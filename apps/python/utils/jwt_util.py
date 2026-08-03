@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
-from core.config import UPLOAD_DIR
+from core.config import UPLOAD_DIR, VIDEO_PLAYBACK_TOKEN_TTL_SECONDS
 
 
 def _get_or_create_jwt_secret(upload_dir: Path) -> str:
@@ -99,6 +99,39 @@ def get_admin_id_from_token(token: str) -> uuid.UUID | None:
         except ValueError:
             return None
     return None
+
+
+def create_video_playback_token(
+    photo_id: uuid.UUID,
+    access_kind: str,
+    access_id: uuid.UUID,
+) -> str:
+    """Create a short-lived token scoped to one video's streaming files."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "photo_id": str(photo_id),
+        "access_kind": access_kind,
+        "access_id": str(access_id),
+        "exp": now + timedelta(seconds=VIDEO_PLAYBACK_TOKEN_TTL_SECONDS),
+        "iat": now,
+        "type": "video_playback",
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_video_playback_token(token: str) -> dict | None:
+    """Verify a video playback token and return its scoped claims."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "video_playback":
+            return None
+        uuid.UUID(payload["photo_id"])
+        uuid.UUID(payload["access_id"])
+        if payload.get("access_kind") not in {"admin", "share", "collection"}:
+            return None
+        return payload
+    except (KeyError, ValueError, jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
 
 
 # ============================================================================
