@@ -461,15 +461,20 @@ class VideoStreamingWorker:
         except asyncio.CancelledError:
             await self._finish_job(job_id, "cancelled", None)
         except Exception as exc:
+            print(f"Warning: Video job {job_id} failed: {exc}")
             await self._finish_job(job_id, "failed", str(exc)[:1000])
         finally:
             if temp_root is not None:
                 shutil.rmtree(temp_root, ignore_errors=True)
 
     async def _is_cancelled(self, db: AsyncSession, job_id: uuid.UUID) -> bool:
-        db.expire_all()
-        job = await db.get(VideoTranscodeJob, job_id)
-        return bool(job is None or job.cancel_requested)
+        result = await db.execute(
+            select(VideoTranscodeJob.cancel_requested).where(
+                VideoTranscodeJob.id == job_id
+            )
+        )
+        cancel_requested = result.scalar_one_or_none()
+        return cancel_requested is None or cancel_requested
 
     async def _finish_job(
         self, job_id: uuid.UUID, status: str, error: str | None

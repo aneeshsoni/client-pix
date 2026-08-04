@@ -190,11 +190,14 @@ export const AdaptiveVideoPlayer = forwardRef<
       )}
 
       {playback?.status === "failed" && onRetry && (
-        <div className="absolute left-3 top-3 flex items-center gap-2 rounded bg-black/80 px-3 py-2 text-xs text-white">
-          Video optimization failed.
+        <div className="absolute left-3 top-3 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded bg-black/80 px-3 py-2 text-xs text-white">
+          <span className="line-clamp-2" title={playback.error || undefined}>
+            Video optimization failed
+            {playback.error ? `: ${playback.error}` : "."}
+          </span>
           <button
             type="button"
-            className="underline hover:no-underline disabled:opacity-60"
+            className="shrink-0 underline hover:no-underline disabled:opacity-60"
             disabled={retrying}
             onClick={() => {
               setRetrying(true);

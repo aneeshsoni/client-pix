@@ -11,6 +11,7 @@ from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from models.db.video_streaming_db_models import VideoRendition, VideoTranscodeJob
+from services.video_streaming_service import video_streaming_worker
 
 
 async def _create_video(
@@ -184,3 +185,26 @@ async def test_ready_video_exposes_labeled_authorized_hls_streams(
     assert tampered.status_code == 401
     quality = await client.get(body["qualities"][1]["playlist_url"])
     assert quality.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_cancellation_check_does_not_expire_loaded_video_metadata(
+    db_session: AsyncSession,
+):
+    _photo, file_hash = await _create_video(
+        db_session,
+        digest="d" * 64,
+        width=3840,
+        height=2160,
+    )
+    job = VideoTranscodeJob(
+        file_hash_id=file_hash.id,
+        status="processing",
+        progress=1,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    assert await video_streaming_worker._is_cancelled(db_session, job.id) is False
+    assert file_hash.width == 3840
+    assert file_hash.height == 2160
