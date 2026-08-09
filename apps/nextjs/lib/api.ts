@@ -678,6 +678,29 @@ const capabilityCache = new Map<
   { expiresAt: number; value: UploadCapabilities }
 >();
 
+// Keep enough uploads in flight to use the available bandwidth without
+// overwhelming the API with image processing work. Large uploads use 64 MB
+// chunks by default, so three workers cap that transfer window at 192 MB.
+const MAX_CONCURRENT_UPLOADS = 3;
+
+async function runUploadWorkers(
+  fileCount: number,
+  uploadFile: (index: number) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(MAX_CONCURRENT_UPLOADS, fileCount);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < fileCount) {
+        const index = nextIndex;
+        nextIndex += 1;
+        await uploadFile(index);
+      }
+    }),
+  );
+}
+
 async function getUploadCapabilities(
   url: string,
   authenticated: boolean,
@@ -930,9 +953,10 @@ async function uploadLargeFileChunkedToShareLink(
 }
 
 /**
- * Upload photos to an album in batches for reliability.
+ * Upload photos to an album with bounded concurrency.
  *
- * Uploads in batches of BATCH_SIZE to prevent timeouts and memory issues.
+ * Uploads up to MAX_CONCURRENT_UPLOADS files at once to improve throughput
+ * while keeping browser and server memory usage bounded.
  * Supports uploading 100+ photos at once.
  * Uses chunked upload for files > 50MB to bypass proxy buffer limits.
  *
@@ -940,7 +964,6 @@ async function uploadLargeFileChunkedToShareLink(
  * @param files - Array of files to upload
  * @param onProgress - Callback with (uploaded, total) counts for batch progress
  * @param onUploadProgress - Callback with (loaded, total) bytes for real-time progress
- * @param batchSize - Number of files per batch (default: 1 for large files to show progress)
  */
 export async function uploadPhotosToAlbum(
   albumId: string,
@@ -948,13 +971,12 @@ export async function uploadPhotosToAlbum(
   onProgress?: (uploaded: number, total: number) => void,
   onUploadProgress?: (loaded: number, total: number) => void,
   onDuplicate?: (duplicateCount: number) => void,
-  _batchSize: number = 1, // Default to 1 for better progress tracking
 ): Promise<PhotoUploadResponse> {
   const allPhotos: Photo[] = [];
   let totalUploaded = 0;
   let totalDuplicates = 0;
   let successfullyProcessed = 0;
-  const failures: UploadFailure[] = [];
+  const failures: Array<UploadFailure | undefined> = new Array(files.length);
   const capabilities = await getUploadCapabilities(
     `${API_BASE_URL}/api/albums/${albumId}/upload-capabilities`,
     true,
@@ -962,10 +984,17 @@ export async function uploadPhotosToAlbum(
 
   // Calculate total size for progress
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-  let uploadedSize = 0;
+  const fileProgress = new Array<number>(files.length).fill(0);
+  let completedFiles = 0;
+  const reportFileProgress = (index: number, loaded: number) => {
+    fileProgress[index] = Math.min(loaded, files[index].size);
+    onUploadProgress?.(
+      fileProgress.reduce((sum, bytes) => sum + bytes, 0),
+      totalSize,
+    );
+  };
 
-  // Process files one at a time for large files, or in batches for small files
-  for (let i = 0; i < files.length; i++) {
+  await runUploadWorkers(files.length, async (i) => {
     const file = files[i];
 
     try {
@@ -990,7 +1019,7 @@ export async function uploadPhotosToAlbum(
           albumId,
           file,
           (loaded, _total) => {
-            onUploadProgress?.(uploadedSize + loaded, totalSize);
+            reportFileProgress(i, loaded);
           },
         );
       } else {
@@ -1002,7 +1031,7 @@ export async function uploadPhotosToAlbum(
           `${API_BASE_URL}/api/albums/${albumId}/photos`,
           formData,
           (loaded, _total) => {
-            onUploadProgress?.(uploadedSize + loaded, totalSize);
+            reportFileProgress(i, loaded);
           },
           15 * 60 * 1000,
           getAuthToken(),
@@ -1016,7 +1045,6 @@ export async function uploadPhotosToAlbum(
         onDuplicate?.(totalDuplicates);
       }
       successfullyProcessed += 1;
-      uploadedSize += file.size;
     } catch (error) {
       console.error(`File ${i + 1}/${files.length} error:`, error);
       const uploadError =
@@ -1025,24 +1053,30 @@ export async function uploadPhotosToAlbum(
           : new UploadApiError(
               error instanceof Error ? error.message : "Upload failed",
             );
-      failures.push({
+      failures[i] = {
         filename: file.name,
         code: uploadError.code,
         message: uploadError.message,
         retryable: uploadError.retryable,
-      });
+      };
+    } finally {
+      reportFileProgress(i, file.size);
+      completedFiles += 1;
+      onProgress?.(completedFiles, files.length);
     }
+  });
 
-    // Report file progress
-    onProgress?.(i + 1, files.length);
-  }
+  const completedFailures = failures.filter(
+    (failure): failure is UploadFailure => failure !== undefined,
+  );
 
   // If nothing was uploaded at all, throw an error
   if (successfullyProcessed === 0 && files.length > 0) {
     throw new UploadApiError(
-      failures[0]?.message ?? "Failed to upload any files. Please try again.",
-      failures[0]?.code,
-      failures[0]?.retryable,
+      completedFailures[0]?.message ??
+        "Failed to upload any files. Please try again.",
+      completedFailures[0]?.code,
+      completedFailures[0]?.retryable,
     );
   }
 
@@ -1050,7 +1084,7 @@ export async function uploadPhotosToAlbum(
     photos: allPhotos,
     uploaded_count: totalUploaded,
     duplicate_count: totalDuplicates,
-    failed_files: failures,
+    failed_files: completedFailures,
   };
 }
 
@@ -1631,7 +1665,7 @@ export async function uploadSharePhotos(
   let totalUploaded = 0;
   let totalDuplicates = 0;
   let successfullyProcessed = 0;
-  const failures: UploadFailure[] = [];
+  const failures: Array<UploadFailure | undefined> = new Array(files.length);
   const capabilityParams = new URLSearchParams();
   if (password) capabilityParams.set("password", password);
   const capabilityQuery = capabilityParams.toString();
@@ -1642,9 +1676,17 @@ export async function uploadSharePhotos(
     false,
   );
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-  let uploadedSize = 0;
+  const fileProgress = new Array<number>(files.length).fill(0);
+  let completedFiles = 0;
+  const reportFileProgress = (index: number, loaded: number) => {
+    fileProgress[index] = Math.min(loaded, files[index].size);
+    onUploadProgress?.(
+      fileProgress.reduce((sum, bytes) => sum + bytes, 0),
+      totalSize,
+    );
+  };
 
-  for (let i = 0; i < files.length; i++) {
+  await runUploadWorkers(files.length, async (i) => {
     const file = files[i];
 
     try {
@@ -1662,7 +1704,7 @@ export async function uploadSharePhotos(
           file,
           password,
           (loaded) => {
-            onUploadProgress?.(uploadedSize + loaded, totalSize);
+            reportFileProgress(i, loaded);
           },
         );
       } else {
@@ -1676,7 +1718,7 @@ export async function uploadSharePhotos(
           `${API_BASE_URL}/api/share/${token}/upload`,
           formData,
           (loaded) => {
-            onUploadProgress?.(uploadedSize + loaded, totalSize);
+            reportFileProgress(i, loaded);
           },
           15 * 60 * 1000,
         );
@@ -1689,7 +1731,6 @@ export async function uploadSharePhotos(
         onDuplicate?.(totalDuplicates);
       }
       successfullyProcessed += 1;
-      uploadedSize += file.size;
     } catch (error) {
       console.error(`Shared upload file ${i + 1}/${files.length} error:`, error);
       const uploadError =
@@ -1698,22 +1739,29 @@ export async function uploadSharePhotos(
           : new UploadApiError(
               error instanceof Error ? error.message : "Upload failed",
             );
-      failures.push({
+      failures[i] = {
         filename: file.name,
         code: uploadError.code,
         message: uploadError.message,
         retryable: uploadError.retryable,
-      });
+      };
+    } finally {
+      reportFileProgress(i, file.size);
+      completedFiles += 1;
+      onProgress?.(completedFiles, files.length);
     }
+  });
 
-    onProgress?.(i + 1, files.length);
-  }
+  const completedFailures = failures.filter(
+    (failure): failure is UploadFailure => failure !== undefined,
+  );
 
   if (successfullyProcessed === 0 && files.length > 0) {
     throw new UploadApiError(
-      failures[0]?.message ?? "Failed to upload any files. Please try again.",
-      failures[0]?.code,
-      failures[0]?.retryable,
+      completedFailures[0]?.message ??
+        "Failed to upload any files. Please try again.",
+      completedFailures[0]?.code,
+      completedFailures[0]?.retryable,
     );
   }
 
@@ -1721,7 +1769,7 @@ export async function uploadSharePhotos(
     photos: allPhotos,
     uploaded_count: totalUploaded,
     duplicate_count: totalDuplicates,
-    failed_files: failures,
+    failed_files: completedFailures,
   };
 }
 
