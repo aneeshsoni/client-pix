@@ -14,6 +14,12 @@ class CollectionCreate(BaseModel):
     description: str | None = None
     access_level: Literal["public", "private"] = "public"
     password: str | None = Field(None, min_length=8, max_length=100)
+    custom_slug: str | None = Field(
+        None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+    )
     album_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -29,6 +35,12 @@ class CollectionUpdate(BaseModel):
     access_level: Literal["public", "private"] | None = None
     password: str | None = Field(None, min_length=8, max_length=100)
     album_ids: list[uuid.UUID] | None = None
+    custom_slug: str | None = Field(
+        None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+    )
 
 
 class CollectionAlbumResponse(BaseModel):
@@ -47,6 +59,7 @@ class CollectionResponse(BaseModel):
     title: str
     description: str | None
     token: str
+    custom_slug: str | None
     share_url: str
     access_level: Literal["public", "private"]
     album_count: int

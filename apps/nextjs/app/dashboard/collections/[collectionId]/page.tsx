@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Check, Copy, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, Loader2, Plus, Trash2 } from "lucide-react";
+import { NewAlbumModal } from "@/components/gallery/NewAlbumModal";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,7 +37,9 @@ export default function CollectionDetailPage() {
   const [description, setDescription] = useState("");
   const [accessLevel, setAccessLevel] = useState<"public" | "private">("public");
   const [password, setPassword] = useState("");
+  const [customSlug, setCustomSlug] = useState("");
   const [selectedAlbums, setSelectedAlbums] = useState<string[]>([]);
+  const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -55,6 +58,7 @@ export default function CollectionDetailPage() {
       setTitle(collectionData.title);
       setDescription(collectionData.description || "");
       setAccessLevel(collectionData.access_level);
+      setCustomSlug(collectionData.custom_slug || "");
       setSelectedAlbums(collectionData.albums.map((album) => album.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load collection");
@@ -78,6 +82,7 @@ export default function CollectionDetailPage() {
         description: description || null,
         access_level: accessLevel,
         password: password || undefined,
+        custom_slug: customSlug || null,
         album_ids: selectedAlbums,
       });
       setCollection(updated);
@@ -187,6 +192,30 @@ export default function CollectionDetailPage() {
               </div>
             )}
             <div className="space-y-2">
+              <Label htmlFor="customSlug">Custom link (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">/collection/</span>
+                <Input
+                  id="customSlug"
+                  value={customSlug}
+                  onChange={(event) =>
+                    setCustomSlug(
+                      event.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]/g, ""),
+                    )
+                  }
+                  minLength={3}
+                  maxLength={100}
+                  pattern="[a-z0-9][a-z0-9-]*[a-z0-9]"
+                  placeholder="smith-wedding"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave blank to use the random link.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>Share link</Label>
               <div className="flex gap-2">
                 <Input value={collection.share_url} readOnly />
@@ -211,11 +240,22 @@ export default function CollectionDetailPage() {
           </section>
 
           <section className="space-y-3 rounded-xl border bg-card p-6">
-            <div>
-              <h2 className="font-semibold">Albums</h2>
-              <p className="text-sm text-muted-foreground">
-                An album may belong to any number of collections.
-              </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Albums</h2>
+                <p className="text-sm text-muted-foreground">
+                  An album may belong to any number of collections.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setNewAlbumOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                New Album
+              </Button>
             </div>
             <div className="space-y-1">
               {albums.map((album) => (
@@ -265,6 +305,17 @@ export default function CollectionDetailPage() {
           </div>
         </form>
       </main>
+      <NewAlbumModal
+        open={newAlbumOpen}
+        onOpenChange={setNewAlbumOpen}
+        onAlbumCreated={(album) => {
+          setAlbums((current) => [...current, album]);
+          setSelectedAlbums((current) =>
+            current.includes(album.id) ? current : [...current, album.id],
+          );
+          setMessage("Album created and selected. Save changes to add it.");
+        }}
+      />
     </>
   );
 }

@@ -106,6 +106,7 @@ export interface Collection {
   title: string;
   description: string | null;
   token: string;
+  custom_slug: string | null;
   share_url: string;
   access_level: "public" | "private";
   album_count: number;
@@ -120,6 +121,7 @@ export interface CollectionPayload {
   access_level?: "public" | "private";
   password?: string;
   album_ids?: string[];
+  custom_slug?: string | null;
 }
 
 export interface SharedCollection {

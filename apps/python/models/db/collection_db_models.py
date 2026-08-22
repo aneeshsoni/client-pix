@@ -31,6 +31,9 @@ class Collection(Base):
     token: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, index=True
     )
+    custom_slug: Mapped[str | None] = mapped_column(
+        String(100), unique=True, nullable=True, index=True
+    )
     access_level: Mapped[str] = mapped_column(
         String(16), nullable=False, default="public"
     )

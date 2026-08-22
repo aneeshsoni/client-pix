@@ -22,7 +22,16 @@ from utils.security_util import verify_password
 async def get_collection_by_token(
     token: str, db: AsyncSession, *, load_albums: bool = False
 ) -> Collection | None:
-    stmt = select(Collection).where(Collection.token == token)
+    stmt = select(Collection).where(Collection.custom_slug == token)
+    result = await db.execute(stmt)
+    collection = result.scalar_one_or_none()
+    if collection is not None:
+        if load_albums:
+            stmt = select(Collection).where(Collection.id == collection.id)
+        else:
+            return collection
+    else:
+        stmt = select(Collection).where(Collection.token == token)
     if load_albums:
         stmt = stmt.options(
             selectinload(Collection.album_links)

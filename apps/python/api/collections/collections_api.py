@@ -1,8 +1,11 @@
 """Admin and public APIs for shareable album collections."""
 
+import asyncio
 import uuid
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from models.api.collections_api_models import (
     CollectionAccessRequest,
     CollectionCreate,
@@ -16,6 +19,7 @@ from models.api.share_links_api_models import SharedAlbumResponse
 from models.db.album_db_models import Album
 from models.db.collection_db_models import Collection, CollectionAlbum
 from models.db.photo_db_models import Photo
+from PIL import Image, ImageOps
 from services.collection_service import (
     build_collection_album_response,
     build_shared_collection_album,
@@ -23,6 +27,7 @@ from services.collection_service import (
     require_collection_album,
     validate_collection_password,
 )
+from services.storage_service import storage_service
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -44,7 +49,86 @@ def _collection_share_url(collection: Collection, request: Request) -> str:
     host = request.headers.get(
         "x-forwarded-host", request.headers.get("host", "localhost")
     )
-    return f"{scheme}://{host}/collection/{collection.token}"
+    identifier = collection.custom_slug or collection.token
+    return f"{scheme}://{host}/collection/{identifier}"
+
+
+async def _validate_custom_slug(
+    custom_slug: str | None,
+    db: AsyncSession,
+    collection_id: uuid.UUID | None = None,
+) -> str | None:
+    if not custom_slug:
+        return None
+    normalized = custom_slug.lower()
+    stmt = select(Collection).where(Collection.custom_slug == normalized)
+    if collection_id is not None:
+        stmt = stmt.where(Collection.id != collection_id)
+    if (await db.execute(stmt)).scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Custom slug '{normalized}' is already in use",
+        )
+    return normalized
+
+
+def _create_collection_og_image(collection: Collection) -> bytes:
+    width, height, gap = 1200, 630, 8
+    albums = [link.album for link in collection.album_links[:4]]
+    canvas = Image.new("RGB", (width, height), "#e5e7eb")
+    if not albums:
+        output = BytesIO()
+        canvas.save(output, "JPEG", quality=90)
+        return output.getvalue()
+
+    columns = 1 if len(albums) == 1 else 2
+    rows = 1 if len(albums) <= 2 else 2
+    cell_width = (width - gap * (columns - 1)) // columns
+    cell_height = (height - gap * (rows - 1)) // rows
+
+    for index, album in enumerate(albums):
+        x = (index % columns) * (cell_width + gap)
+        y = (index // columns) * (cell_height + gap)
+        cover = next(
+            (photo for photo in album.photos if photo.id == album.cover_photo_id),
+            album.photos[0] if album.photos else None,
+        )
+        if cover is None:
+            continue
+        file_hash = cover.file_hash
+        prefix = file_hash.sha256_hash[:2]
+        second = file_hash.sha256_hash[2:4]
+        image_path = (
+            storage_service.upload_dir
+            / "thumbnails"
+            / prefix
+            / second
+            / f"{file_hash.sha256_hash}.webp"
+        )
+        if not image_path.exists() and not cover.is_video:
+            image_path = storage_service.get_file_path(
+                file_hash.sha256_hash,
+                file_hash.file_extension,
+            )
+        if not image_path.exists():
+            continue
+        try:
+            with Image.open(image_path) as source:
+                fitted = ImageOps.fit(
+                    source.convert("RGB"),
+                    (cell_width, cell_height),
+                    centering=(
+                        album.cover_photo_position_x / 100,
+                        album.cover_photo_position_y / 100,
+                    ),
+                )
+                canvas.paste(fitted, (x, y))
+        except OSError:
+            continue
+
+    output = BytesIO()
+    canvas.save(output, "JPEG", quality=90, optimize=True)
+    return output.getvalue()
 
 
 async def _load_collection(collection_id: uuid.UUID, db: AsyncSession) -> Collection:
@@ -76,6 +160,7 @@ def _build_collection_response(
         title=collection.title,
         description=collection.description,
         token=collection.token,
+        custom_slug=collection.custom_slug,
         share_url=_collection_share_url(collection, request),
         access_level=collection.access_level,
         album_count=len(albums),
@@ -122,10 +207,12 @@ async def create_collection(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    custom_slug = await _validate_custom_slug(data.custom_slug, db)
     collection = Collection(
         title=data.title.strip(),
         description=data.description,
         token=generate_token(),
+        custom_slug=custom_slug,
         access_level=data.access_level,
         password_hash=hash_password(data.password) if data.password else None,
     )
@@ -204,6 +291,10 @@ async def update_collection(
         collection.access_level = "private"
     if data.album_ids is not None:
         await _replace_collection_albums(collection, data.album_ids, db)
+    if "custom_slug" in data.model_fields_set:
+        collection.custom_slug = await _validate_custom_slug(
+            data.custom_slug, db, collection.id
+        )
 
     await db.commit()
     return _build_collection_response(
@@ -234,6 +325,22 @@ async def get_collection_info(
         description=collection.description,
         is_password_protected=collection.access_level == "private",
         album_count=len(collection.album_links),
+    )
+
+
+@public_router.get("/{token}/og-image")
+async def get_collection_og_image(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    collection = await get_collection_by_token(token, db, load_albums=True)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    content = await asyncio.to_thread(_create_collection_og_image, collection)
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 

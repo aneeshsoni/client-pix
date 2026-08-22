@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { FolderPlus, Globe, ImageIcon, Loader2, Lock } from "lucide-react";
+import { FolderPlus, Globe, ImageIcon, Loader2, Lock, Plus } from "lucide-react";
+import { NewAlbumModal } from "@/components/gallery/NewAlbumModal";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -44,7 +45,9 @@ export default function CollectionsPage() {
   const [description, setDescription] = useState("");
   const [accessLevel, setAccessLevel] = useState<"public" | "private">("public");
   const [password, setPassword] = useState("");
+  const [customSlug, setCustomSlug] = useState("");
   const [selectedAlbums, setSelectedAlbums] = useState<string[]>([]);
+  const [newAlbumOpen, setNewAlbumOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -69,7 +72,9 @@ export default function CollectionsPage() {
     setDescription("");
     setAccessLevel("public");
     setPassword("");
+    setCustomSlug("");
     setSelectedAlbums([]);
+    setNewAlbumOpen(false);
     setError("");
   };
 
@@ -83,6 +88,7 @@ export default function CollectionsPage() {
         description: description || null,
         access_level: accessLevel,
         password: accessLevel === "private" ? password : undefined,
+        custom_slug: customSlug || null,
         album_ids: selectedAlbums,
       });
       setOpen(false);
@@ -216,6 +222,30 @@ export default function CollectionsPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="collectionCustomSlug">Custom link (optional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">/collection/</span>
+                <Input
+                  id="collectionCustomSlug"
+                  value={customSlug}
+                  onChange={(event) =>
+                    setCustomSlug(
+                      event.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9-]/g, ""),
+                    )
+                  }
+                  minLength={3}
+                  maxLength={100}
+                  pattern="[a-z0-9][a-z0-9-]*[a-z0-9]"
+                  placeholder="smith-wedding"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave blank for a random link. Use letters, numbers, and hyphens.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="collectionAccess">Access</Label>
               <select
                 id="collectionAccess"
@@ -246,6 +276,7 @@ export default function CollectionsPage() {
               albums={albums}
               selected={selectedAlbums}
               onChange={setSelectedAlbums}
+              onCreateAlbum={() => setNewAlbumOpen(true)}
             />
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -254,6 +285,16 @@ export default function CollectionsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <NewAlbumModal
+        open={newAlbumOpen}
+        onOpenChange={setNewAlbumOpen}
+        onAlbumCreated={(album) => {
+          setAlbums((current) => [...current, album]);
+          setSelectedAlbums((current) =>
+            current.includes(album.id) ? current : [...current, album.id],
+          );
+        }}
+      />
     </>
   );
 }
@@ -262,18 +303,26 @@ function AlbumPicker({
   albums,
   selected,
   onChange,
+  onCreateAlbum,
 }: {
   albums: Album[];
   selected: string[];
   onChange: (albumIds: string[]) => void;
+  onCreateAlbum: () => void;
 }) {
   return (
     <div className="space-y-2">
-      <Label>Albums</Label>
+      <div className="flex items-center justify-between gap-3">
+        <Label>Albums</Label>
+        <Button type="button" variant="outline" size="sm" onClick={onCreateAlbum}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Album
+        </Button>
+      </div>
       <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
         {albums.length === 0 ? (
           <p className="p-2 text-sm text-muted-foreground">
-            Create an album first.
+            Create an album here to add it to this collection.
           </p>
         ) : (
           albums.map((album) => (

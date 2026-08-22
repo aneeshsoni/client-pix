@@ -18,12 +18,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createAlbum, uploadPhotosToAlbum } from "@/lib/api";
+import { createAlbum, uploadPhotosToAlbum, type Album } from "@/lib/api";
 
 interface NewAlbumModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAlbumCreated?: () => void;
+  onAlbumCreated?: (album: Album) => void;
 }
 
 export function NewAlbumModal({
@@ -135,7 +135,7 @@ export function NewAlbumModal({
       onOpenChange(false);
 
       // Notify parent to refresh album list
-      onAlbumCreated?.();
+      onAlbumCreated?.(album);
     } catch (error) {
       console.error("Failed to create album:", error);
       setUploadProgress(
