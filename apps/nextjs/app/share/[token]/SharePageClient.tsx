@@ -40,6 +40,7 @@ import {
 import { useDownloadJob } from "@/hooks/use-download-job";
 import { toast } from "sonner";
 import { AdaptiveVideoPlayer } from "@/components/gallery/AdaptiveVideoPlayer";
+import { WindowDropUpload } from "@/components/gallery/WindowDropUpload";
 
 // Empty string = relative URLs (works with any domain)
 const API_BASE_URL = "";
@@ -515,10 +516,9 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   };
 
   const handleUploadFiles = useCallback(
-    async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
+    async (selectedFiles: File[]) => {
+      if (selectedFiles.length === 0 || isUploading) return;
 
-      const selectedFiles = Array.from(files);
       setIsUploading(true);
       setUploadProgress(
         `Preparing ${selectedFiles.length} file${selectedFiles.length > 1 ? "s" : ""}...`,
@@ -580,7 +580,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         setUploadBytes(null);
       }
     },
-    [accessAlbum, token, verifiedPassword],
+    [accessAlbum, isUploading, token, verifiedPassword],
   );
 
   // Loading state
@@ -670,6 +670,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
   if (state === "album" && album) {
     return (
       <PhotoSelectionProvider>
+      <WindowDropUpload
+        destination={album.title}
+        disabled={!album.allows_uploads || isUploading}
+        onFiles={handleUploadFiles}
+      />
       <div className="min-h-screen bg-background">
         {/* Header */}
         <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
@@ -697,7 +702,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     multiple
                     accept="image/*,video/*"
                     className="hidden"
-                    onChange={(e) => handleUploadFiles(e.target.files)}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files || []);
+                      event.target.value = "";
+                      void handleUploadFiles(files);
+                    }}
                   />
                   <Button
                     variant="outline"

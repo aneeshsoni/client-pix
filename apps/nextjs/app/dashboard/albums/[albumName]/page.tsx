@@ -32,6 +32,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { WindowDropUpload } from "@/components/gallery/WindowDropUpload";
 import {
   getAlbumBySlug,
   uploadPhotosToAlbum,
@@ -178,10 +179,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
-  const handleFileUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0 || !album) return;
+  const handleUploadFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0 || !album || isUploading) return;
 
       setIsUploading(true);
       setUploadProgress(
@@ -194,7 +194,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       try {
         const result = await uploadPhotosToAlbum(
           album.id,
-          Array.from(files),
+          files,
           (uploaded, total) => {
             // Batch progress (files completed)
             setUploadProgress(`Uploaded ${uploaded}/${total} files`);
@@ -232,11 +232,18 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         setUploadBytes(null);
       } finally {
         setIsUploading(false);
-        // Reset input
-        e.target.value = "";
       }
     },
-    [album, fetchAlbum]
+    [album, fetchAlbum, isUploading]
+  );
+
+  const handleFileUpload = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || []);
+      event.target.value = "";
+      void handleUploadFiles(files);
+    },
+    [handleUploadFiles],
   );
 
   const handlePhotoTagsChange = useCallback(
@@ -347,6 +354,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
 
   return (
     <PhotoSelectionProvider>
+      <WindowDropUpload
+        destination={album.title}
+        disabled={isUploading}
+        onFiles={handleUploadFiles}
+      />
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-background border-b">
         {/* Row 1: Title bar */}
