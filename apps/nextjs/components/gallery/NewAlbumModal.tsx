@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createAlbum, uploadPhotosToAlbum, type Album } from "@/lib/api";
+import { toast } from "sonner";
+import { EMPTY_FILE_DROP_MESSAGE, getDroppedFiles } from "@/lib/drop-files";
 
 interface NewAlbumModalProps {
   open: boolean;
@@ -52,7 +54,7 @@ export function NewAlbumModal({
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
-  const handleFiles = useCallback((fileList: FileList) => {
+  const handleFiles = useCallback((fileList: FileList | File[]) => {
     const mediaFiles = Array.from(fileList).filter(
       (file) => file.type.startsWith("image/") || file.type.startsWith("video/")
     );
@@ -62,10 +64,17 @@ export function NewAlbumModal({
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       setIsDragOver(false);
-      handleFiles(e.dataTransfer.files);
+      if (isUploading) return;
+      const droppedFiles = getDroppedFiles(e.dataTransfer);
+      if (droppedFiles.length === 0) {
+        toast.error(EMPTY_FILE_DROP_MESSAGE);
+        return;
+      }
+      handleFiles(droppedFiles);
     },
-    [handleFiles]
+    [handleFiles, isUploading]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

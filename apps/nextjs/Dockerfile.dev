@@ -22,5 +22,6 @@ EXPOSE 3000
 # Set hostname for container networking
 ENV HOSTNAME="0.0.0.0"
 
-# Run Next.js dev server with Turbopack
-CMD ["npm", "run", "dev"]
+# Use Webpack for Docker development; Turbopack can sustain high CPU usage
+# with the macOS source bind mount. Native npm run dev still uses Turbopack.
+CMD ["./node_modules/.bin/next", "dev", "--webpack", "--hostname", "0.0.0.0"]

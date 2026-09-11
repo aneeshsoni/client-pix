@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
+import { toast } from "sonner";
+import { EMPTY_FILE_DROP_MESSAGE, getDroppedFiles, isFileTransfer } from "@/lib/drop-files";
 
 interface WindowDropUploadProps {
   destination: string;
@@ -10,7 +12,7 @@ interface WindowDropUploadProps {
 }
 
 function isFileDrag(event: DragEvent): boolean {
-  return Array.from(event.dataTransfer?.types || []).includes("Files");
+  return isFileTransfer(event.dataTransfer);
 }
 
 export function WindowDropUpload({
@@ -56,8 +58,9 @@ export function WindowDropUpload({
       dragDepth.current = 0;
       setActive(false);
       if (disabled) return;
-      const files = Array.from(event.dataTransfer?.files || []);
+      const files = getDroppedFiles(event.dataTransfer);
       if (files.length > 0) void onFiles(files);
+      else toast.error(EMPTY_FILE_DROP_MESSAGE);
     };
 
     window.addEventListener("dragenter", handleDragEnter);
