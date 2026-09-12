@@ -1,7 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getAuthToken, getRefreshToken } from '../lib/auth'
+import { getAuthToken, getRefreshToken, refreshTokens } from '../lib/auth'
 
 describe('Auth Utilities', () => {
+  it('shares one token refresh across concurrent uploads', async () => {
+    vi.mocked(window.localStorage.getItem).mockReturnValue('refresh-token');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ access_token: 'new-token', refresh_token: 'new-refresh' })));
+    try {
+      expect(await Promise.all([refreshTokens(), refreshTokens(), refreshTokens()])).toEqual(['new-token', 'new-token', 'new-token']);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.getItem = vi.fn()

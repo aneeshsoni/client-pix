@@ -5,7 +5,7 @@
  * No need to configure NEXT_PUBLIC_API_URL - just works!
  */
 
-import { authFetch, getAuthToken } from "./auth";
+import { authFetch, getAuthToken, refreshTokens } from "./auth";
 
 // Empty string = relative URLs (works with any domain via Nginx proxy)
 const API_BASE_URL = "";
@@ -161,6 +161,7 @@ export interface PhotoUploadResponse {
 }
 
 export interface UploadFailure {
+  file_index?: number;
   filename: string;
   code: string;
   message: string;
@@ -179,6 +180,7 @@ export class UploadApiError extends Error {
     message: string,
     public readonly code = "UNKNOWN_UPLOAD_ERROR",
     public readonly retryable = false,
+    public readonly status?: number,
   ) {
     super(message);
     this.name = "UploadApiError";
@@ -206,16 +208,19 @@ function uploadErrorFromBody(
     return new UploadApiError(
       structured.message,
       structured.code,
-      structured.retryable,
+      structured.retryable ?? (status !== undefined && (status >= 500 || status === 429)),
+      status,
     );
   }
   if (typeof data?.detail === "string") {
     return new UploadApiError(
       data.detail,
       status === 413 ? "FILE_TOO_LARGE" : "UPLOAD_FAILED",
+      status !== undefined && (status >= 500 || status === 429),
+      status,
     );
   }
-  return new UploadApiError(fallback);
+  return new UploadApiError(fallback, "UPLOAD_FAILED", status !== undefined && (status >= 500 || status === 429), status);
 }
 
 async function responseUploadError(
@@ -614,7 +619,34 @@ export async function updatePhotoTags(
  * Upload a single file with progress tracking using XMLHttpRequest.
  * Returns a promise that resolves with the response or rejects on error.
  */
-function uploadFileWithProgress(
+async function uploadFileWithProgress(
+  url: string,
+  formData: FormData,
+  onProgress?: (loaded: number, total: number) => void,
+  timeoutMs = 15 * 60 * 1000,
+  authToken?: string | null,
+): Promise<PhotoUploadResponse> {
+  let refreshed = false;
+  let retries = 0;
+  while (true) {
+    const token = authToken ? getAuthToken() : null;
+    try {
+      return await uploadFileOnce(url, formData, onProgress, timeoutMs, token);
+    } catch (error) {
+      if (!(error instanceof UploadApiError)) throw error;
+      if (error.status === 401 && token && !refreshed) {
+        refreshed = true;
+        const newToken = getAuthToken() !== token ? getAuthToken() : await refreshTokens();
+        if (newToken) continue;
+      }
+      if (!error.retryable || retries >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** retries));
+      retries += 1;
+    }
+  }
+}
+
+function uploadFileOnce(
   url: string,
   formData: FormData,
   onProgress?: (loaded: number, total: number) => void,
@@ -649,17 +681,17 @@ function uploadFileWithProgress(
             ),
           );
         } catch {
-          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+          reject(uploadErrorFromBody(null, `Upload failed: ${xhr.status} ${xhr.statusText}`, xhr.status));
         }
       }
     });
 
     xhr.addEventListener("error", () => {
-      reject(new Error("Network error during upload"));
+      reject(new UploadApiError("Network error during upload", "NETWORK_ERROR", true));
     });
 
     xhr.addEventListener("timeout", () => {
-      reject(new Error("Upload timed out"));
+      reject(new UploadApiError("Upload timed out", "UPLOAD_TIMEOUT", true));
     });
 
     xhr.addEventListener("abort", () => {
@@ -1056,6 +1088,7 @@ export async function uploadPhotosToAlbum(
               error instanceof Error ? error.message : "Upload failed",
             );
       failures[i] = {
+        file_index: i,
         filename: file.name,
         code: uploadError.code,
         message: uploadError.message,
@@ -1742,6 +1775,7 @@ export async function uploadSharePhotos(
               error instanceof Error ? error.message : "Upload failed",
             );
       failures[i] = {
+        file_index: i,
         filename: file.name,
         code: uploadError.code,
         message: uploadError.message,

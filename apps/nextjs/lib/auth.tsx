@@ -317,7 +317,18 @@ export function getRefreshToken(): string | null {
 }
 
 // Helper to refresh tokens
-async function refreshTokens(): Promise<string | null> {
+let pendingRefresh: Promise<string | null> | null = null;
+
+export function refreshTokens(): Promise<string | null> {
+  if (!pendingRefresh) {
+    pendingRefresh = performTokenRefresh().finally(() => {
+      pendingRefresh = null;
+    });
+  }
+  return pendingRefresh;
+}
+
+async function performTokenRefresh(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 

@@ -36,6 +36,7 @@ export function NewAlbumModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [createdAlbum, setCreatedAlbum] = useState<Album | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
@@ -104,10 +105,11 @@ export function NewAlbumModal({
 
     try {
       // Create the album
-      const album = await createAlbum(
+      const album = createdAlbum ?? await createAlbum(
         title.trim(),
         description.trim() || undefined
       );
+      setCreatedAlbum(album);
 
       // Upload files if any (in batches for reliability)
       if (files.length > 0) {
@@ -116,12 +118,12 @@ export function NewAlbumModal({
         );
         setUploadProgressPercent(0);
         setUploadBytes(null);
-        await uploadPhotosToAlbum(
+        const result = await uploadPhotosToAlbum(
           album.id,
           files,
           (uploaded, total) => {
             // Batch progress
-            setUploadProgress(`Uploaded ${uploaded}/${total} files`);
+            setUploadProgress(`Processed ${uploaded}/${total} files`);
           },
           (loaded, total) => {
             // Real-time byte progress
@@ -130,6 +132,16 @@ export function NewAlbumModal({
             setUploadBytes({ loaded, total });
           }
         );
+        if (result.failed_files?.length) {
+          setFiles(result.failed_files.flatMap((failure) =>
+            failure.file_index === undefined ? [] : [files[failure.file_index]]
+          ));
+          setUploadProgress(`${result.failed_files.length} files failed. ${result.failed_files[0].message}`);
+          setUploadProgressPercent(0);
+          setUploadBytes(null);
+          onAlbumCreated?.(album);
+          return;
+        }
         setUploadProgress("Upload complete!");
         setUploadProgressPercent(100);
       }
@@ -138,6 +150,7 @@ export function NewAlbumModal({
       setTitle("");
       setDescription("");
       setFiles([]);
+      setCreatedAlbum(null);
       setUploadProgress("");
       setUploadProgressPercent(0);
       setUploadBytes(null);
@@ -153,13 +166,14 @@ export function NewAlbumModal({
     } finally {
       setIsUploading(false);
     }
-  }, [title, description, files, onOpenChange, onAlbumCreated]);
+  }, [title, description, files, createdAlbum, onOpenChange, onAlbumCreated]);
 
   const handleClose = useCallback(() => {
     if (isUploading) return; // Prevent closing during upload
     setTitle("");
     setDescription("");
     setFiles([]);
+    setCreatedAlbum(null);
     setUploadProgress("");
     setUploadProgressPercent(0);
     onOpenChange(false);
@@ -179,7 +193,7 @@ export function NewAlbumModal({
                   placeholder="Add your album title here..."
                   className="w-full bg-transparent text-2xl font-semibold tracking-tight placeholder:text-muted-foreground/40 focus:outline-none focus:placeholder:text-muted-foreground/60"
                   autoFocus
-                  disabled={isUploading}
+                  disabled={isUploading || !!createdAlbum}
                 />
                 <motion.div
                   className="absolute -bottom-1 left-0 h-0.5 bg-foreground"
@@ -208,7 +222,7 @@ export function NewAlbumModal({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 className="border-2 bg-background/50 transition-all focus:border-foreground focus:ring-foreground/20"
-                disabled={isUploading}
+                disabled={isUploading || !!createdAlbum}
               />
             </div>
 
@@ -349,7 +363,7 @@ export function NewAlbumModal({
           {uploadProgress && (
             <div className="rounded-lg border bg-primary/10 px-4 py-3">
               <div className="flex items-center gap-3 mb-2">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                {isUploading && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">
                     {uploadProgress}
@@ -359,7 +373,7 @@ export function NewAlbumModal({
                       ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(
                           uploadBytes.total
                         )}`
-                      : "Please wait while files are being uploaded..."}
+                      : isUploading ? "Please wait while files are being uploaded..." : "Upload stopped. Retry to finish uploading to this album."}
                   </p>
                 </div>
                 {uploadProgressPercent > 0 && (
@@ -433,7 +447,7 @@ export function NewAlbumModal({
                       Creating...
                     </>
                   ) : (
-                    "Create Album"
+                    createdAlbum ? "Retry Upload" : "Create Album"
                   )}
                 </Button>
               </motion.div>

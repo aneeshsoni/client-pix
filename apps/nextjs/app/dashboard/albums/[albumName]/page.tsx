@@ -164,6 +164,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
   }, [fetchAlbum]);
 
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [failedUploadFiles, setFailedUploadFiles] = useState<File[]>([]);
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
   const [uploadDuplicates, setUploadDuplicates] = useState<number>(0);
   const [uploadBytes, setUploadBytes] = useState<{
@@ -184,6 +185,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       if (files.length === 0 || !album || isUploading) return;
 
       setIsUploading(true);
+      setFailedUploadFiles([]);
       setUploadProgress(
         `Preparing ${files.length} file${files.length > 1 ? "s" : ""}...`
       );
@@ -197,7 +199,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
           files,
           (uploaded, total) => {
             // Batch progress (files completed)
-            setUploadProgress(`Uploaded ${uploaded}/${total} files`);
+            setUploadProgress(`Processed ${uploaded}/${total} files`);
           },
           (loaded, total) => {
             // Real-time byte progress
@@ -211,11 +213,13 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         );
         setUploadProgress("Upload complete! Refreshing...");
         setUploadProgressPercent(100);
-        await fetchAlbum(); // Refresh album data
         if (result.failed_files?.length) {
+          setFailedUploadFiles(result.failed_files.flatMap((failure) =>
+            failure.file_index === undefined ? [] : [files[failure.file_index]]
+          ));
           const firstFailure = result.failed_files[0];
           setUploadProgress(
-            `Uploaded ${result.uploaded_count} of ${files.length} files. ${firstFailure.message}`,
+            `Uploaded ${result.uploaded_count}, skipped ${result.duplicate_count} duplicates, failed ${result.failed_files.length}. ${firstFailure.message}`,
           );
         } else {
           setUploadProgress("");
@@ -223,7 +227,9 @@ export default function AlbumPage({ params }: AlbumPageProps) {
         setUploadProgressPercent(0);
         setUploadDuplicates(0);
         setUploadBytes(null);
+        await fetchAlbum(); // Refresh album data
       } catch (err) {
+        setFailedUploadFiles(files);
         console.error("Failed to upload photos:", err);
         setUploadProgress(
           `Error: ${err instanceof Error ? err.message : "Upload failed"}`
@@ -528,7 +534,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
       {uploadProgress && (
         <div className="mx-6 mt-4 rounded-lg border bg-primary/10 px-4 py-3">
           <div className="flex items-center gap-3 mb-2">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            {isUploading && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
             <div className="flex-1">
               <p className="text-sm font-medium text-foreground">
                 {uploadProgress}
@@ -538,7 +544,7 @@ export default function AlbumPage({ params }: AlbumPageProps) {
                   ? `${formatBytes(uploadBytes.loaded)} / ${formatBytes(
                       uploadBytes.total
                     )}`
-                  : "Please wait while files are being uploaded..."}
+                  : isUploading ? "Please wait while files are being uploaded..." : "Upload finished with errors. Uploaded files are saved; retries skip duplicates."}
                 {uploadDuplicates > 0 && (
                   <span className="ml-2">
                     ({uploadDuplicates} duplicate{uploadDuplicates !== 1 ? "s" : ""} skipped)
@@ -552,6 +558,11 @@ export default function AlbumPage({ params }: AlbumPageProps) {
               </span>
             )}
           </div>
+          {!isUploading && failedUploadFiles.length > 0 && (
+            <Button variant="outline" onClick={() => void handleUploadFiles(failedUploadFiles)}>
+              Retry {failedUploadFiles.length} failed files
+            </Button>
+          )}
           {uploadProgressPercent > 0 && (
             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
               <div
