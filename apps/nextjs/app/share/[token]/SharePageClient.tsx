@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Lock,
   ImageIcon,
@@ -33,6 +34,9 @@ import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { VirtualizedPhotoGrid } from "@/components/gallery";
 import { PhotoSelectionProvider } from "@/hooks/use-photo-selection";
 import {
+  getCollectionImageUrl,
+  getCollectionVideoPlayback,
+  getPublicAlbumApiUrl,
   getShareVideoPlayback,
   getSharedImageUrl,
   uploadSharePhotos,
@@ -99,6 +103,7 @@ interface SharedAlbum {
 }
 
 interface SharePageClientProps {
+  collectionAlbumId?: string;
   token: string;
 }
 
@@ -120,6 +125,7 @@ function SharedPhotoCard({
   index,
   onClick,
   shareToken,
+  collectionAlbumId,
   password,
   className,
   style,
@@ -130,6 +136,7 @@ function SharedPhotoCard({
   index: number;
   onClick: () => void;
   shareToken: string;
+  collectionAlbumId?: string;
   password: string | null;
   className?: string;
   style?: CSSProperties;
@@ -142,7 +149,9 @@ function SharedPhotoCard({
     : "object-cover object-center";
 
   // Use secure share URL
-  const imageUrl = getSharedImageUrl(
+  const imageUrl = collectionAlbumId
+    ? getCollectionImageUrl(shareToken, collectionAlbumId, photo.id, "thumbnail", password || undefined)
+    : getSharedImageUrl(
     shareToken,
     photo.id,
     "thumbnail",
@@ -229,7 +238,7 @@ function SharedPhotoCard({
   );
 }
 
-export default function SharePageClient({ token }: SharePageClientProps) {
+export default function SharePageClient({ token, collectionAlbumId }: SharePageClientProps) {
   const [state, setState] = useState<PageState>("loading");
   const [album, setAlbum] = useState<SharedAlbum | null>(null);
   const [password, setPassword] = useState("");
@@ -346,8 +355,15 @@ export default function SharePageClient({ token }: SharePageClientProps) {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
+  const getImageUrl = (photoId: string) => collectionAlbumId
+    ? getCollectionImageUrl(token, collectionAlbumId, photoId, "web", verifiedPassword || undefined)
+    : getSharedImageUrl(token, photoId, "web", verifiedPassword || undefined);
+
   // Build download URL with optional password
   const getDownloadUrl = (photoId: string) => {
+    if (collectionAlbumId) {
+      return `${getCollectionImageUrl(token, collectionAlbumId, photoId, "original", verifiedPassword || undefined)}&download=true`;
+    }
     const url = `${API_BASE_URL}/api/share/${token}/download/${photoId}`;
     return verifiedPassword
       ? `${url}?password=${encodeURIComponent(verifiedPassword)}`
@@ -356,6 +372,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
 
   const fetchShareInfo = useCallback(async () => {
     try {
+      if (collectionAlbumId) {
+        const saved = window.sessionStorage.getItem(`client-pix-collection-password:${token}`) || undefined;
+        await accessAlbum(saved);
+        return;
+      }
       const response = await fetch(`${API_BASE_URL}/api/share/${token}/info`);
 
       if (response.status === 404) {
@@ -389,7 +410,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
       setState("error");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, collectionAlbumId]);
 
   const accessAlbum = useCallback(
     async (pwd?: string) => {
@@ -400,7 +421,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         const params = new URLSearchParams({ sort_by: sortBy });
         if (sortDir) params.set("sort_dir", sortDir);
         const response = await fetch(
-          `${API_BASE_URL}/api/share/${token}/access?${params}`,
+          `${getPublicAlbumApiUrl(token, collectionAlbumId)}/access?${params}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -409,6 +430,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         );
 
         if (response.status === 401) {
+          setState("password");
           setError("Incorrect password. Please try again.");
           setIsVerifying(false);
           return;
@@ -435,11 +457,12 @@ export default function SharePageClient({ token }: SharePageClientProps) {
           return;
         }
 
-        setAlbum(data);
+        setAlbum(collectionAlbumId ? { ...data, allows_uploads: false } : data);
         setState("album");
         // Save the password for download URLs if it was used
         if (pwd) {
           setVerifiedPassword(pwd);
+          if (collectionAlbumId) window.sessionStorage.setItem(`client-pix-collection-password:${token}`, pwd);
         }
       } catch (err) {
         console.error("Error accessing album:", err);
@@ -449,7 +472,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         setIsVerifying(false);
       }
     },
-    [token, sortBy, sortDir],
+    [token, sortBy, sortDir, collectionAlbumId],
   );
 
   useEffect(() => {
@@ -679,6 +702,11 @@ export default function SharePageClient({ token }: SharePageClientProps) {
         {/* Header */}
         <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
           <div className="container mx-auto px-4 py-4">
+            {collectionAlbumId && (
+              <Link href={`/collection/${token}`} className="mb-3 inline-block text-sm text-muted-foreground hover:text-foreground">
+                Back to collection
+              </Link>
+            )}
             <div className="min-w-0">
               <h1 className="text-xl font-semibold leading-tight sm:text-2xl break-words">
                 {album.title}
@@ -789,7 +817,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                 <button
                   onClick={() => {
                     if (downloadJob.status === "idle" || downloadJob.status === "failed") {
-                      downloadJob.startShareDownload(token, verifiedPassword || undefined);
+                      downloadJob.startShareDownload(token, verifiedPassword || undefined, collectionAlbumId);
                     }
                   }}
                   disabled={downloadJob.status === "preparing" || downloadJob.status === "downloading"}
@@ -807,7 +835,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      <span className="hidden sm:inline">Download All</span>
+                      <span className="hidden sm:inline">{collectionAlbumId ? "Download Album" : "Download All"}</span>
                     </>
                   )}
                 </button>
@@ -883,6 +911,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   index={index}
                   onClick={() => onOpenLightbox(index)}
                   shareToken={token}
+                  collectionAlbumId={collectionAlbumId}
                   password={verifiedPassword}
                   className={className}
                   style={style}
@@ -1025,15 +1054,12 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                   {selectedPhoto.is_video ? (
                     <div className="h-[90vh] w-[90vw]">
                       <AdaptiveVideoPlayer
-                        sourceUrl={getSharedImageUrl(
-                          token,
-                          selectedPhoto.id,
-                          "web",
-                          verifiedPassword || undefined,
-                        )}
+                        sourceUrl={getImageUrl(selectedPhoto.id)}
                         photoId={selectedPhoto.id}
                         loadPlayback={() =>
-                          getShareVideoPlayback(
+                          collectionAlbumId
+                            ? getCollectionVideoPlayback(token, collectionAlbumId, selectedPhoto.id, verifiedPassword || undefined)
+                            : getShareVideoPlayback(
                             token,
                             selectedPhoto.id,
                             verifiedPassword || undefined,
@@ -1046,12 +1072,7 @@ export default function SharePageClient({ token }: SharePageClientProps) {
                     </div>
                   ) : (
                     <Image
-                      src={getSharedImageUrl(
-                        token,
-                        selectedPhoto.id,
-                        "web",
-                        verifiedPassword || undefined,
-                      )}
+                      src={getImageUrl(selectedPhoto.id)}
                       alt={selectedPhoto.original_filename}
                       width={selectedPhoto.width}
                       height={selectedPhoto.height}

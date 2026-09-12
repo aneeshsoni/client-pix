@@ -2,6 +2,8 @@
 
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from httpx import AsyncClient
@@ -12,6 +14,7 @@ from models.db.album_db_models import Album
 from models.db.file_hash_db_models import FileHash
 from models.db.photo_db_models import Photo
 from services.storage_service import storage_service
+from services.download_service import download_service
 
 
 async def _albums(db_session: AsyncSession) -> tuple[Album, Album, Album]:
@@ -23,6 +26,121 @@ async def _albums(db_session: AsyncSession) -> tuple[Album, Album, Album]:
     db_session.add_all(albums)
     await db_session.commit()
     return albums
+
+
+@pytest.mark.asyncio
+async def test_collection_downloads_are_password_protected_and_album_scoped(
+    client, db_session, auth_headers, tmp_path, monkeypatch
+):
+    from api.files import files_api
+
+    wedding, reception, outside = await _albums(db_session)
+    monkeypatch.setattr(files_api, "UPLOAD_DIR", tmp_path)
+    photos = []
+    for index, album in enumerate((wedding, reception, outside)):
+        digest = f"{index + 1:064x}"
+        path = tmp_path / "originals" / digest[:2] / digest[2:4] / f"{digest}.jpg"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"original-photo")
+        photo = Photo(
+            album_id=album.id,
+            original_filename=f"original-{index}.jpg",
+            file_hash=FileHash(
+                sha256_hash=digest,
+                storage_path=str(path.relative_to(tmp_path)),
+                file_extension=".jpg",
+                mime_type="image/jpeg",
+                file_size=14,
+                width=100,
+                height=100,
+            ),
+        )
+        db_session.add(photo)
+        photos.append(photo)
+    await db_session.commit()
+    created = await client.post(
+        "/api/collections",
+        headers=auth_headers,
+        json={
+            "title": "Private",
+            "access_level": "private",
+            "password": "secret123",
+            "album_ids": [str(wedding.id), str(reception.id)],
+        },
+    )
+    token = created.json()["token"]
+    base = f"/api/collection-share/{token}/albums/{wedding.id}"
+    zip_path = tmp_path / "album.zip"
+    zip_path.write_bytes(b"zip-content")
+    job = SimpleNamespace(
+        job_id="job-1",
+        album_id=str(wedding.id),
+        album_title=wedding.title,
+        status="ready",
+        progress=100,
+        total_files=1,
+        processed_files=1,
+        zip_size=11,
+        error=None,
+        zip_path=zip_path,
+    )
+    prepare = Mock(return_value=job)
+    monkeypatch.setattr(download_service, "prepare_download", prepare)
+    monkeypatch.setattr(download_service, "get_job", lambda _: job)
+    assert (await client.post(f"{base}/prepare-download", json={})).status_code == 401
+    response = await client.post(
+        f"{base}/prepare-download", json={"password": "secret123"}
+    )
+    assert response.status_code == 200
+    assert [p.id for p in prepare.call_args.kwargs["photos"]] == [photos[0].id]
+    assert prepare.call_args.kwargs["album_id"] == str(wedding.id)
+    for endpoint in ("download-status", "download-file"):
+        url = f"{base}/{endpoint}/job-1"
+        assert (await client.get(url)).status_code == 401
+        assert (
+            await client.get(url, params={"password": "secret123"})
+        ).status_code == 200
+        wrong_album = url.replace(str(wedding.id), str(reception.id))
+        assert (
+            await client.get(wrong_album, params={"password": "secret123"})
+        ).status_code == 404
+    outside_url = base.replace(str(wedding.id), str(outside.id))
+    assert (
+        await client.post(
+            f"{outside_url}/prepare-download", json={"password": "secret123"}
+        )
+    ).status_code == 404
+    assert (
+        await client.post(
+            f"/api/collection-share/{token}/prepare-download",
+            json={"password": "secret123"},
+        )
+    ).status_code == 404
+
+    photo_url = f"/api/files/collection/{token}/album/{wedding.id}/photo/{photos[0].id}"
+    assert (await client.get(photo_url, params={"download": "true"})).status_code == 401
+    original = await client.get(
+        photo_url, params={"download": "true", "password": "secret123"}
+    )
+    assert original.content == b"original-photo"
+    assert 'filename="original-0.jpg"' in original.headers["content-disposition"]
+    wrong_photo = photo_url.replace(str(photos[0].id), str(photos[1].id))
+    assert (
+        await client.get(
+            wrong_photo, params={"password": "secret123", "download": "true"}
+        )
+    ).status_code == 404
+
+    await client.patch(
+        f"/api/collections/{created.json()['id']}",
+        headers=auth_headers,
+        json={"album_ids": [str(reception.id)]},
+    )
+    assert (
+        await client.get(
+            f"{base}/download-file/job-1", params={"password": "secret123"}
+        )
+    ).status_code == 404
 
 
 @pytest.mark.asyncio

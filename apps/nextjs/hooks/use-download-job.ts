@@ -22,7 +22,7 @@ export type DownloadStatus =
 interface UseDownloadJobReturn {
   startDownload: (albumId: string, photoIds?: string[]) => Promise<void>;
   startAllAlbumsDownload: () => Promise<void>;
-  startShareDownload: (token: string, password?: string) => Promise<void>;
+  startShareDownload: (token: string, password?: string, collectionAlbumId?: string) => Promise<void>;
   progress: number;
   status: DownloadStatus;
   error: string | null;
@@ -128,7 +128,7 @@ export function useDownloadJob(): UseDownloadJobReturn {
   );
 
   const startShareDownload = useCallback(
-    async (token: string, password?: string) => {
+    async (token: string, password?: string, collectionAlbumId?: string) => {
       cleanup();
       cancelledRef.current = false;
       setStatus("preparing");
@@ -136,11 +136,11 @@ export function useDownloadJob(): UseDownloadJobReturn {
       setError(null);
 
       try {
-        const job = await prepareShareDownload(token, password);
+        const job = await prepareShareDownload(token, password, collectionAlbumId);
 
         if (job.status === "ready") {
           triggerBrowserDownload(
-            getShareDownloadFileUrl(token, job.job_id, password),
+            getShareDownloadFileUrl(token, job.job_id, password, collectionAlbumId),
           );
           return;
         }
@@ -154,8 +154,8 @@ export function useDownloadJob(): UseDownloadJobReturn {
         // Start polling
         setProgress(job.progress);
         pollForCompletion(
-          () => getShareDownloadStatus(token, job.job_id, password),
-          () => getShareDownloadFileUrl(token, job.job_id, password),
+          () => getShareDownloadStatus(token, job.job_id, password, collectionAlbumId),
+          () => getShareDownloadFileUrl(token, job.job_id, password, collectionAlbumId),
         );
       } catch (e) {
         setStatus("failed");

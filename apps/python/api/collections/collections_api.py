@@ -16,6 +16,7 @@ from models.api.collections_api_models import (
     SharedCollectionResponse,
 )
 from models.api.share_links_api_models import SharedAlbumResponse
+from models.api.downloads_api_models import DownloadJobResponse
 from models.db.album_db_models import Album
 from models.db.collection_db_models import Collection, CollectionAlbum
 from models.db.photo_db_models import Photo
@@ -28,13 +29,16 @@ from services.collection_service import (
     validate_collection_password,
 )
 from services.storage_service import storage_service
+from services.download_service import DownloadJob, download_service
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from utils.auth_util import get_admin_from_token_or_query
 from utils.security_util import generate_token, hash_password
+from utils.download_util import ResumableFileResponse
 
 from core.database import get_db
+from core.config import UPLOAD_DIR
 
 router = APIRouter(
     prefix="/collections",
@@ -385,3 +389,100 @@ async def access_collection_album(
     validate_collection_password(collection, data.password)
     album = await require_collection_album(collection.id, album_id, db)
     return await build_shared_collection_album(album, db, sort_by, sort_dir)
+
+
+async def _download_album(
+    token: str, album_id: uuid.UUID, password: str | None, db: AsyncSession
+) -> Album:
+    collection = await get_collection_by_token(token, db)
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    validate_collection_password(collection, password)
+    return await require_collection_album(collection.id, album_id, db)
+
+
+def _collection_download_job(job_id: str, album_id: uuid.UUID) -> DownloadJob:
+    job = download_service.get_job(job_id)
+    if job is None or job.album_id != str(album_id):
+        raise HTTPException(status_code=404, detail="Download job not found")
+    return job
+
+
+def _download_response(job: DownloadJob) -> DownloadJobResponse:
+    return DownloadJobResponse(
+        job_id=job.job_id,
+        status=job.status,
+        progress=job.progress,
+        total_files=job.total_files,
+        processed_files=job.processed_files,
+        zip_size=job.zip_size,
+        error=job.error,
+    )
+
+
+@public_router.post(
+    "/{token}/albums/{album_id}/prepare-download", response_model=DownloadJobResponse
+)
+async def prepare_collection_album_download(
+    token: str,
+    album_id: uuid.UUID,
+    data: CollectionAccessRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    album = await _download_album(token, album_id, data.password, db)
+    result = await db.execute(
+        select(Photo)
+        .where(Photo.album_id == album_id)
+        .options(selectinload(Photo.file_hash))
+    )
+    photos = result.scalars().all()
+    if not photos:
+        raise HTTPException(status_code=404, detail="No photos in album")
+    job = download_service.prepare_download(
+        album_id=str(album_id),
+        album_title=album.title,
+        photos=photos,
+        upload_dir=UPLOAD_DIR,
+    )
+    return _download_response(job)
+
+
+@public_router.get(
+    "/{token}/albums/{album_id}/download-status/{job_id}",
+    response_model=DownloadJobResponse,
+)
+async def collection_album_download_status(
+    token: str,
+    album_id: uuid.UUID,
+    job_id: str,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    await _download_album(token, album_id, password, db)
+    return _download_response(_collection_download_job(job_id, album_id))
+
+
+@public_router.get("/{token}/albums/{album_id}/download-file/{job_id}")
+async def download_collection_album(
+    token: str,
+    album_id: uuid.UUID,
+    job_id: str,
+    request: Request,
+    password: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    await _download_album(token, album_id, password, db)
+    job = _collection_download_job(job_id, album_id)
+    if job.status != "ready":
+        raise HTTPException(status_code=409, detail="Download not ready yet")
+    if not job.zip_path:
+        raise HTTPException(status_code=500, detail="ZIP file path missing")
+    safe_title = "".join(
+        c if c.isalnum() or c in " -_" else "_" for c in job.album_title
+    )
+    return ResumableFileResponse(
+        path=job.zip_path,
+        filename=f"{safe_title}.zip",
+        media_type="application/zip",
+        request=request,
+    )

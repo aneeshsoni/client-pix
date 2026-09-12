@@ -1520,9 +1520,10 @@ export function getDownloadFileUrl(jobId: string, token?: string | null): string
 export async function prepareShareDownload(
   token: string,
   password?: string,
+  collectionAlbumId?: string,
 ): Promise<DownloadJobResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/api/share/${token}/prepare-download`,
+    `${getPublicAlbumApiUrl(token, collectionAlbumId)}/prepare-download`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1541,12 +1542,13 @@ export async function getShareDownloadStatus(
   token: string,
   jobId: string,
   password?: string,
+  collectionAlbumId?: string,
 ): Promise<DownloadJobResponse> {
   const params = new URLSearchParams();
   if (password) params.set("password", password);
   const qs = params.toString();
   const response = await fetch(
-    `${API_BASE_URL}/api/share/${token}/download-status/${jobId}${qs ? `?${qs}` : ""}`,
+    `${getPublicAlbumApiUrl(token, collectionAlbumId)}/download-status/${jobId}${qs ? `?${qs}` : ""}`,
   );
 
   if (!response.ok) {
@@ -1560,11 +1562,12 @@ export function getShareDownloadFileUrl(
   token: string,
   jobId: string,
   password?: string,
+  collectionAlbumId?: string,
 ): string {
   const params = new URLSearchParams();
   if (password) params.set("password", password);
   const qs = params.toString();
-  return `${API_BASE_URL}/api/share/${token}/download-file/${jobId}${qs ? `?${qs}` : ""}`;
+  return `${getPublicAlbumApiUrl(token, collectionAlbumId)}/download-file/${jobId}${qs ? `?${qs}` : ""}`;
 }
 
 export function getDownloadUrl(albumId: string, photoId: string): string {
@@ -1965,4 +1968,10 @@ export async function cleanupUploadTempFiles(): Promise<CleanupResult> {
   }
 
   return response.json();
+}
+
+export function getPublicAlbumApiUrl(token: string, collectionAlbumId?: string): string {
+  return collectionAlbumId
+    ? `/api/collection-share/${token}/albums/${collectionAlbumId}`
+    : `/api/share/${token}`;
 }

@@ -52,7 +52,9 @@ def get_file_path(
         raise HTTPException(status_code=400, detail="Invalid variant")
 
 
-def _file_response_for_photo(photo: Photo, variant: str) -> FileResponse:
+def _file_response_for_photo(
+    photo: Photo, variant: str, download: bool = False
+) -> FileResponse:
     file_hash = photo.file_hash
     is_video = photo.is_video
     file_path = get_file_path(
@@ -75,6 +77,7 @@ def _file_response_for_photo(photo: Photo, variant: str) -> FileResponse:
     return FileResponse(
         path=file_path,
         media_type=media_type,
+        filename=photo.original_filename if download else None,
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
@@ -86,6 +89,7 @@ async def get_collection_photo(
     photo_id: uuid.UUID,
     variant: str = Query("web", pattern="^(original|thumbnail|web)$"),
     password: str | None = Query(None),
+    download: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
     """Serve a photo when its album belongs to an accessible collection."""
@@ -102,7 +106,9 @@ async def get_collection_photo(
     photo = result.scalar_one_or_none()
     if photo is None:
         raise HTTPException(status_code=404, detail="Photo not found")
-    return _file_response_for_photo(photo, variant)
+    return _file_response_for_photo(
+        photo, "original" if download else variant, download
+    )
 
 
 # --- Authenticated File Access (Admin only) ---
