@@ -293,11 +293,11 @@ export function AlbumSettingsModal({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-h-[94vh] overflow-hidden flex flex-col sm:max-w-3xl lg:max-w-5xl">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Album Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-6 py-4 px-2">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-6 py-4 px-2">
           {/* Title */}
           <div>
             <Label htmlFor="title" className="text-sm font-medium">
@@ -345,46 +345,51 @@ export function AlbumSettingsModal({
                 No media in this album yet
               </p>
             ) : (
-              <div className="grid max-h-[min(52vh,36rem)] grid-cols-2 gap-3 overflow-y-auto rounded-lg border p-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                {photos.map((photo) => (
-                  <motion.button
-                    key={photo.id}
-                    onClick={() => handleCoverSelect(photo.id)}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`relative aspect-square rounded-md overflow-hidden border-2 transition-colors ${
-                      selectedCoverId === photo.id
-                        ? "border-primary ring-2 ring-primary/20"
-                        : "border-transparent hover:border-muted-foreground/30"
-                    }`}
-                    disabled={isSaving}
-                  >
-                    <Image
-                      src={getSecureImageUrl(
-                        photo.id,
-                        "thumbnail",
-                        token || undefined
-                      )}
-                      alt={photo.original_filename}
-                      fill
-                      className="object-cover"
-                      sizes="100px"
-                      unoptimized
-                    />
-                    {photo.is_video && (
-                      <div className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white backdrop-blur-sm">
-                        <Play className="h-3 w-3 fill-current" />
-                      </div>
-                    )}
-                    {selectedCoverId === photo.id && (
-                      <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                        <div className="bg-primary text-primary-foreground rounded-full p-1">
-                          <Check className="h-4 w-4" />
+              <div className="max-h-[min(52vh,36rem)] overflow-y-auto rounded-lg border p-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {photos.map((photo) => (
+                    <motion.button
+                      key={photo.id}
+                      type="button"
+                      aria-label={`Use ${photo.original_filename} as album cover`}
+                      aria-pressed={selectedCoverId === photo.id}
+                      onClick={() => handleCoverSelect(photo.id)}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`relative aspect-square w-full rounded-md overflow-hidden border-2 transition-colors ${
+                        selectedCoverId === photo.id
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "border-transparent hover:border-muted-foreground/30"
+                      }`}
+                      disabled={isSaving}
+                    >
+                      <Image
+                        src={getSecureImageUrl(
+                          photo.id,
+                          "thumbnail",
+                          token || undefined
+                        )}
+                        alt={photo.original_filename}
+                        fill
+                        className="object-cover"
+                        sizes="100px"
+                        unoptimized
+                      />
+                      {photo.is_video && (
+                        <div className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white backdrop-blur-sm">
+                          <Play className="h-3 w-3 fill-current" />
                         </div>
-                      </div>
-                    )}
-                  </motion.button>
-                ))}
+                      )}
+                      {selectedCoverId === photo.id && (
+                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                          <div className="bg-primary text-primary-foreground rounded-full p-1">
+                            <Check className="h-4 w-4" />
+                          </div>
+                        </div>
+                      )}
+                    </motion.button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -477,7 +482,7 @@ export function AlbumSettingsModal({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
+        <div className="flex shrink-0 justify-end gap-3 pt-4 border-t">
           <Button variant="ghost" onClick={handleClose} disabled={isSaving}>
             Cancel
           </Button>
